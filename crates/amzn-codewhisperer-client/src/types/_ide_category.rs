@@ -13,9 +13,11 @@
 /// # let idecategory = unimplemented!();
 /// match idecategory {
 ///     IdeCategory::Cli => { /* ... */ },
+///     IdeCategory::Eclipse => { /* ... */ },
 ///     IdeCategory::JetBrains => { /* ... */ },
 ///     IdeCategory::JupyterMd => { /* ... */ },
 ///     IdeCategory::JupyterSm => { /* ... */ },
+///     IdeCategory::VisualStudio => { /* ... */ },
 ///     IdeCategory::VsCode => { /* ... */ },
 ///     other @ _ if other.as_str() == "NewFeature" => { /* handles a case for `NewFeature` */ },
 ///     _ => { /* ... */ },
@@ -53,11 +55,15 @@ pub enum IdeCategory {
     #[allow(missing_docs)] // documentation missing in model
     Cli,
     #[allow(missing_docs)] // documentation missing in model
+    Eclipse,
+    #[allow(missing_docs)] // documentation missing in model
     JetBrains,
     #[allow(missing_docs)] // documentation missing in model
     JupyterMd,
     #[allow(missing_docs)] // documentation missing in model
     JupyterSm,
+    #[allow(missing_docs)] // documentation missing in model
+    VisualStudio,
     #[allow(missing_docs)] // documentation missing in model
     VsCode,
     /// `Unknown` contains new variants that have been added since this code was generated.
@@ -70,9 +76,11 @@ impl ::std::convert::From<&str> for IdeCategory {
     fn from(s: &str) -> Self {
         match s {
             "CLI" => IdeCategory::Cli,
+            "ECLIPSE" => IdeCategory::Eclipse,
             "JETBRAINS" => IdeCategory::JetBrains,
             "JUPYTER_MD" => IdeCategory::JupyterMd,
             "JUPYTER_SM" => IdeCategory::JupyterSm,
+            "VISUAL_STUDIO" => IdeCategory::VisualStudio,
             "VSCODE" => IdeCategory::VsCode,
             other => IdeCategory::Unknown(crate::primitives::sealed_enum_unknown::UnknownVariantValue(
                 other.to_owned(),
@@ -92,9 +100,11 @@ impl IdeCategory {
     pub fn as_str(&self) -> &str {
         match self {
             IdeCategory::Cli => "CLI",
+            IdeCategory::Eclipse => "ECLIPSE",
             IdeCategory::JetBrains => "JETBRAINS",
             IdeCategory::JupyterMd => "JUPYTER_MD",
             IdeCategory::JupyterSm => "JUPYTER_SM",
+            IdeCategory::VisualStudio => "VISUAL_STUDIO",
             IdeCategory::VsCode => "VSCODE",
             IdeCategory::Unknown(value) => value.as_str(),
         }
@@ -102,7 +112,15 @@ impl IdeCategory {
 
     /// Returns all the `&str` representations of the enum members.
     pub const fn values() -> &'static [&'static str] {
-        &["CLI", "JETBRAINS", "JUPYTER_MD", "JUPYTER_SM", "VSCODE"]
+        &[
+            "CLI",
+            "ECLIPSE",
+            "JETBRAINS",
+            "JUPYTER_MD",
+            "JUPYTER_SM",
+            "VISUAL_STUDIO",
+            "VSCODE",
+        ]
     }
 }
 impl ::std::convert::AsRef<str> for IdeCategory {
@@ -126,9 +144,11 @@ impl ::std::fmt::Display for IdeCategory {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         match self {
             IdeCategory::Cli => write!(f, "CLI"),
+            IdeCategory::Eclipse => write!(f, "ECLIPSE"),
             IdeCategory::JetBrains => write!(f, "JETBRAINS"),
             IdeCategory::JupyterMd => write!(f, "JUPYTER_MD"),
             IdeCategory::JupyterSm => write!(f, "JUPYTER_SM"),
+            IdeCategory::VisualStudio => write!(f, "VISUAL_STUDIO"),
             IdeCategory::VsCode => write!(f, "VSCODE"),
             IdeCategory::Unknown(value) => write!(f, "{}", value),
         }

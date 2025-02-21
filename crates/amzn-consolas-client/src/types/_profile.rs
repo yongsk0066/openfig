@@ -10,7 +10,7 @@ pub struct Profile {
     #[allow(missing_docs)] // documentation missing in model
     pub profile_name: ::std::string::String,
     #[allow(missing_docs)] // documentation missing in model
-    pub reference_tracker_configuration: crate::types::ReferenceTrackerConfiguration,
+    pub reference_tracker_configuration: ::std::option::Option<crate::types::ReferenceTrackerConfiguration>,
     #[allow(missing_docs)] // documentation missing in model
     pub kms_key_arn: ::std::option::Option<::std::string::String>,
     #[allow(missing_docs)] // documentation missing in model
@@ -49,8 +49,10 @@ impl Profile {
     }
 
     #[allow(missing_docs)] // documentation missing in model
-    pub fn reference_tracker_configuration(&self) -> &crate::types::ReferenceTrackerConfiguration {
-        &self.reference_tracker_configuration
+    pub fn reference_tracker_configuration(
+        &self,
+    ) -> ::std::option::Option<&crate::types::ReferenceTrackerConfiguration> {
+        self.reference_tracker_configuration.as_ref()
     }
 
     #[allow(missing_docs)] // documentation missing in model
@@ -182,7 +184,6 @@ impl ProfileBuilder {
     }
 
     #[allow(missing_docs)] // documentation missing in model
-    /// This field is required.
     pub fn reference_tracker_configuration(mut self, input: crate::types::ReferenceTrackerConfiguration) -> Self {
         self.reference_tracker_configuration = ::std::option::Option::Some(input);
         self
@@ -381,7 +382,6 @@ impl ProfileBuilder {
     /// This method will fail if any of the following fields are not set:
     /// - [`arn`](crate::types::builders::ProfileBuilder::arn)
     /// - [`profile_name`](crate::types::builders::ProfileBuilder::profile_name)
-    /// - [`reference_tracker_configuration`](crate::types::builders::ProfileBuilder::reference_tracker_configuration)
     pub fn build(
         self,
     ) -> ::std::result::Result<crate::types::Profile, ::aws_smithy_types::error::operation::BuildError> {
@@ -399,12 +399,7 @@ impl ProfileBuilder {
                     "profile_name was not specified but it is required when building Profile",
                 )
             })?,
-            reference_tracker_configuration: self.reference_tracker_configuration.ok_or_else(|| {
-                ::aws_smithy_types::error::operation::BuildError::missing_field(
-                    "reference_tracker_configuration",
-                    "reference_tracker_configuration was not specified but it is required when building Profile",
-                )
-            })?,
+            reference_tracker_configuration: self.reference_tracker_configuration,
             kms_key_arn: self.kms_key_arn,
             active_functionalities: self.active_functionalities,
             status: self.status,

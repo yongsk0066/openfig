@@ -11,6 +11,8 @@ pub struct OptInFeatures {
     pub dashboard_analytics: ::std::option::Option<crate::types::DashboardAnalytics>,
     #[allow(missing_docs)] // documentation missing in model
     pub notifications: ::std::option::Option<::std::vec::Vec<crate::types::NotificationsFeature>>,
+    #[allow(missing_docs)] // documentation missing in model
+    pub workspace_context: ::std::option::Option<crate::types::WorkspaceContext>,
 }
 impl OptInFeatures {
     #[allow(missing_docs)] // documentation missing in model
@@ -34,6 +36,11 @@ impl OptInFeatures {
     pub fn notifications(&self) -> &[crate::types::NotificationsFeature] {
         self.notifications.as_deref().unwrap_or_default()
     }
+
+    #[allow(missing_docs)] // documentation missing in model
+    pub fn workspace_context(&self) -> ::std::option::Option<&crate::types::WorkspaceContext> {
+        self.workspace_context.as_ref()
+    }
 }
 impl OptInFeatures {
     /// Creates a new builder-style object to manufacture
@@ -51,6 +58,7 @@ pub struct OptInFeaturesBuilder {
     pub(crate) by_user_analytics: ::std::option::Option<crate::types::ByUserAnalytics>,
     pub(crate) dashboard_analytics: ::std::option::Option<crate::types::DashboardAnalytics>,
     pub(crate) notifications: ::std::option::Option<::std::vec::Vec<crate::types::NotificationsFeature>>,
+    pub(crate) workspace_context: ::std::option::Option<crate::types::WorkspaceContext>,
 }
 impl OptInFeaturesBuilder {
     #[allow(missing_docs)] // documentation missing in model
@@ -129,6 +137,23 @@ impl OptInFeaturesBuilder {
         &self.notifications
     }
 
+    #[allow(missing_docs)] // documentation missing in model
+    pub fn workspace_context(mut self, input: crate::types::WorkspaceContext) -> Self {
+        self.workspace_context = ::std::option::Option::Some(input);
+        self
+    }
+
+    #[allow(missing_docs)] // documentation missing in model
+    pub fn set_workspace_context(mut self, input: ::std::option::Option<crate::types::WorkspaceContext>) -> Self {
+        self.workspace_context = input;
+        self
+    }
+
+    #[allow(missing_docs)] // documentation missing in model
+    pub fn get_workspace_context(&self) -> &::std::option::Option<crate::types::WorkspaceContext> {
+        &self.workspace_context
+    }
+
     /// Consumes the builder and constructs a [`OptInFeatures`](crate::types::OptInFeatures).
     pub fn build(self) -> crate::types::OptInFeatures {
         crate::types::OptInFeatures {
@@ -136,6 +161,7 @@ impl OptInFeaturesBuilder {
             by_user_analytics: self.by_user_analytics,
             dashboard_analytics: self.dashboard_analytics,
             notifications: self.notifications,
+            workspace_context: self.workspace_context,
         }
     }
 }

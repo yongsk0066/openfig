@@ -22,15 +22,6 @@ use crate::{
 mod macos;
 pub use self::macos::*;
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct PlatformWindow {
-    pub rect: Rect,
-    pub inner: PlatformWindowImpl,
-    // TODO: add a platform specific impl of things like name, is_terminal(), etc
-    // pub inner: ExternalPlatformWindowImpl
-}
-
 #[derive(Debug, Serialize)]
 pub struct PlatformState(Arc<PlatformStateImpl>);
 
@@ -69,9 +60,9 @@ impl PlatformState {
         self.0.get_cursor_position()
     }
 
-    /// Gets the currently active window on the platform
-    pub fn get_active_window(&self) -> Option<PlatformWindow> {
-        self.0.get_active_window()
+    /// The bottom edge of the currently focused window, in logical pixels.
+    pub fn active_window_bottom(&self, scale: f64) -> Option<f64> {
+        self.0.active_window_bottom(scale)
     }
 
     /// Looks up icons by name on the platform

@@ -289,7 +289,7 @@ impl UIElement {
         Ok(focused.into())
     }
 
-    fn role(&self) -> Result<CFString> {
+    pub(crate) fn role(&self) -> Result<CFString> {
         self.get_attr::<CFString>(kAXRoleAttribute)
     }
 

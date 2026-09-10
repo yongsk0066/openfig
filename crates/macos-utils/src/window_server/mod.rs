@@ -21,6 +21,7 @@ use accessibility_sys::{
     kAXWindowCreatedNotification,
     kAXWindowMovedNotification,
     kAXWindowResizedNotification,
+    kAXWindowRole,
     pid_t,
 };
 use ax_observer::AXObserver;
@@ -1010,19 +1011,30 @@ unsafe extern "C" fn application_ax_callback(
             Some(WindowServerEvent::RequestCaretPositionUpdate)
         },
         kAXUIElementDestroyedNotification => {
-            // We check to see if there is a valid window for the app, if there is not then we know the final
-            // window has been destroyed. This is done via getting an error when trying to get the focused
-            // window.
-            // SAFETY:
-            // Operations: `AXUIElementCreateApplication` (no preconditions, Create rule) and
-            // `UIElement::from`, whose precondition — a live non-null element — is the
-            // postcondition of the former.
-            // Leak note: the `+1` from the Create rule is never released, and `UIElement::from`
-            // applies the *Get* rule on top of it, so this leaks one AX element per destroyed
-            // window. See docs/13-unsafe-review.md #6.
-            let ax_app_ref = UIElement::from(AXUIElementCreateApplication(app.pid));
-            if ax_app_ref.focused_window().is_err() {
-                Some(WindowServerEvent::WindowDestroyed { app: app.clone() })
+            // This notification fires for every destroyed element — menus, tooltips, text
+            // fields — not just windows, and each one used to cost an
+            // `AXUIElementCreateApplication` plus a cross-process `focused_window()` round
+            // trip. The destroyed element is right here as an argument, so ask it what it was
+            // first and only follow up when a window actually went away.
+            let was_a_window = element.role().is_ok_and(|role| role == kAXWindowRole);
+
+            if was_a_window {
+                // We check to see if there is a valid window for the app, if there is not then we know the
+                // final window has been destroyed. This is done via getting an error when trying to get
+                // the focused window.
+                // SAFETY:
+                // Operations: `AXUIElementCreateApplication` (no preconditions, Create rule) and
+                // `UIElement::from`, whose precondition — a live non-null element — is the
+                // postcondition of the former.
+                // Leak note: the `+1` from the Create rule is never released, and `UIElement::from`
+                // applies the *Get* rule on top of it, so this leaks one AX element per destroyed
+                // window. See docs/13-unsafe-review.md #6.
+                let ax_app_ref = UIElement::from(AXUIElementCreateApplication(app.pid));
+                if ax_app_ref.focused_window().is_err() {
+                    Some(WindowServerEvent::WindowDestroyed { app: app.clone() })
+                } else {
+                    None
+                }
             } else {
                 None
             }

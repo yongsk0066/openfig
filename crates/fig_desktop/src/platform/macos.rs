@@ -91,10 +91,7 @@ use tracing::{
     warn,
 };
 
-use super::{
-    PlatformBoundEvent,
-    PlatformWindow,
-};
+use super::PlatformBoundEvent;
 use crate::event::{
     Event,
     EventSender,
@@ -978,13 +975,16 @@ impl PlatformStateImpl {
         }
     }
 
-    /// Gets the currently active window on the platform
-    pub(super) fn get_active_window(&self) -> Option<PlatformWindow> {
-        let active_window = self.focused_window.lock().unwrap().as_ref()?.clone();
-        Some(PlatformWindow {
-            rect: active_window.get_bounds()?.into(),
-            inner: active_window,
-        })
+    /// The bottom edge of the focused window, in logical pixels.
+    ///
+    /// This used to return a whole `PlatformWindow`, which meant cloning the `PlatformWindowImpl`
+    /// — a `UIElement` `CFRetain` plus the entire `x_term_tree_cache` `Vec`, each element
+    /// retained — so that the caller could read `rect.bottom()` and drop the rest.
+    /// `PlatformWindow::inner` had no reader at all.
+    pub(super) fn active_window_bottom(&self, scale: f64) -> Option<f64> {
+        let guard = self.focused_window.lock().unwrap();
+        let active_window = guard.as_ref()?;
+        Some(Rect::from(active_window.get_bounds()?).bottom(scale))
     }
 
     pub(super) async fn icon_lookup(asset: &AssetSpecifier<'_>) -> Option<ProcessedAsset> {

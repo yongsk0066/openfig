@@ -112,6 +112,13 @@ impl WindowState {
         }
     }
 
+    fn set_position(&self, platform_state: &PlatformState, position: Position, which: &'static str) {
+        match platform_state.position_window(&self.window, &self.window_id, position) {
+            Ok(_) => tracing::trace!(window_id =% self.window_id, ?position, %which, "updated window geometry"),
+            Err(err) => tracing::error!(%err, window_id =% self.window_id, "failed to position window"),
+        }
+    }
+
     #[instrument(skip(self))]
     fn update_window_geometry(
         &self,
@@ -232,9 +239,9 @@ impl WindowState {
                         )
                     });
 
-                let overflows_window_below = platform_state.get_active_window().is_some_and(|window| {
-                    window.rect.bottom(scale_factor) < max_height + caret_position.y + caret_size.height
-                });
+                let overflows_window_below = platform_state
+                    .active_window_bottom(scale_factor)
+                    .is_some_and(|bottom| bottom < max_height + caret_position.y + caret_size.height);
 
                 let above = !overflows_monitor_above & (overflows_monitor_below | overflows_window_below);
 
@@ -265,21 +272,24 @@ impl WindowState {
         };
 
         if !dry_run {
-            match platform_state.position_window(&self.window, &self.window_id, position) {
-                Ok(_) => {
-                    tracing::trace!(window_id =% self.window_id, ?position, ?is_above, ?is_clipped, "updated window geometry: first set");
-                },
-                Err(err) => tracing::error!(%err, window_id =% self.window_id, "failed to position window"),
+            // The position is applied before *and* after the resize on purpose: Cocoa's origin is
+            // the bottom-left, so `setContentSize:` keeps the bottom edge fixed and moves the top
+            // edge, which is the one this window is anchored by. What is new is the change
+            // checks — a keystroke that moves neither the caret nor the suggestion list used to
+            // cost four to six `setFrameOrigin:` and two `setContentSize:` window-server round
+            // trips regardless.
+            let size_changed = self.window.inner_size() != size.to_physical(self.window.scale_factor());
+            let position_changed =
+                self.window.outer_position().ok() != Some(position.to_physical(self.window.scale_factor()));
+
+            if position_changed {
+                self.set_position(platform_state, position, "first set");
             }
 
-            // Apply the diff to atomic state
-            self.window.set_inner_size(size);
-
-            match platform_state.position_window(&self.window, &self.window_id, position) {
-                Ok(_) => {
-                    tracing::trace!(window_id =% self.window_id,"updated window geometry: second set");
-                },
-                Err(err) => tracing::error!(%err, window_id =% self.window_id, "failed to position window"),
+            if size_changed {
+                self.window.set_inner_size(size);
+                // Re-anchor the top edge after Cocoa moved it.
+                self.set_position(platform_state, position, "second set");
             }
         }
 
@@ -347,7 +357,10 @@ impl WindowState {
             },
             WindowEvent::Show => {
                 if self.window_id == AUTOCOMPLETE_ID {
-                    if platform::autocomplete_active() {
+                    // `Hide` has always checked; `Show` did not, so every keystroke re-sent
+                    // `InterceptFigJSVisible` to every linked figterm session and re-called
+                    // `set_visible(true)` on an already visible window.
+                    if platform::autocomplete_active() && !self.window.is_visible() {
                         for session in figterm_state.inner.lock().linked_sessions.values_mut() {
                             let _ = session
                                 .sender

@@ -10,7 +10,6 @@ use std::rc::Rc;
 use std::sync::{
     Arc,
     LazyLock,
-    OnceLock,
 };
 
 use fig_desktop_api::init_script::javascript_init;
@@ -166,11 +165,6 @@ pub struct ApiState {
     pub position_window: tokio::sync::Mutex<()>,
 }
 
-/// The last global standing: `platform/macos.rs`'s `application_should_handle_reopen` IMP is an
-/// `extern "C"` function with no way to receive captured state. Lane 2 #30 replaces that
-/// injection with `WryEvent::Reopen` and this can go with it.
-pub static GLOBAL_PROXY: OnceLock<EventLoopProxy> = OnceLock::new();
-
 impl WebviewManager {
     #[allow(unused_variables)]
     #[allow(unused_mut)]
@@ -190,7 +184,6 @@ impl WebviewManager {
         }
 
         let proxy = event_loop.create_proxy();
-        GLOBAL_PROXY.set(proxy.clone()).unwrap();
 
         let figterm_state = Arc::new(FigtermState::default());
         let platform_state = Arc::new(PlatformState::new(proxy.clone()));
@@ -509,6 +502,17 @@ impl WebviewManager {
                     }) {
                         warn!(%err, "Error sending event");
                     }
+                },
+                // Dock icon clicked while the app has no visible window. tao raises this
+                // directly; the app used to try to inject its own
+                // `applicationShouldHandleReopen:hasVisibleWindows:` IMP into
+                // `TaoAppDelegateParent`, which `class_addMethod` refused because tao defines
+                // that selector itself — so it was a no-op with a `trace!` for a signal.
+                WryEvent::Reopen { .. } => {
+                    proxy.send_event_or_log(Event::WindowEvent {
+                        window_id: DASHBOARD_ID,
+                        window_event: WindowEvent::Show,
+                    });
                 },
                 WryEvent::MainEventsCleared | WryEvent::NewEvents(StartCause::WaitCancelled { .. }) => {},
                 // tao raises these from a global `NSEvent` monitor and offers no way to turn

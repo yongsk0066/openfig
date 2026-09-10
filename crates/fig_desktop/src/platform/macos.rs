@@ -58,7 +58,6 @@ use objc::runtime::{
     Object,
     Sel,
     class_addMethod,
-    objc_getClass,
     object_getClass,
 };
 use objc::{
@@ -107,7 +106,6 @@ use crate::utils::Rect;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::webview::{
     FigIdMap,
-    GLOBAL_PROXY,
     WindowId,
 };
 use crate::{
@@ -300,34 +298,6 @@ impl PlatformStateImpl {
         F: MethodImplementation<Callee = Object>,
     {
         Self::override_objc_class_method(webview_class, "WryWebView", sel, func);
-    }
-
-    fn override_app_delegate_method<F>(sel: Sel, func: F)
-    where
-        F: MethodImplementation<Callee = Object>,
-    {
-        // tao still registers this one with the old `objc` ClassDecl under a literal name:
-        // https://github.com/tauri-apps/tao/blob/dev/src/platform_impl/macos/app_delegate.rs
-        const CLASS: &str = "TaoAppDelegateParent";
-        let name = CString::new(CLASS).unwrap();
-        // SAFETY:
-        // Operation: the `objc_getClass` FFI call, plus the `*const Class -> *mut Class` cast.
-        // Contract (Objective-C runtime): the argument must be a valid NUL-terminated C string;
-        // the function returns the registered class of that name, or nil.
-        // Evidence:
-        // - `name` is a `CString` built from a `&'static str` literal with no interior NUL, so
-        //   `CString::new` succeeded (the `unwrap` is infallible for this literal) and `as_ptr()` yields a
-        //   valid NUL-terminated pointer. `name` is a live local for the whole call.
-        // - The nil case is handled by the `is_null` test below, so a missing class degrades to "do not
-        //   install the override" rather than to UB.
-        // Postcondition: `class` is nil or an immortal `Class`; the `*const -> *mut` cast is
-        // sound because `class_addMethod` mutates the class through the runtime's own locks,
-        // not through Rust aliasing rules.
-        // Fragility note (not a soundness defect): the class name is tao's, matched by string.
-        // A tao upgrade that renames or objc2-ifies `TaoAppDelegateParent` silently disables
-        // the override — the `trace!` in `override_objc_class_method` is the only signal.
-        let class = unsafe { objc_getClass(name.as_ptr()) as *mut Class };
-        Self::override_objc_class_method((!class.is_null()).then_some(class), CLASS, sel, func);
     }
 
     fn override_objc_class_method<F>(class: Option<*mut Class>, class_name: &str, sel: Sel, func: F)
@@ -651,31 +621,6 @@ impl PlatformStateImpl {
                     webview_class,
                     sel!(mouseDown:),
                     mouse_down as extern "C" fn(&Object, Sel, id),
-                );
-
-                extern "C" fn application_should_handle_reopen(
-                    _this: &Object,
-                    _cmd: Sel,
-                    _sender: id,
-                    _visible_windows: BOOL,
-                ) -> BOOL {
-                    trace!("application_should_handle_reopen");
-
-                    let proxy = GLOBAL_PROXY.get().unwrap();
-
-                    if let Err(err) = proxy.send_event(Event::WindowEvent {
-                        window_id: DASHBOARD_ID,
-                        window_event: WindowEvent::Show,
-                    }) {
-                        warn!(%err, "Error sending event");
-                    }
-
-                    YES
-                }
-
-                Self::override_app_delegate_method(
-                    sel!(applicationShouldHandleReopen:hasVisibleWindows:),
-                    application_should_handle_reopen as extern "C" fn(&Object, Sel, id, BOOL) -> BOOL,
                 );
 
                 Ok(())

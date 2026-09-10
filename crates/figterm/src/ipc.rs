@@ -53,6 +53,15 @@ use tracing::{
 
 use crate::MainLoopEvent;
 
+/// Sent to the main loop when a write to the desktop fails, so a pending insertion lock does not
+/// keep the terminal frozen waiting for a reply that will never come.
+const UNLOCK_INSERTION: MainLoopEvent = MainLoopEvent::Insert {
+    insert: Vec::new(),
+    unlock: true,
+    bracketed: false,
+    execute: false,
+};
+
 /// Whether a desktop app is currently attached to the outgoing channel.
 ///
 /// The outgoing channel has to stay unbounded — it also carries request *responses*
@@ -123,11 +132,10 @@ pub async fn spawn_figterm_ipc(
                             match read_half.recv_message::<FigtermRequestMessage>().await {
                                 Ok(Some(message)) => {
                                     // debug!("Received message: {message:?}");
-                                    incoming_tx
-                                        .clone()
-                                        .send_async((message, response_tx.clone()))
-                                        .await
-                                        .unwrap();
+                                    if let Err(err) = incoming_tx.send_async((message, response_tx.clone())).await {
+                                        error!(%err, "No more listeners for incoming messages");
+                                        break;
+                                    }
                                 },
                                 Ok(None) => {
                                     debug!("Received EOF");
@@ -241,14 +249,9 @@ pub async fn spawn_remote_ipc(
                                 Ok(()) => {},
                                 Err(err) => {
                                     error!(%err, "Failed to send message");
-                                    main_loop_sender
-                                        .send(MainLoopEvent::Insert {
-                                            insert: Vec::new(),
-                                            unlock: true,
-                                            bracketed: false,
-                                            execute: false,
-                                        })
-                                        .unwrap();
+                                    if let Err(err) = main_loop_sender.send(UNLOCK_INSERTION) {
+                                        error!(%err, "Failed to unlock insertion");
+                                    }
                                     let _ = writer.shutdown().await;
                                     break;
                                 }

@@ -16,7 +16,14 @@ pub async fn handle_request(
     message_id: i64,
     state: &WebviewNotificationsState,
 ) -> RequestResult {
-    let notification_type = NotificationType::try_from(request.r#type.unwrap()).unwrap();
+    let Some(raw_type) = request.r#type else {
+        return RequestResult::error("NotificationRequest is missing a type");
+    };
+
+    let notification_type = match NotificationType::try_from(raw_type) {
+        Ok(notification_type) => notification_type,
+        Err(_) => return RequestResult::error(format!("Unknown notification type {raw_type}")),
+    };
 
     if request.subscribe.unwrap_or(true) {
         subscribe(window_id, message_id, notification_type, state)
@@ -75,4 +82,79 @@ fn unsubscribe_all(window_id: &WindowId, state: &WebviewNotificationsState) -> R
     }
 
     RequestResult::success()
+}
+
+#[cfg(test)]
+mod tests {
+    use fig_proto::fig::server_originated_message::Submessage;
+
+    use super::*;
+
+    fn error_message(result: RequestResult) -> String {
+        match *result.expect("handle_request must not return Err") {
+            Submessage::Error(msg) => msg,
+            other => panic!("expected an Error submessage, got {other:?}"),
+        }
+    }
+
+    /// A webview that sends `{}` for a notification request must get an error back, not a
+    /// panicking task that leaves the JS `fetch` pending forever.
+    #[tokio::test]
+    async fn missing_type_is_an_error() {
+        let state = WebviewNotificationsState::default();
+        let result = handle_request(
+            NotificationRequest {
+                subscribe: Some(true),
+                r#type: None,
+            },
+            WindowId("test".into()),
+            0,
+            &state,
+        )
+        .await;
+
+        assert_eq!(error_message(result), "NotificationRequest is missing a type");
+        assert!(state.subscriptions.is_empty());
+    }
+
+    /// Same for an enum value this build does not know about.
+    #[tokio::test]
+    async fn unknown_type_is_an_error() {
+        let state = WebviewNotificationsState::default();
+        let result = handle_request(
+            NotificationRequest {
+                subscribe: Some(true),
+                r#type: Some(9999),
+            },
+            WindowId("test".into()),
+            0,
+            &state,
+        )
+        .await;
+
+        assert_eq!(error_message(result), "Unknown notification type 9999");
+        assert!(state.subscriptions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn known_type_subscribes() {
+        let state = WebviewNotificationsState::default();
+        let result = handle_request(
+            NotificationRequest {
+                subscribe: Some(true),
+                r#type: Some(NotificationType::NotifyOnPrompt as i32),
+            },
+            WindowId("test".into()),
+            7,
+            &state,
+        )
+        .await;
+
+        assert!(matches!(*result.unwrap(), Submessage::Success(true)));
+        assert_eq!(
+            state.subscriptions.get(&WindowId("test".into())).unwrap().len(),
+            1,
+            "the known type must actually be recorded"
+        );
+    }
 }

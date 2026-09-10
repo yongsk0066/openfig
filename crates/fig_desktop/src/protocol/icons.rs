@@ -7,6 +7,7 @@ use std::sync::{
     LazyLock,
 };
 
+use dashmap::DashMap;
 use fig_os_shim::Context;
 use image::{
     GenericImage,
@@ -36,10 +37,20 @@ use crate::webview::WindowId;
 
 const DEFAULT_ICON: &str = "template";
 
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
 pub enum AssetSpecifier<'a> {
     Named(Cow<'a, str>),
     PathBased(Cow<'a, Path>),
+}
+
+impl AssetSpecifier<'_> {
+    /// A `'static` copy, for use as a cache key.
+    fn to_owned_key(&self) -> AssetSpecifier<'static> {
+        match self {
+            AssetSpecifier::Named(name) => AssetSpecifier::Named(Cow::Owned(name.clone().into_owned())),
+            AssetSpecifier::PathBased(path) => AssetSpecifier::PathBased(Cow::Owned(path.clone().into_owned())),
+        }
+    }
 }
 
 static ASSETS: LazyLock<HashMap<AssetSpecifier<'static>, Arc<Cow<'static, [u8]>>>> = LazyLock::new(|| {
@@ -115,10 +126,38 @@ fn build_asset_response(data: Cow<'static, [u8]>, asset_kind: AssetKind) -> Resp
         .unwrap()
 }
 
+/// Resolved assets, keyed by what was asked for.
+///
+/// The function below was already named `cached_asset_response` and had no cache. Everything it
+/// answers is derived from a file path or a compiled-in blob, and a `PathBased` lookup costs a
+/// LaunchServices query plus a resize, a TIFF encode, a TIFF decode and a PNG encode — repeated
+/// for every icon of every suggestion, every time the list is rebuilt. The fallback chain in
+/// `macos.rs` calls in here up to four times for a single icon.
+static ASSET_CACHE: LazyLock<DashMap<AssetCacheKey, ProcessedAsset>> = LazyLock::new(DashMap::new);
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+struct AssetCacheKey {
+    asset: AssetSpecifier<'static>,
+    fallback: Option<String>,
+}
+
 async fn cached_asset_response(asset: &AssetSpecifier<'_>, fallback: Option<&str>) -> Response<Cow<'static, [u8]>> {
     trace!(?asset, "building response for asset");
-    let (data, asset_kind) = resolve_asset(asset, fallback).await;
-    build_asset_response((*data).clone(), asset_kind)
+
+    let key = AssetCacheKey {
+        asset: asset.to_owned_key(),
+        fallback: fallback.map(ToOwned::to_owned),
+    };
+
+    if let Some(hit) = ASSET_CACHE.get(&key) {
+        let (data, asset_kind) = hit.value();
+        return build_asset_response((**data).clone(), asset_kind.clone());
+    }
+
+    let resolved = resolve_asset(asset, fallback).await;
+    let response = build_asset_response((*resolved.0).clone(), resolved.1.clone());
+    ASSET_CACHE.insert(key, resolved);
+    response
 }
 
 async fn build_default() -> Response<Cow<'static, [u8]>> {
@@ -200,5 +239,54 @@ pub async fn handle(
     match res {
         Some(res) => Ok(res),
         None => Ok(build_default().await),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A second request for the same asset must be answered from the cache, not by resolving it
+    /// again — the `PathBased` path is a LaunchServices query plus three codec passes.
+    #[tokio::test]
+    async fn the_same_asset_is_only_resolved_once() {
+        let asset = AssetSpecifier::Named("git".into());
+        let key = AssetCacheKey {
+            asset: asset.to_owned_key(),
+            fallback: None,
+        };
+        ASSET_CACHE.remove(&key);
+
+        let first = cached_asset_response(&asset, None).await;
+        assert_eq!(first.status(), StatusCode::OK);
+        assert!(
+            ASSET_CACHE.contains_key(&key),
+            "the first request must populate the cache"
+        );
+
+        // Overwrite the cached bytes: if the second request re-resolves, it will not see them.
+        let marker: Arc<Cow<'static, [u8]>> = Arc::new(Cow::Owned(b"cached".to_vec()));
+        ASSET_CACHE.insert(key.clone(), (marker, AssetKind::Png));
+
+        let second = cached_asset_response(&asset, None).await;
+        assert_eq!(second.body().as_ref(), b"cached");
+
+        ASSET_CACHE.remove(&key);
+    }
+
+    /// Different fallbacks give different answers for the same name, so the key has to carry it.
+    #[test]
+    fn the_fallback_is_part_of_the_key() {
+        let asset = AssetSpecifier::Named("some-cli".into());
+        let with_folder = AssetCacheKey {
+            asset: asset.to_owned_key(),
+            fallback: Some("folder".into()),
+        };
+        let with_file = AssetCacheKey {
+            asset: asset.to_owned_key(),
+            fallback: Some("file".into()),
+        };
+
+        assert_ne!(with_folder, with_file);
     }
 }

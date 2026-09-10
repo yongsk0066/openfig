@@ -8,11 +8,16 @@ use std::path::{
 use std::sync::Arc;
 
 use fig_os_shim::Context;
+use parking_lot::Mutex;
 use serde::{
     Deserialize,
     Serialize,
 };
-use tracing::error;
+use tokio::sync::OnceCell;
+use tracing::{
+    debug,
+    error,
+};
 use wry::http::header::CONTENT_TYPE;
 use wry::http::{
     HeaderValue,
@@ -55,24 +60,42 @@ struct SpecIndex {
 
 /// The spec directories to search, in priority order: the user override first, then the
 /// directory bundled into the app resources.
-async fn spec_roots(ctx: &Context) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
+///
+/// Canonicalized once, here, rather than per request inside `resolve_in_root`. Startup alone
+/// makes ~60 `<name>.js` requests and each one used to re-resolve both roots
+/// (`autocomplete_specs_dir` + a `metadata`, `current_exe` + a `canonicalize`) before touching
+/// the file it wanted. Neither can change while the process runs.
+static SPEC_ROOTS: OnceCell<Vec<PathBuf>> = OnceCell::const_new();
 
-    match fig_util::directories::autocomplete_specs_dir() {
-        Ok(dir) => {
-            if tokio::fs::metadata(&dir).await.is_ok_and(|meta| meta.is_dir()) {
-                roots.push(dir);
+async fn spec_roots(ctx: &Context) -> &'static [PathBuf] {
+    SPEC_ROOTS
+        .get_or_init(|| async {
+            let mut roots = Vec::new();
+
+            match fig_util::directories::autocomplete_specs_dir() {
+                Ok(dir) => {
+                    if tokio::fs::metadata(&dir).await.is_ok_and(|meta| meta.is_dir()) {
+                        roots.push(dir);
+                    }
+                },
+                Err(err) => error!(%err, "failed to resolve the user spec dir"),
             }
-        },
-        Err(err) => error!(%err, "failed to resolve the user spec dir"),
-    }
 
-    match fig_util::directories::resources_path_ctx(ctx) {
-        Ok(resources) => roots.push(resources.join("specs")),
-        Err(err) => error!(%err, "failed to resolve the bundled spec dir"),
-    }
+            match fig_util::directories::resources_path_ctx(ctx) {
+                Ok(resources) => roots.push(resources.join("specs")),
+                Err(err) => error!(%err, "failed to resolve the bundled spec dir"),
+            }
 
-    roots
+            let mut canonical = Vec::with_capacity(roots.len());
+            for root in roots {
+                match tokio::fs::canonicalize(&root).await {
+                    Ok(root) => canonical.push(root),
+                    Err(err) => debug!(%err, root = %root.display(), "spec root is not readable"),
+                }
+            }
+            canonical
+        })
+        .await
 }
 
 /// The union of every root's `index.json`, sorted and deduplicated.
@@ -85,7 +108,7 @@ async fn spec_roots(ctx: &Context) -> Vec<PathBuf> {
 ///
 /// `None` means no root had a parseable `index.json`; the caller answers 404 so the loader's
 /// index cache resets and retries, instead of caching "no specs exist" for the session.
-async fn index_json(roots: &[PathBuf]) -> Option<SpecIndex> {
+async fn index_json_uncached(roots: &[PathBuf]) -> Option<SpecIndex> {
     let mut completions = BTreeSet::new();
     let mut diff_versioned_completions = BTreeSet::new();
     let mut any = false;
@@ -119,6 +142,48 @@ async fn index_json(roots: &[PathBuf]) -> Option<SpecIndex> {
     })
 }
 
+/// The serialized index, rebuilt only when a root's `index.json` changes.
+///
+/// The bundled index is 21 KB / 737 entries and was read, parsed and re-serialized on every
+/// `spec://localhost/index.json` request. The key is the roots plus each index file's
+/// modification time, so editing a spec directory in dev still takes effect and the tests below
+/// — which each use their own temp roots — never see each other's entries.
+type IndexKey = Vec<(PathBuf, Option<std::time::SystemTime>)>;
+/// `None` for the body means "no root had a parseable index", which is cached too.
+type CachedIndex = (IndexKey, Option<Arc<Vec<u8>>>);
+static INDEX_CACHE: Mutex<Option<CachedIndex>> = Mutex::new(None);
+
+async fn index_key(roots: &[PathBuf]) -> IndexKey {
+    let mut key = Vec::with_capacity(roots.len());
+    for root in roots {
+        let path = root.join("index.json");
+        let modified = tokio::fs::metadata(&path)
+            .await
+            .ok()
+            .and_then(|meta| meta.modified().ok());
+        key.push((path, modified));
+    }
+    key
+}
+
+async fn index_json(roots: &[PathBuf]) -> Option<Arc<Vec<u8>>> {
+    let key = index_key(roots).await;
+
+    if let Some((cached_key, cached)) = INDEX_CACHE.lock().as_ref()
+        && *cached_key == key
+    {
+        return cached.clone();
+    }
+
+    let index = index_json_uncached(roots)
+        .await
+        .and_then(|index| serde_json::to_vec(&index).ok())
+        .map(Arc::new);
+
+    *INDEX_CACHE.lock() = Some((key, index.clone()));
+    index
+}
+
 fn relativize(path: &Path) -> &Path {
     path.strip_prefix("/").unwrap_or(path)
 }
@@ -142,7 +207,7 @@ async fn resolve_in_root(root: &Path, uri_path: &Path) -> Option<PathBuf> {
 async fn handle_roots(roots: &[PathBuf], uri_path: &str) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
     if uri_path == "/index.json" {
         return match index_json(roots).await {
-            Some(index) => Ok(res_ok(serde_json::to_vec(&index)?, APPLICATION_JSON)),
+            Some(index) => Ok(res_ok((*index).clone(), APPLICATION_JSON)),
             None => Ok(res_404()),
         };
     }
@@ -172,7 +237,7 @@ pub async fn handle(
     request: Request<Vec<u8>>,
     _: WindowId,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
-    handle_roots(&spec_roots(&ctx).await, request.uri().path()).await
+    handle_roots(spec_roots(&ctx).await, request.uri().path()).await
 }
 
 #[cfg(test)]

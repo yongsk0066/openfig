@@ -131,7 +131,6 @@ pub const DEFAULT_CARET_WIDTH: f64 = 10.0;
 const kCGFloatingWindowLevelKey: i32 = 5;
 
 static UNMANAGED: Unmanaged = Unmanaged {
-    event_sender: RwLock::new(Option::<EventLoopProxy>::None),
     window_server: RwLock::new(Option::<Arc<Mutex<WindowServer>>>::None),
 };
 
@@ -150,7 +149,6 @@ pub fn is_ventura() -> bool {
 }
 
 struct Unmanaged {
-    event_sender: RwLock<Option<EventLoopProxy>>,
     window_server: RwLock<Option<Arc<Mutex<WindowServer>>>>,
 }
 
@@ -414,7 +412,6 @@ impl PlatformStateImpl {
                     }
                 }
 
-                UNMANAGED.event_sender.write().unwrap().replace(self.proxy.clone());
                 let (tx, rx) = flume::unbounded::<WindowServerEvent>();
 
                 UNMANAGED
@@ -909,27 +906,20 @@ impl PlatformStateImpl {
         let caret = caret.context("Failed to get cursor position")?;
         debug!("Sending caret update {:?}", caret);
 
-        UNMANAGED
-            .event_sender
-            .read()
-            .unwrap()
-            .clone()
-            .unwrap()
-            .send_event(Event::WindowEvent {
-                window_id: AUTOCOMPLETE_ID,
-                window_event: WindowEvent::UpdateWindowGeometry {
-                    position: Some(WindowPosition::RelativeToCaret {
-                        caret_position: caret.position,
-                        caret_size: caret.size,
-                        origin: Origin::TopLeft,
-                    }),
-                    size: None,
-                    anchor: None,
-                    tx: None,
-                    dry_run: false,
-                },
-            })
-            .ok();
+        self.proxy.send_event_or_log(Event::WindowEvent {
+            window_id: AUTOCOMPLETE_ID,
+            window_event: WindowEvent::UpdateWindowGeometry {
+                position: Some(WindowPosition::RelativeToCaret {
+                    caret_position: caret.position,
+                    caret_size: caret.size,
+                    origin: Origin::TopLeft,
+                }),
+                size: None,
+                anchor: None,
+                tx: None,
+                dry_run: false,
+            },
+        });
 
         Ok(())
     }

@@ -1,9 +1,9 @@
-#[allow(unused_imports)]
 use fig_util::consts::PRODUCT_NAME;
-#[allow(unused_imports)]
 use muda::{
     Menu,
     MenuEvent,
+    MenuItemBuilder,
+    PredefinedMenuItem,
     Submenu,
 };
 use tao::event_loop::ControlFlow;
@@ -24,13 +24,11 @@ const DASHBOARD_RELOAD: &str = "dashboard-reload";
 const DASHBOARD_BACK: &str = "dashboard-back";
 const DASHBOARD_FORWARD: &str = "dashboard-forward";
 
+/// The dashboard window's menu bar.
+///
+/// The "Help" submenu used to be appended empty — a top-level title with nothing under it. The
+/// dashboard's own `/help` route is the real one.
 pub fn menu_bar() -> Menu {
-    use muda::{
-        MenuItemBuilder,
-        PredefinedMenuItem,
-        Submenu,
-    };
-
     let menu_bar = Menu::new();
 
     let app_submenu = Submenu::new(PRODUCT_NAME, true);
@@ -96,9 +94,6 @@ pub fn menu_bar() -> Menu {
         .append_items(&[&PredefinedMenuItem::minimize(Some("Minimize"))])
         .unwrap();
     menu_bar.append(&window_submenu).unwrap();
-
-    let help_submenu = Submenu::new("Help", true);
-    menu_bar.append(&help_submenu).unwrap();
 
     menu_bar
 }

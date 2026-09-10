@@ -26,8 +26,9 @@ use crate::{
     EventLoopProxy,
 };
 
-/// The tray menu has four ids; there used to be four more handlers for ids the menu has never
-/// contained (`dashboard-devtools`, `autocomplete-devtools`, `dashboard`, `uninstall`).
+/// The tray menu has two clickable ids. There used to be four more handlers for ids the menu has
+/// never contained (`dashboard-devtools`, `autocomplete-devtools`, `dashboard`, `uninstall`), plus
+/// a `not-working` entry that opened `/help` — the dashboard sidebar already links there.
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &*menu_event.id().0 {
         "quit" => {
@@ -40,15 +41,6 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
                     WindowEvent::NavigateRelative {
                         path: "/autocomplete".into(),
                     },
-                    WindowEvent::Show,
-                ]),
-            });
-        },
-        "not-working" => {
-            proxy.send_event_or_log(Event::WindowEvent {
-                window_id: DASHBOARD_ID.clone(),
-                window_event: WindowEvent::Batch(vec![
-                    WindowEvent::NavigateRelative { path: "/help".into() },
                     WindowEvent::Show,
                 ]),
             });
@@ -80,21 +72,20 @@ fn get_icon() -> Icon {
     Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
 
-/// The tray menu: four live items.
+/// The tray menu: Settings, Version, Quit.
 ///
 /// This used to be a 157-line `MenuElement` DSL — an enum with a dead `SubMenu` variant, two
 /// near-identical `add_to_menu`/`add_to_submenu` walkers, a `("linux", Some(emoji))` branch in
 /// a macOS-only app, and `emoji_icon`/`image_icon` fields every call site passed `None` for.
+///
+/// With `LSUIElement = true` there is no Dock icon, so this menu is the only way to reach the
+/// dashboard or stop the app without a terminal. `app.hideMenubarIcon` hides it anyway
+/// (`webview/mod.rs`), which is why `q quit` and `q dashboard` have to keep working.
 fn get_context_menu() -> Menu {
     let menu = Menu::new();
 
-    let items: [&dyn muda::IsMenuItem; 7] = [
+    let items: [&dyn muda::IsMenuItem; 5] = [
         &MenuItemBuilder::new().text("Settings").id("settings".into()).build(),
-        &PredefinedMenuItem::separator(),
-        &MenuItemBuilder::new()
-            .text(format!("{PRODUCT_NAME} not working?"))
-            .id("not-working".into())
-            .build(),
         &PredefinedMenuItem::separator(),
         &MenuItemBuilder::new()
             .text(format!("Version: {}", env!("CARGO_PKG_VERSION")))

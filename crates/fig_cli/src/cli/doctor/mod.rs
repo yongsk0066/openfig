@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod checks;
 
 use std::borrow::Cow;
@@ -15,7 +13,6 @@ use std::process::{
     Command,
     ExitCode,
 };
-use std::sync::Arc;
 use std::time::Duration;
 
 use anstream::{
@@ -57,17 +54,12 @@ use fig_os_shim::{
 };
 use fig_proto::local::DiagnosticsResponse;
 use fig_settings::JsonStore;
-use fig_util::directories::{
-    local_remote_socket_path,
-    settings_path,
-};
+use fig_util::directories::settings_path;
 use fig_util::env_var::{
     PROCESS_LAUNCHED_BY_Q,
     Q_TERM,
     QTERM_SESSION_ID,
 };
-use fig_util::macos::BUNDLE_CONTENTS_INFO_PLIST_PATH;
-use fig_util::terminal::in_special_terminal;
 use fig_util::{
     APP_BUNDLE_NAME,
     CLI_BINARY_NAME,
@@ -91,13 +83,9 @@ use spinners::{
 use tokio::io::AsyncBufReadExt;
 
 use super::app::restart_fig;
-use super::diagnostics::verify_integration;
 use crate::util::desktop::desktop_app_running;
+use crate::util::is_executable_in_path;
 use crate::util::system_info::SupportLevel;
-use crate::util::{
-    app_path_from_bundle_id,
-    is_executable_in_path,
-};
 
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct DoctorArgs {
@@ -256,27 +244,6 @@ where
                 .join(" ")
         )
     })))
-}
-
-fn is_installed(app: Option<impl AsRef<OsStr>>) -> bool {
-    match app.and_then(app_path_from_bundle_id) {
-        Some(x) => !x.is_empty(),
-        None => false,
-    }
-}
-
-pub fn app_version(app: impl AsRef<OsStr>) -> Option<Version> {
-    let app_path = app_path_from_bundle_id(app)?;
-    let output = Command::new("defaults")
-        .args([
-            "read",
-            &format!("{app_path}/{BUNDLE_CONTENTS_INFO_PLIST_PATH}"),
-            "CFBundleShortVersionString",
-        ])
-        .output()
-        .ok()?;
-    let version = String::from_utf8_lossy(&output.stdout);
-    Version::parse(version.trim()).ok()
 }
 
 const CHECKMARK: &str = "✔";
@@ -459,57 +426,6 @@ impl DoctorCheck for DesktopSocketCheck {
             DoctorCheckType::NormalCheck
         } else {
             DoctorCheckType::NoCheck
-        }
-    }
-}
-
-struct RemoteSocketCheck;
-
-#[async_trait]
-impl DoctorCheck for RemoteSocketCheck {
-    fn name(&self) -> Cow<'static, str> {
-        format!("{PRODUCT_NAME} socket exists").into()
-    }
-
-    async fn get_type(&self, _: &(), _: Platform) -> DoctorCheckType {
-        DoctorCheckType::NormalCheck
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        let remote_socket = local_remote_socket_path().map_err(|err| DoctorError::Error {
-            reason: "Unable to get remote socket path".into(),
-            info: vec![format!("Error: {err}").into()],
-            fix: None,
-            error: Some(err.into()),
-        })?;
-
-        // Check file exists
-        check_file_exists(&remote_socket).map_err(|err| DoctorError::Error {
-            reason: format!("{PRODUCT_NAME} socket missing").into(),
-            info: vec![
-                format!("Path: {remote_socket:?}").into(),
-                format!("Error: {err}").into(),
-            ],
-            fix: None,
-            error: Some(err),
-        })?;
-
-        // Check socket permissions
-        check_socket_perms(&remote_socket).await?;
-
-        // Check connecting to socket
-        match tokio::net::UnixStream::connect(&remote_socket).await {
-            Ok(_) => Ok(()),
-            Err(err) => Err(DoctorError::Error {
-                reason: "Failed to connect to remote socket".into(),
-                info: vec![
-                    "Ensure the desktop app is running".into(),
-                    format!("Path: {remote_socket:?}").into(),
-                    format!("Error: {err}").into(),
-                ],
-                fix: None,
-                error: Some(err.into()),
-            }),
         }
     }
 }
@@ -1138,37 +1054,8 @@ impl DoctorCheck<DiagnosticsResponse> for DotfilesSymlinkedCheck {
     }
 }
 
-struct AutocompleteActiveCheck;
-
-#[async_trait]
-impl DoctorCheck<DiagnosticsResponse> for AutocompleteActiveCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Autocomplete is active".into()
-    }
-
-    async fn get_type(&self, diagnostics: &DiagnosticsResponse, _platform: Platform) -> DoctorCheckType {
-        if diagnostics.autocomplete_active.is_some() {
-            DoctorCheckType::NormalCheck
-        } else {
-            DoctorCheckType::NoCheck
-        }
-    }
-
-    async fn check(&self, diagnostics: &DiagnosticsResponse) -> Result<(), DoctorError> {
-        if diagnostics.autocomplete_active() {
-            Ok(())
-        } else {
-            Err(doctor_error!(
-                "Autocomplete is currently inactive. Your desktop integration(s) may be broken!"
-            ))
-        }
-    }
-}
-
 struct SupportedTerminalCheckContext {
-    ctx: Arc<Context>,
     terminal: Option<Terminal>,
-    in_special_terminal: Option<Terminal>,
 }
 
 struct SupportedTerminalCheck;
@@ -1209,40 +1096,6 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
         } else {
             Ok(())
         }
-    }
-}
-
-struct ItermIntegrationCheck;
-
-#[async_trait]
-impl DoctorCheck<Option<Terminal>> for ItermIntegrationCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "iTerm integration is enabled".into()
-    }
-
-    async fn get_type(&self, current_terminal: &Option<Terminal>, platform: Platform) -> DoctorCheckType {
-        if platform == Platform::MacOs {
-            if !is_installed(Terminal::Iterm.to_bundle_id().as_deref()) {
-                DoctorCheckType::NoCheck
-            } else if matches!(current_terminal.to_owned(), Some(Terminal::Iterm)) {
-                DoctorCheckType::NormalCheck
-            } else {
-                DoctorCheckType::SoftCheck
-            }
-        } else {
-            DoctorCheckType::NoCheck
-        }
-    }
-
-    async fn check(&self, _: &Option<Terminal>) -> Result<(), DoctorError> {
-        if let Some(version) = app_version("com.googlecode.iterm2")
-            && version < Version::new(3, 4, 0)
-        {
-            return Err(doctor_error!(
-                "iTerm version is incompatible with {PRODUCT_NAME}. Please update iTerm to latest version"
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -1301,59 +1154,6 @@ impl DoctorCheck<SupportedTerminalCheckContext> for ItermBashIntegrationCheck {
     }
 }
 
-struct HyperIntegrationCheck;
-#[async_trait]
-impl DoctorCheck<Option<Terminal>> for HyperIntegrationCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Hyper integration is enabled".into()
-    }
-
-    async fn get_type(&self, current_terminal: &Option<Terminal>, _platform: Platform) -> DoctorCheckType {
-        if !is_installed(Terminal::Hyper.to_bundle_id().as_deref()) {
-            return DoctorCheckType::NoCheck;
-        }
-
-        if matches!(current_terminal.to_owned(), Some(Terminal::Hyper)) {
-            DoctorCheckType::NormalCheck
-        } else {
-            DoctorCheckType::SoftCheck
-        }
-    }
-
-    async fn check(&self, _: &Option<Terminal>) -> Result<(), DoctorError> {
-        let integration = verify_integration("co.zeit.hyper")
-            .await
-            .context("Could not verify Hyper integration")?;
-
-        if integration != "installed!" {
-            // Check ~/.hyper_plugins/local/fig-hyper-integration/index.js exists
-            let integration_path = directories::home_dir()
-                .context("Could not get home dir")?
-                .join(".hyper_plugins/local/fig-hyper-integration/index.js");
-
-            if !integration_path.exists() {
-                return Err(doctor_error!("fig-hyper-integration plugin is missing."));
-            }
-
-            let config = read_to_string(
-                directories::home_dir()
-                    .context("Could not get home dir")?
-                    .join(".hyper.js"),
-            )
-            .context("Could not read ~/.hyper.js")?;
-
-            if !config.contains("fig-hyper-integration") {
-                return Err(doctor_error!(
-                    "fig-hyper-integration plugin needs to be added to localPlugins!"
-                ));
-            }
-            return Err(doctor_error!("Unknown error with Hyper integration"));
-        }
-
-        Ok(())
-    }
-}
-
 struct SystemVersionCheck;
 
 #[async_trait]
@@ -1376,40 +1176,6 @@ impl DoctorCheck for SystemVersionCheck {
             )),
             SupportLevel::Unsupported => Err(doctor_error!("{os_version} is not supported")),
         }
-    }
-}
-
-struct DesktopCompatibilityCheck;
-
-#[async_trait]
-impl DoctorCheck for DesktopCompatibilityCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Desktop Compatibility Check".into()
-    }
-
-    async fn get_type(&self, _: &(), _: Platform) -> DoctorCheckType {
-        DoctorCheckType::NormalCheck
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        Ok(())
-    }
-}
-
-struct WindowsConsoleCheck;
-
-#[async_trait]
-impl DoctorCheck for WindowsConsoleCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Windows Console Check".into()
-    }
-
-    async fn get_type(&self, _: &(), _: Platform) -> DoctorCheckType {
-        DoctorCheckType::NormalCheck
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        Ok(())
     }
 }
 
@@ -1562,13 +1328,8 @@ async fn get_shell_context() -> Result<Option<Shell>> {
 }
 
 async fn get_terminal_context() -> Result<SupportedTerminalCheckContext> {
-    let ctx = Context::new();
-    let terminal = Terminal::parent_terminal(&Context::new());
-    let in_special_terminal = in_special_terminal(&ctx);
     Ok(SupportedTerminalCheckContext {
-        ctx,
-        terminal,
-        in_special_terminal,
+        terminal: Terminal::parent_terminal(&Context::new()),
     })
 }
 
@@ -1717,11 +1478,7 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
         run_checks_with_context(
             "Let's check your terminal integrations...",
-            vec![
-                &SupportedTerminalCheck,
-                // &ItermIntegrationCheck,
-                &ItermBashIntegrationCheck,
-            ],
+            vec![&SupportedTerminalCheck, &ItermBashIntegrationCheck],
             get_terminal_context,
             config,
             &mut spinner,

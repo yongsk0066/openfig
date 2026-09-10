@@ -1,6 +1,5 @@
 mod cli_context;
 pub mod desktop;
-pub mod spinner;
 pub mod system_info;
 
 use std::env;
@@ -59,29 +58,6 @@ pub fn glob_dir(glob: &GlobSet, directory: impl AsRef<Path>) -> Result<Vec<PathB
 
         // Check if the file matches the glob pattern
         if glob.is_match(&path) {
-            files.push(path);
-        }
-    }
-
-    Ok(files)
-}
-
-/// Glob patterns against the file name
-pub fn glob_files(glob: &GlobSet, directory: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
-    // List files in the directory
-    let dir = std::fs::read_dir(directory)?;
-
-    for entry in dir {
-        let entry = entry?;
-        let path = entry.path();
-        let file_name = path.file_name();
-
-        // Check if the file matches the glob pattern
-        if let Some(file_name) = file_name
-            && glob.is_match(file_name)
-        {
             files.push(path);
         }
     }
@@ -206,22 +182,6 @@ pub fn choose(prompt: impl Display, options: &[impl Display]) -> Result<Option<u
     }
 }
 
-pub fn input(prompt: &str, initial_text: Option<&str>) -> Result<String> {
-    if !stdout().is_terminal() {
-        warn!("called input while stdout is not a terminal");
-        return Ok(String::new());
-    }
-
-    let theme = dialoguer_theme();
-    let mut input = dialoguer::Input::with_theme(&theme).with_prompt(prompt);
-
-    if let Some(initial_text) = initial_text {
-        input = input.with_initial_text(initial_text);
-    }
-
-    Ok(input.interact_text()?)
-}
-
 pub fn get_running_app_info(bundle_id: impl AsRef<str>, field: impl AsRef<str>) -> Result<String> {
     let info = Command::new("lsappinfo")
         .args(["info", "-only", field.as_ref(), "-app", bundle_id.as_ref()])
@@ -248,16 +208,6 @@ pub fn dialoguer_theme() -> ColorfulTheme {
         prompt_prefix: dialoguer::console::style("?".into()).for_stderr().magenta(),
         ..ColorfulTheme::default()
     }
-}
-
-pub async fn is_brew_reinstall() -> bool {
-    let regex = regex::bytes::Regex::new(r"brew(\.\w+)?\s+(upgrade|reinstall|install)").unwrap();
-
-    tokio::process::Command::new("ps")
-        .args(["aux", "-o", "args"])
-        .output()
-        .await
-        .is_ok_and(|output| regex.is_match(&output.stdout))
 }
 
 #[cfg(test)]

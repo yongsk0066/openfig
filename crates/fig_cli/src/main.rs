@@ -12,10 +12,7 @@ use clap::error::{
 use crossterm::style::Stylize;
 use eyre::Result;
 use fig_log::get_log_level_max;
-use fig_util::{
-    CLI_BINARY_NAME,
-    PRODUCT_NAME,
-};
+use fig_util::CLI_BINARY_NAME;
 use tracing::metadata::LevelFilter;
 
 #[global_allocator]
@@ -38,10 +35,12 @@ fn main() -> Result<ExitCode> {
                 });
 
             if unknown_arg {
+                // There is no `update` subcommand in this fork — the whole self-update pipeline
+                // was removed — so the old "try running `q update`" hint pointed at a command
+                // that itself fails with "unknown subcommand".
                 eprintln!(
-                    "\nThis command may be valid in newer versions of the {PRODUCT_NAME} CLI. Try running {} {}.",
-                    CLI_BINARY_NAME.magenta(),
-                    "update".magenta()
+                    "\nRun {} to see the commands this build supports.",
+                    format!("{CLI_BINARY_NAME} --help").magenta()
                 );
             }
 

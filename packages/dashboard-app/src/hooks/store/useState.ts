@@ -1,19 +1,21 @@
 import { StoreContext } from "@/context/zustand";
-import { useContext } from "react";
+import { useCallback, useContext } from "react";
 import { useStore } from "zustand";
 import z from "zod";
 
 export function useLocalState(key: string): readonly [unknown, (value: unknown) => void] {
   const store = useContext(StoreContext);
   if (!store) throw new Error("Missing StoreContext.Provider in the tree");
-  return [
-    useStore(store, (state) => {
-      const s = state.state;
-      if (!s) throw new Error("Missing state in the store");
-      return s[key];
-    }),
-    useStore(store, (state) => (value: unknown) => state.setState(key, value)),
-  ] as const;
+  // zustand 5 re-renders whenever a selector returns a new reference, so the
+  // setter must come from a stable store action rather than an inline closure.
+  const value = useStore(store, (state) => {
+    const s = state.state;
+    if (!s) throw new Error("Missing state in the store");
+    return s[key];
+  });
+  const setState = useStore(store, (state) => state.setState);
+  const set = useCallback((next: unknown) => setState(key, next), [setState, key]);
+  return [value, set] as const;
 }
 
 export function useLocalStateDefault(

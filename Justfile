@@ -54,7 +54,8 @@ specs:
 # Web: proto -> api-bindings -> autocomplete-app, dashboard-app
 web:
     pnpm install --frozen-lockfile --ignore-scripts
-    pnpm exec turbo build --filter=./packages/autocomplete-app --filter=./packages/dashboard-app
+    rm -rf packages/autocomplete-app/dist packages/dashboard-app/dist
+    pnpm exec turbo build --force --filter=./packages/autocomplete-app --filter=./packages/dashboard-app
     test -f packages/autocomplete-app/dist/index.html
     test -f packages/dashboard-app/dist/index.html
 

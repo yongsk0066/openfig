@@ -1,5 +1,5 @@
 import { StoreContext } from "@/context/zustand";
-import { useContext } from "react";
+import { useCallback, useContext } from "react";
 import { useStore } from "zustand";
 
 /**
@@ -10,8 +10,10 @@ export function useSetting(key: string) {
   const store = useContext(StoreContext);
   if (!store) throw new Error("Missing StoreContext.Provider in the tree");
 
-  return [
-    useStore(store, (state) => state.settings![key]),
-    useStore(store, (state) => (value: unknown) => state.setSetting(key, value)),
-  ] as const;
+  // zustand 5 re-renders whenever a selector returns a new reference, so the
+  // setter must come from a stable store action rather than an inline closure.
+  const value = useStore(store, (state) => state.settings![key]);
+  const setSetting = useStore(store, (state) => state.setSetting);
+  const set = useCallback((next: unknown) => setSetting(key, next), [setSetting, key]);
+  return [value, set] as const;
 }

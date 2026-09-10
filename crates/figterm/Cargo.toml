@@ -23,7 +23,6 @@ bitflags.workspace = true
 bstr.workspace = true
 bytes.workspace = true
 clap.workspace = true
-dashmap.workspace = true
 fig_ipc.workspace = true
 fig_log.workspace = true
 fig_os_shim.workspace = true

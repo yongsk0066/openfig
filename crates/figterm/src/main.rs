@@ -916,10 +916,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                             stdout.write_all(&write_buffer[..size]).await?;
                             stdout.flush().await?;
 
-                            if write_buffer.capacity() == write_buffer.len() {
-                                write_buffer.reserve(write_buffer.len());
-                            }
-
                             if let Some(edit_buffer) = can_send_edit_buffer(&term)
                                 && let Err(err) = send_edit_buffer(term.shell_state(), edit_buffer, &remote_sender, None).await {
                                     warn!("Failed to send edit buffer: {err}");

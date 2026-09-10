@@ -1,8 +1,13 @@
+use std::collections::HashMap;
 use std::path::{
     Path,
     PathBuf,
 };
 use std::sync::atomic::Ordering;
+use std::sync::{
+    LazyLock,
+    Mutex,
+};
 use std::time::{
     Duration,
     SystemTime,
@@ -83,6 +88,34 @@ fn working_directory(path: Option<&str>, shell_state: &ShellState) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
+/// Resolved `which` lookups, keyed by `(executable, PATH, cwd)`.
+///
+/// Autocomplete generators run a command per request, and `which_in` walks every `PATH` entry
+/// (54 of them here) with a `stat` each. A cached hit is revalidated with a single `is_file`, so a
+/// binary that has been moved or removed still falls through to a fresh lookup; misses are never
+/// cached, so a newly installed binary is found the first time it is asked for.
+type WhichKey = (PathBuf, String, PathBuf);
+
+static WHICH_CACHE: LazyLock<Mutex<HashMap<WhichKey, PathBuf>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn which_cached(executable: &Path, path: Option<&str>, working_directory: &Path) -> Option<PathBuf> {
+    let key: WhichKey = (
+        executable.to_path_buf(),
+        path.unwrap_or_default().to_owned(),
+        working_directory.to_path_buf(),
+    );
+
+    if let Some(hit) = WHICH_CACHE.lock_ignore_poison().get(&key)
+        && hit.is_file()
+    {
+        return Some(hit.clone());
+    }
+
+    let resolved = which::which_in(executable, path, working_directory).ok()?;
+    WHICH_CACHE.lock_ignore_poison().insert(key, resolved.clone());
+    Some(resolved)
+}
+
 fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Path>) -> Command {
     let env = (*SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison())
         .clone()
@@ -97,8 +130,8 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
             .iter()
             .find_map(|(key, value)| if key == "PATH" { Some(value.as_str()) } else { None });
 
-        which::which_in(executable.as_ref(), path, working_directory.as_ref())
-            .map_or_else(|_| Command::new(executable.as_ref()), Command::new)
+        which_cached(executable.as_ref(), path, working_directory.as_ref())
+            .map_or_else(|| Command::new(executable.as_ref()), Command::new)
     };
 
     cmd.current_dir(working_directory);

@@ -4,6 +4,7 @@ use std::io::{
     Write,
 };
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use async_trait::async_trait;
 use clap::ValueEnum;
@@ -54,11 +55,17 @@ impl std::fmt::Display for When {
     }
 }
 
+/// Leading `.` of a dotfile name, e.g. `.zshrc` -> `zshrc`.
+static LEADING_DOT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\.").unwrap());
+
+/// A `# fig ignore` marker anywhere in an rc file.
+static FIG_IGNORE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?mi)^\s*#\s*fig ignore\s?.*$").unwrap());
+
+/// Comment-only and empty lines.
+static COMMENT_LINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*(#.*)?\n").unwrap());
+
 fn integration_file_name(dotfile_name: &str, when: &When, shell: &Shell) -> String {
-    format!(
-        "{}.{when}.{shell}",
-        Regex::new(r"^\.").unwrap().replace_all(dotfile_name, ""),
-    )
+    format!("{}.{when}.{shell}", LEADING_DOT.replace_all(dotfile_name, ""))
 }
 
 pub trait ShellExt {
@@ -298,7 +305,7 @@ impl DotfileShellIntegration {
     fn script_integration(&self, when: When) -> Result<ShellScriptShellIntegration> {
         let integration_file_name = format!(
             "{}.{}.{}",
-            Regex::new(r"^\.").unwrap().replace_all(self.dotfile_name, ""),
+            LEADING_DOT.replace_all(self.dotfile_name, ""),
             when,
             self.shell
         );
@@ -470,17 +477,11 @@ impl Integration for DotfileShellIntegration {
             // Remove comments and empty lines.
             Ok(contents) => {
                 // Check for existence of ignore flag
-                if Regex::new(r"(?mi)^\s*#\s*fig ignore\s?.*$")
-                    .unwrap()
-                    .is_match(&contents)
-                {
+                if FIG_IGNORE.is_match(&contents) {
                     return Ok(());
                 }
 
-                Regex::new(r"(?m)^\s*(#.*)?\n")
-                    .unwrap()
-                    .replace_all(&contents, "")
-                    .into()
+                COMMENT_LINE.replace_all(&contents, "").into()
             },
             Err(Error::Io(err)) if err.kind() == ErrorKind::NotFound => {
                 return Err(Error::FileDoesNotExist(dotfile.into()));

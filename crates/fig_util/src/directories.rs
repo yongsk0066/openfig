@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use camino::Utf8PathBuf;
 use fig_os_shim::{
@@ -116,10 +117,21 @@ fn macos_tempdir() -> Result<PathBuf> {
 ///
 /// On macOS this falls back to TMPDIR, which is secure on macOS
 fn runtime_dir() -> Result<PathBuf> {
-    let mut dir = dirs::runtime_dir();
-    dir = dir.or_else(|| std::env::var_os("TMPDIR").map(PathBuf::from));
-    dir = dir.or(Some(macos_tempdir()?));
-    dir.ok_or(DirectoryError::NoRuntimeDirectory)
+    // Cached: every socket path and log path in the process goes through here, and the
+    // `confstr(_CS_DARWIN_USER_TEMP_DIR)` fallback is two syscalls. Nothing here can change during
+    // the life of the process.
+    static RUNTIME_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    RUNTIME_DIR
+        .get_or_init(|| {
+            dirs::runtime_dir()
+                .or_else(|| std::env::var_os("TMPDIR").map(PathBuf::from))
+                // `.or(Some(macos_tempdir()?))` was eager: it ran `confstr` even when `$TMPDIR`
+                // was set, and turned a fallback failure into a hard error for callers that had a
+                // perfectly good directory already.
+                .or_else(|| macos_tempdir().ok())
+        })
+        .clone()
+        .ok_or(DirectoryError::NoRuntimeDirectory)
 }
 
 /// The sockets directory of the local installation

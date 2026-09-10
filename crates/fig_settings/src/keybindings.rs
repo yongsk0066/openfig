@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::sync::LazyLock;
 
 use serde::{
     Deserialize,
@@ -40,26 +41,34 @@ pub struct KeyBinding {
 #[serde(transparent)]
 pub struct KeyBindings(pub Vec<KeyBinding>);
 
+/// The default key bindings, parsed once.
+///
+/// `actions.json` is 6.8 KB of JSON compiled into the binary, and `load_hardcoded` re-parsed it on
+/// every call. The result is constant.
+static HARDCODED: LazyLock<KeyBindings> = LazyLock::new(|| {
+    let hardcoded_descriptions: Vec<KeyBindingDescription> =
+        serde_json::from_str(include_str!("actions.json")).expect("Unable to load hardcoded actions");
+
+    let key_bindings = hardcoded_descriptions
+        .into_iter()
+        .flat_map(|description| {
+            description
+                .default_bindings
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |binding| KeyBinding {
+                    identifier: description.identifier.clone(),
+                    binding,
+                })
+        })
+        .collect();
+
+    KeyBindings(key_bindings)
+});
+
 impl KeyBindings {
     pub fn load_hardcoded() -> Self {
-        let hardcoded_descriptions: Vec<KeyBindingDescription> =
-            serde_json::from_str(include_str!("actions.json")).expect("Unable to load hardcoded actions");
-
-        let key_bindings = hardcoded_descriptions
-            .into_iter()
-            .flat_map(|description| {
-                description
-                    .default_bindings
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(move |binding| KeyBinding {
-                        identifier: description.identifier.clone(),
-                        binding,
-                    })
-            })
-            .collect();
-
-        Self(key_bindings)
+        HARDCODED.clone()
     }
 
     fn load_from_json_map(

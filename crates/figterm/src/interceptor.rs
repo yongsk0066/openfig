@@ -1,7 +1,7 @@
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use anyhow::Result;
-use dashmap::DashMap;
 use fig_proto::figterm::Action;
 use fig_settings::keybindings::{
     KeyBinding,
@@ -96,7 +96,7 @@ pub struct KeyInterceptor {
     // TODO: this should be based on `availability`
     _global_actions: Vec<Action>,
 
-    mappings: DashMap<KeyEvent, String, fnv::FnvBuildHasher>,
+    mappings: HashMap<KeyEvent, String, fnv::FnvBuildHasher>,
 }
 
 impl KeyInterceptor {
@@ -192,30 +192,27 @@ impl KeyInterceptor {
         self.intercept = false;
     }
 
-    pub fn intercept_key(&self, key_event: &KeyEvent) -> Option<String> {
+    pub fn intercept_key(&self, key_event: &KeyEvent) -> Option<&str> {
         trace!(?key_event, "Intercepting key");
 
         match (self.intercept_global, self.intercept) {
             (true, false) => {
                 // TODO: only show on tab should be encoded in AE
                 if key_event.key == KeyCode::Tab && *ONLY_SHOW_ON_TAB {
-                    Some("showAutocomplete".into())
+                    Some("showAutocomplete")
                 } else {
-                    match self.mappings.get(key_event) {
-                        Some(action) if action.value() == IGNORE_ACTION => None,
-                        Some(action) if GLOBAL_ACTIONS.contains(&action.value().as_str()) => {
-                            Some(action.value().clone())
-                        },
+                    match self.mappings.get(key_event).map(String::as_str) {
+                        Some(IGNORE_ACTION) => None,
+                        Some(action) if GLOBAL_ACTIONS.contains(&action) => Some(action),
                         _ => None,
                     }
                 }
             },
             (_, true) => {
                 if self.window_visible {
-                    match self.mappings.get(key_event) {
-                        Some(action) if action.value() == IGNORE_ACTION => None,
-                        Some(action) => Some(action.value().clone()),
-                        None => None,
+                    match self.mappings.get(key_event).map(String::as_str) {
+                        Some(IGNORE_ACTION) => None,
+                        other => other,
                     }
                 } else {
                     None
@@ -267,14 +264,14 @@ mod tests {
                 key: KeyCode::Tab,
                 modifiers: Modifiers::NONE
             }),
-            Some("insertCommonPrefix".into())
+            Some("insertCommonPrefix")
         );
         assert_eq!(
             interceptor.intercept_key(&KeyEvent {
                 key: KeyCode::DownArrow,
                 modifiers: Modifiers::NONE
             }),
-            Some("navigateDown".into())
+            Some("navigateDown")
         );
     }
 }

@@ -10,6 +10,7 @@ use std::ops::{
     Range,
 };
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::time::SystemTime;
 use std::{
     env,
@@ -240,6 +241,18 @@ pub struct TextBuffer {
     pub buffer: String,
     pub cursor_idx: Option<usize>,
 }
+
+/// `Q_PROMPT_OFFSET_WORKAROUND`, parsed once.
+///
+/// This was read and re-parsed on every new prompt, and each read built a fresh
+/// `fig_os_shim::Env` (a full snapshot of the process environment). The variable is set by the
+/// shell integration before figterm starts and cannot change afterwards.
+static PROMPT_OFFSET_WORKAROUND: LazyLock<Option<i32>> = LazyLock::new(|| {
+    fig_os_shim::Env::new()
+        .q_prompt_offset_workaround()
+        .ok()
+        .and_then(|offset| offset.parse::<i32>().ok())
+});
 
 pub struct Term<T> {
     /// Currently active grid.
@@ -831,9 +844,7 @@ impl<T> Term<T> {
         trace!("New command cursor: {:?}", self.shell_state.cmd_cursor);
 
         // Add work around for emojis
-        if let Ok(cursor_offset) = fig_os_shim::Env::new().q_prompt_offset_workaround()
-            && let Ok(offset) = cursor_offset.parse::<i32>()
-        {
+        if let Some(offset) = *PROMPT_OFFSET_WORKAROUND {
             self.shell_state.cmd_cursor = self.shell_state.cmd_cursor.map(|cursor| Point {
                 column: Column((cursor.column.0 as i32 - offset).max(0) as usize),
                 line: cursor.line,

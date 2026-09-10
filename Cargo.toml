@@ -82,11 +82,11 @@ parking_lot = "0.12.3"
 percent-encoding = "2.2.0"
 portable-pty = "0.8.1"
 r2d2 = "0.8.10"
-r2d2_sqlite = "0.25.0"
+r2d2_sqlite = "0.35.0"
 rand = "0.10.2"
 rayon = "1.8.0"
 regex = "1.7.0"
-rusqlite = { version = "0.32.1", features = ["bundled", "serde_json"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "serde_json"] }
 shellexpand = "3.0.0"
 shell-color = "1.0.0"
 semver = { version = "1.0.26", features = ["serde"] }

@@ -87,12 +87,12 @@ impl History {
                         .start_time
                         .as_ref()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs()),
+                        .and_then(|d| i64::try_from(d.as_secs()).ok()),
                     &command_info
                         .end_time
                         .as_ref()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|t| t.as_secs()),
+                        .and_then(|t| i64::try_from(t.as_secs()).ok()),
                     &command_info
                         .start_time
                         .as_ref()
@@ -156,6 +156,9 @@ impl History {
             "SELECT {ALL_COLUMNS} FROM history {where_expr} {order_by} LIMIT ? OFFSET ?",
         ))?;
 
+        // rusqlite 0.34 dropped the lossy ToSql impls for usize/u64.
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let offset = i64::try_from(offset).unwrap_or(i64::MAX);
         let rows = stmt.query(params![limit, offset])?;
 
         let rows_mapped = rows.mapped(map_row).collect::<rusqlite::Result<Vec<CommandInfo>>>()?;

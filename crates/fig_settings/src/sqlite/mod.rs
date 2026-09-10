@@ -128,7 +128,9 @@ impl Db {
             // insert the migration entry
             transaction.execute(
                 "INSERT INTO migrations (version, migration_time) VALUES (?1, strftime('%s', 'now'));",
-                params![version],
+                // `version` indexes the MIGRATIONS constant, so the cast cannot lose anything;
+                // rusqlite 0.34 dropped the usize ToSql impl.
+                params![version as i64],
             )?;
         }
 
@@ -290,7 +292,7 @@ fn has_migration<C: Deref<Target = Connection>>(conn: &C, version: usize, max_ve
             },
             Err(err) => return Err(err.into()),
         };
-        let count: i32 = stmt.query_row([version], |row| row.get(0))?;
+        let count: i32 = stmt.query_row([version as i64], |row| row.get(0))?;
         return Ok(count >= 1);
     }
 

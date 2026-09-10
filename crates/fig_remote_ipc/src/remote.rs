@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{
-    AtomicU64,
-    Ordering,
-};
 
 use anyhow::{
     Context,
@@ -39,10 +35,8 @@ use tokio::net::{
     UnixStream,
 };
 use tokio::select;
-use tokio::sync::Notify;
 use tokio::time::{
     Duration,
-    Instant,
     MissedTickBehavior,
 };
 use tracing::{
@@ -99,14 +93,12 @@ async fn handle_remote_ipc(
     let (reader, writer) = tokio::io::split(stream);
     let (clientbound_tx, clientbound_rx) = flume::unbounded();
 
-    let bad_connection = Arc::new(Notify::new());
-
     let (on_close_tx, mut on_close_rx) = tokio::sync::broadcast::channel(1);
 
     let outgoing_task = tokio::spawn(handle_outgoing(
         writer,
         clientbound_rx,
-        bad_connection.clone(),
+        on_close_tx.clone(),
         on_close_tx.subscribe(),
     ));
 
@@ -136,7 +128,6 @@ async fn handle_remote_ipc(
                                 if session.secret == handshake.secret {
                                     initialized = true;
                                     session.writer = Some(clientbound_tx.clone());
-                                    session.dead_since = None;
                                     session.on_close_tx = on_close_tx.clone();
                                     debug!(
                                         "Client auth for {} accepted because of secret match ({} = {})",
@@ -165,8 +156,6 @@ async fn handle_remote_ipc(
                                     secret: handshake.secret.clone(),
                                     sender: command_tx,
                                     writer: Some(clientbound_tx.clone()),
-                                    dead_since: None,
-                                    last_receive: Instant::now(),
                                     edit_buffer: EditBuffer {
                                         text: "".to_string(),
                                         cursor: 0,
@@ -174,7 +163,7 @@ async fn handle_remote_ipc(
                                     context: None,
                                     terminal_cursor_coordinates: None,
                                     response_map: HashMap::new(),
-                                    nonce_counter: Arc::new(AtomicU64::new(0)),
+                                    nonce_counter: 0,
                                     on_close_tx: on_close_tx.clone(),
                                     intercept: InterceptMode::Unlocked,
                                     intercept_global: InterceptMode::Unlocked
@@ -269,9 +258,6 @@ async fn handle_remote_ipc(
                         },
                         Some(hostbound::Packet::Pong(())) => {
                             trace!(?session_id, "Received pong");
-                            figterm_state.with(&session_id, |session| {
-                                session.last_receive = Instant::now();
-                            });
                             None
                         },
                         Some(hostbound::Packet::Request(hostbound::Request { request: None, .. })
@@ -301,10 +287,6 @@ async fn handle_remote_ipc(
     let _ = on_close_tx.send(());
     drop(clientbound_tx);
 
-    // figterm_state.with_update(session_id.clone(), |session| {
-    //     session.writer = None;
-    //     session.dead_since = Some(Instant::now());
-    // });
     figterm_state.remove_id(&session_id);
 
     if let Err(err) = ping_task.await {
@@ -321,7 +303,7 @@ async fn handle_remote_ipc(
 async fn handle_outgoing(
     mut writer: tokio::io::WriteHalf<UnixStream>,
     outgoing: flume::Receiver<Clientbound>,
-    bad_connection: Arc<Notify>,
+    on_close_tx: tokio::sync::broadcast::Sender<()>,
     mut on_close_rx: tokio::sync::broadcast::Receiver<()>,
 ) {
     loop {
@@ -334,8 +316,11 @@ async fn handle_outgoing(
                 if let Ok(message) = message {
                     trace!(?message, "Sending remote message");
                     if let Err(err) = writer.send_message(message).await {
-                        error!(%err, "remote outgoing task send error");
-                        bad_connection.notify_one();
+                        // The socket is unusable; tear the whole connection down rather than
+                        // leaving the read loop waiting for a peer that can no longer be
+                        // answered.
+                        error!(%err, "remote outgoing task send error, closing connection");
+                        let _ = on_close_tx.send(());
                         return;
                     }
                 } else {
@@ -422,7 +407,8 @@ async fn handle_commands(
 
         let nonce = if let Some(channel) = nonce_channel {
             Some(figterm_state.with(&session_id, |session| {
-                let nonce = session.nonce_counter.fetch_add(1, Ordering::Relaxed);
+                let nonce = session.nonce_counter;
+                session.nonce_counter += 1;
                 session.response_map.insert(nonce, channel);
                 nonce
             })?)
@@ -431,18 +417,14 @@ async fn handle_commands(
         };
 
         figterm_state.with(&session_id, |session| {
-            if let Some(writer) = &session.writer
-                && writer
-                    .try_send(Clientbound {
-                        packet: Some(clientbound::Packet::Request(clientbound::Request {
-                            request: Some(request),
-                            nonce,
-                        })),
-                    })
-                    .is_ok()
-            {
-                session.last_receive = Instant::now();
-            };
+            if let Some(writer) = &session.writer {
+                let _ = writer.try_send(Clientbound {
+                    packet: Some(clientbound::Packet::Request(clientbound::Request {
+                        request: Some(request),
+                        nonce,
+                    })),
+                });
+            }
         })?;
     }
 

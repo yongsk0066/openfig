@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use fig_proto::fig::EnvironmentVariable;
@@ -23,7 +21,6 @@ use tokio::sync::{
     broadcast,
     oneshot,
 };
-use tokio::time::Instant;
 use uuid::Uuid;
 
 #[derive(Clone, Default, Debug)]
@@ -61,13 +58,7 @@ impl FigtermState {
     /// Gets mutable reference to the given session id and sets the most recent session id
     pub fn with_update<T>(&self, key: Uuid, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
-        let res = guard
-            .linked_sessions
-            .get_mut(&key)
-            .and_then(|session| match session.dead_since {
-                Some(_) => None,
-                None => Some(f(session)),
-            });
+        let res = guard.linked_sessions.get_mut(&key).map(f);
 
         if res.is_some() {
             guard.most_recent = Some(key);
@@ -79,13 +70,7 @@ impl FigtermState {
     fn with_most_recent<T>(&self, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
         let id = guard.most_recent?;
-        guard
-            .linked_sessions
-            .get_mut(&id)
-            .and_then(|session| match session.dead_since {
-                Some(_) => None,
-                None => Some(f(session)),
-            })
+        guard.linked_sessions.get_mut(&id).map(f)
     }
 
     /// Gets mutable reference to the given session id
@@ -157,18 +142,14 @@ pub struct FigtermSession {
     #[serde(skip)]
     pub(crate) writer: Option<flume::Sender<Clientbound>>,
     #[serde(skip)]
-    pub(crate) dead_since: Option<Instant>, // TODO: prune old sessions
-    #[serde(skip)]
     pub edit_buffer: EditBuffer,
-    #[serde(skip)]
-    pub(crate) last_receive: Instant,
     pub context: Option<ShellContext>,
     #[serde(skip)]
     pub terminal_cursor_coordinates: Option<TerminalCursorCoordinates>,
     #[serde(skip)]
     pub(crate) response_map: HashMap<u64, oneshot::Sender<hostbound::response::Response>>,
     #[serde(skip)]
-    pub(crate) nonce_counter: Arc<AtomicU64>,
+    pub(crate) nonce_counter: u64,
     #[serde(skip)]
     pub(crate) on_close_tx: broadcast::Sender<()>,
     pub intercept: InterceptMode,

@@ -74,12 +74,16 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
                 std::fs::create_dir_all(parent)?;
             }
 
-            // We delete the old log file when requested each time the logger is initialized, otherwise we only
-            // delete the file when it has grown too large.
+            // We delete the old log file when requested each time the logger is initialized,
+            // otherwise we roll it over once it has grown too large. Rolling rather than deleting:
+            // the log that just crossed the cap is usually the one holding whatever is being
+            // investigated, and it used to be thrown away at the start of the very next run.
             if args.delete_old_log_file {
                 std::fs::remove_file(log_path).ok();
             } else if log_path.exists() && std::fs::metadata(log_path)?.len() > MAX_FILE_SIZE {
-                std::fs::remove_file(log_path)?;
+                let mut rotated = log_path.as_os_str().to_os_string();
+                rotated.push(".1");
+                std::fs::rename(log_path, std::path::PathBuf::from(rotated))?;
             }
 
             // Create the new log file or append to the existing one.

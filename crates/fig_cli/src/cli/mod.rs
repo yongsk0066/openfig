@@ -49,6 +49,7 @@ use fig_util::{
     directories,
 };
 use serde::Serialize;
+use tracing::level_filters::LevelFilter;
 use tracing::{
     Level,
     debug,
@@ -195,26 +196,35 @@ pub struct Cli {
 
 impl Cli {
     pub async fn execute(self) -> Result<ExitCode> {
+        // Resolve the level once and use it for both decisions below. `log_file_path` used to be
+        // computed from `fig_log::get_log_level_max()`, which `initialize_logging` only updates
+        // *after* it has read this struct — so `-vvv` raised the level but never created
+        // `cli.log`, which is the one thing `-vvv` is for.
+        let verbosity = match self.verbose {
+            0 => None,
+            1 => Some(Level::WARN),
+            2 => Some(Level::INFO),
+            3 => Some(Level::DEBUG),
+            _ => Some(Level::TRACE),
+        };
+        let max_level = verbosity.map_or_else(fig_log::get_log_level_max, LevelFilter::from);
+
+        // `q init`, `q completion` and the `q _ …` internals write to stdout expecting the shell
+        // to `eval` it or capture it in `$(…)`. A log line in that stream is a syntax error in the
+        // user's shell startup, so the stdout logger is off for them whatever `Q_LOG_STDOUT` or
+        // `-v` say; the file log still gets everything.
+        let stdout_is_machine_readable = matches!(
+            self.subcommand,
+            Some(CliRootCommands::Init(_) | CliRootCommands::Completion(_) | CliRootCommands::Internal(_))
+        );
+
         // Initialize our logger and keep around the guard so logging can perform as expected.
         let _log_guard = initialize_logging(LogArgs {
-            log_level: match self.verbose > 0 {
-                true => Some(
-                    match self.verbose {
-                        1 => Level::WARN,
-                        2 => Level::INFO,
-                        3 => Level::DEBUG,
-                        _ => Level::TRACE,
-                    }
-                    .to_string(),
-                ),
-                false => None,
-            },
-            log_to_stdout: fig_os_shim::Env::new().q_log_stdout() || self.verbose > 0,
-            log_file_path: match fig_log::get_log_level_max() >= Level::DEBUG {
-                true => Some("cli.log".to_owned()),
-                false => None,
-            }
-            .map(|name| directories::logs_dir().expect("home dir must be set").join(name)),
+            log_level: verbosity.map(|level| level.to_string()),
+            log_to_stdout: !stdout_is_machine_readable && (fig_os_shim::Env::new().q_log_stdout() || self.verbose > 0),
+            log_file_path: (max_level >= Level::DEBUG)
+                .then(|| directories::logs_dir().map(|dir| dir.join("cli.log")))
+                .and_then(Result::ok),
             delete_old_log_file: false,
         });
 

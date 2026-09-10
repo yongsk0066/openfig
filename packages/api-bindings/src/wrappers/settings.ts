@@ -10,7 +10,6 @@ export enum SETTINGS {
   WIDTH = "autocomplete.width",
   HEIGHT = "autocomplete.height",
   THEME = "autocomplete.theme",
-  USER_STYLES = "autocomplete.userStyles",
   FONT_FAMILY = "autocomplete.fontFamily",
   FONT_SIZE = "autocomplete.fontSize",
 
@@ -19,7 +18,6 @@ export enum SETTINGS {
   DISABLE_FOR_COMMANDS = "autocomplete.disableForCommands",
   IMMEDIATELY_EXEC_AFTER_SPACE = "autocomplete.immediatelyExecuteAfterSpace",
   IMMEDIATELY_RUN_DANGEROUS_COMMANDS = "autocomplete.immediatelyRunDangerousCommands",
-  IMMEDIATELY_RUN_GIT_ALIAS = "autocomplete.immediatelyRunGitAliases",
   INSERT_SPACE_AUTOMATICALLY = "autocomplete.insertSpaceAutomatically",
   SCROLL_WRAP_AROUND = "autocomplete.scrollWrapAround",
   SORT_METHOD = "autocomplete.sortMethod",
@@ -28,7 +26,6 @@ export enum SETTINGS {
   NAVIGATE_TO_HISTORY = "autocomplete.navigateToHistory",
   ONLY_SHOW_ON_TAB = "autocomplete.onlyShowOnTab",
   ALWAYS_SHOW_DESCRIPTION = "autocomplete.alwaysShowDescription",
-  HIDE_PREVIEW = "autocomplete.hidePreviewWindow",
   SCRIPT_TIMEOUT = "autocomplete.scriptTimeout",
   PREFER_VERBOSE_SUGGESTIONS = "autocomplete.preferVerboseSuggestions",
   HIDE_AUTO_EXECUTE_SUGGESTION = "autocomplete.hideAutoExecuteSuggestion",
@@ -43,7 +40,6 @@ export enum SETTINGS {
   HISTORY_MODE = "beta.history.mode",
   HISTORY_COMMAND = "beta.history.customCommand",
   HISTORY_MERGE_SHELLS = "beta.history.allShells",
-  HISTORY_CTRL_R_TOGGLE = "beta.history.ctrl-r",
 
   FIRST_COMMAND_COMPLETION = "autocomplete.firstTokenCompletion",
 }

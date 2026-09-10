@@ -53,23 +53,24 @@ const getEnvVarsMemoized = memoizeOne(
     a.every((elem, index) => elem.key === b[index].key && elem.value === b[index].value),
 );
 
+// `alias` output is `name=value` in bash and zsh, the only shells the integration installs
+// into. The separator used to be chosen per shell because fish prints `name value`; the
+// `shellPath` argument existed only for that test and went with the fish integration.
 const getAliasMemoized = memoizeOne(
-  (alias: string, shellPath?: string) => {
-    const separator = shellPath?.includes("fish") ? " " : "=";
-    return alias
+  (alias: string) =>
+    alias
       .replace(/^alias\s/gm, "")
       .split("\n")
       .reduce((acc, a) => {
         try {
-          const [key, ...value] = a.split(separator);
-          acc[key] = value.join(separator).replace(/^'/, "").replace(/'$/, "");
+          const [key, ...value] = a.split("=");
+          acc[key] = value.join("=").replace(/^'/, "").replace(/'$/, "");
         } catch (err) {
           logger.error(`Error parsing alias: ${a}`, err);
         }
         return acc;
-      }, {} as AliasMap);
-  },
-  ([aliasA, shellPathA], [aliasB, shellPathB]) => aliasA === aliasB && shellPathA === shellPathB,
+      }, {} as AliasMap),
+  ([aliasA], [aliasB]) => aliasA === aliasB,
 );
 
 const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => {
@@ -410,7 +411,7 @@ export const useAutocompleteStore = create<AutocompleteState>()(
               }
 
               if (shellContext.alias) {
-                figState.aliases = getAliasMemoized(shellContext.alias, shellContext.shellPath);
+                figState.aliases = getAliasMemoized(shellContext.alias);
               }
             }
 

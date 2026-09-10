@@ -79,7 +79,7 @@
         "category": "Navigation",
         "description": "Scroll up one entry in the list of suggestions",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["shift+tab", "up", "control+p"]
+        "defaultBindings": ["shift+tab", "up", "control+k", "control+p"]
       },
       {
         "identifier": "navigateDown",
@@ -87,7 +87,7 @@
         "category": "Navigation",
         "description": "Scroll down one entry in the list of suggestions",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["down", "control+n"]
+        "defaultBindings": ["down", "control+j", "control+n"]
       },
       {
         "identifier": "selectSuggestion1",
@@ -95,7 +95,7 @@
         "description": "Select the 1st suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+1"]
+        "defaultBindings": ["control+1"]
       },
       {
         "identifier": "selectSuggestion2",
@@ -103,7 +103,7 @@
         "description": "Select the 2nd suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+2"]
+        "defaultBindings": ["control+2"]
       },
       {
         "identifier": "selectSuggestion3",
@@ -111,7 +111,7 @@
         "description": "Select the 3rd suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+3"]
+        "defaultBindings": ["control+3"]
       },
       {
         "identifier": "selectSuggestion4",
@@ -119,7 +119,7 @@
         "description": "Select the 4th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+4"]
+        "defaultBindings": ["control+4"]
       },
       {
         "identifier": "selectSuggestion5",
@@ -127,7 +127,7 @@
         "description": "Select the 5th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+5"]
+        "defaultBindings": ["control+5"]
       },
       {
         "identifier": "selectSuggestion6",
@@ -135,7 +135,7 @@
         "description": "Select the 6th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+6"]
+        "defaultBindings": ["control+6"]
       },
       {
         "identifier": "selectSuggestion7",
@@ -143,7 +143,7 @@
         "description": "Select the 7th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+7"]
+        "defaultBindings": ["control+7"]
       },
       {
         "identifier": "selectSuggestion8",
@@ -151,7 +151,7 @@
         "description": "Select the 8th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+8"]
+        "defaultBindings": ["control+8"]
       },
       {
         "identifier": "selectSuggestion9",
@@ -159,7 +159,7 @@
         "description": "Select the 9th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+9"]
+        "defaultBindings": ["control+9"]
       },
       {
         "identifier": "selectSuggestion10",
@@ -167,7 +167,7 @@
         "description": "Select the 10th suggestion of the list",
         "category": "Navigation",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["command+0"]
+        "defaultBindings": ["control+0"]
       },
       {
         "identifier": "hideDescription",
@@ -191,7 +191,7 @@
         "category": "Appearance",
         "description": "Toggle visibility of autocomplete description popout",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": ["control+k"]
+        "defaultBindings": ["command+i"]
       },
       {
         "identifier": "toggleHistoryMode",
@@ -215,7 +215,7 @@
         "category": "Appearance",
         "description": "Increase the size of the autocomplete window",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": []
+        "defaultBindings": ["command+="]
       },
       {
         "identifier": "decreaseSize",
@@ -223,7 +223,7 @@
         "category": "Appearance",
         "description": "Decrease the size of the autocomplete window",
         "availability": "WHEN_FOCUSED",
-        "defaultBindings": []
+        "defaultBindings": ["command+-"]
       }
     ]
   }

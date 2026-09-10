@@ -50,7 +50,6 @@ const historySources: Record<string, HistorySource> = {
   zsh: { entries: [] },
   fig: { entries: [] },
   bash: { entries: [] },
-  fish: { entries: [] },
   customCommand: { entries: [] },
 };
 
@@ -280,7 +279,6 @@ export const loadHistory = async (aliases: AliasMap) => {
   } else {
     await loadHistoryCommand("fc -R; fc -ln 1", "zsh").catch(() => {});
     await loadHistoryCommand("fc -ln 1", "bash").catch(() => {});
-    await loadHistoryCommand("history search", "fish").catch(() => {});
   }
 };
 

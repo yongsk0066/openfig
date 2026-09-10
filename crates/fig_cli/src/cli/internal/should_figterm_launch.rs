@@ -6,6 +6,7 @@ use std::io::{
 use std::process::ExitCode;
 
 use fig_os_shim::Context;
+use fig_util::Shell;
 
 const Q_FORCE_FIGTERM_LAUNCH: &str = "Q_FORCE_FIGTERM_LAUNCH";
 const Q_TERM_DISABLED: &str = "Q_TERM_DISABLED";
@@ -70,7 +71,9 @@ fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> 
         None => return Status::DontLaunch("No parent name".into()),
     };
 
-    let valid_parent = ["zsh", "bash"].contains(&parent_name);
+    // `Shell::try_find_shell` is the same test `Shell::current_shell` uses, so this cannot drift
+    // from the set of shells the integration actually supports.
+    let valid_parent = Shell::try_find_shell(parent_name).is_some();
 
     if env.in_codespaces() {
         return match env.get_os(Q_TERM) {

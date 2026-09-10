@@ -61,7 +61,7 @@ impl Shell {
     }
 
     /// Try to find the name of common shells in the input
-    fn try_find_shell(input: impl AsRef<Path>) -> Option<Self> {
+    pub fn try_find_shell(input: impl AsRef<Path>) -> Option<Self> {
         let input = input.as_ref().file_name()?.to_str()?;
         if input.contains("bash") {
             Some(Shell::Bash)

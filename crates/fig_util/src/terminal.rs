@@ -138,17 +138,11 @@ impl Terminal {
             return Some(term);
         }
 
-        match env.get("TERM_PROGRAM").ok().as_deref() {
-            Some("iTerm.app") => return Some(Terminal::Iterm),
-            Some("Apple_Terminal") => return Some(Terminal::TerminalApp),
-            Some("Hyper") => return Some(Terminal::Hyper),
-            Some("vscode") => match std::env::var("TERM_PROGRAM_VERSION").ok().as_deref() {
-                Some(v) if v.contains("insiders") => return Some(Terminal::VSCodeInsiders),
-                _ => return Some(Terminal::VSCode),
-            },
-            Some("Tabby") => return Some(Terminal::Tabby),
-            _ => (),
-        };
+        if let Ok(term_program) = env.get("TERM_PROGRAM")
+            && let Some(terminal) = Self::from_term_program(&term_program, env)
+        {
+            return Some(terminal);
+        }
 
         Self::from_process_info(ctx, MACOS_TERMINALS)
     }
@@ -310,9 +304,28 @@ impl Terminal {
         }
     }
 
+    /// The terminal a `$TERM_PROGRAM` value names, if any.
+    ///
+    /// Kept next to the enum rather than inline in `parent_terminal` so that the strings a
+    /// terminal identifies itself by live in one place, with `to_bundle_id`/`from_bundle_id` and
+    /// `executable_names`.
+    pub fn from_term_program(term_program: &str, env: &fig_os_shim::Env) -> Option<Self> {
+        Some(match term_program {
+            "iTerm.app" => Terminal::Iterm,
+            "Apple_Terminal" => Terminal::TerminalApp,
+            "Hyper" => Terminal::Hyper,
+            "Tabby" => Terminal::Tabby,
+            "vscode" => match env.get("TERM_PROGRAM_VERSION").ok() {
+                Some(v) if v.contains("insiders") => Terminal::VSCodeInsiders,
+                _ => Terminal::VSCode,
+            },
+            _ => return None,
+        })
+    }
+
     /// Other pseudoterminal that we want to launch within
     pub fn is_special(&self) -> bool {
-        matches!(self, Terminal::Tmux | Terminal::Vim | Terminal::Nvim | Terminal::Zellij)
+        SPECIAL_TERMINALS.contains(self)
     }
 }
 

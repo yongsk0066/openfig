@@ -510,7 +510,7 @@ impl DebugSubcommand {
                             Shell::Bash => {
                                 writeln!(profile, "eval \"$({CLI_BINARY_NAME} init bash post)\"")?;
                                 command
-                                    .args(["bash", "--noprofile", "--norc", "--rcfile"])
+                                    .args([shell.as_str(), "--noprofile", "--norc", "--rcfile"])
                                     .arg(profile.path());
                                 command
                             },
@@ -521,7 +521,7 @@ impl DebugSubcommand {
                                 )
                                 .unwrap();
 
-                                command.args(["zsh"]).env("ZDOTDIR", tmp_dir.path());
+                                command.args([shell.as_str()]).env("ZDOTDIR", tmp_dir.path());
                                 command
                             },
                         };

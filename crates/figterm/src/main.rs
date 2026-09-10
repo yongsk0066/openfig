@@ -71,6 +71,7 @@ use fig_util::env_var::{
 use fig_util::{
     PRODUCT_NAME,
     PTY_BINARY_NAME,
+    Shell,
     Terminal as FigTerminal,
     directories,
 };
@@ -369,8 +370,13 @@ where
             .and_then(|s| s.strip_suffix(" ("))
             .unwrap_or(shell)
     });
-    let shell_enabled = ["bash", "zsh", "dash"]
-        .into_iter()
+    // `dash` is not a `Shell` variant — the integration is never installed into it — but figterm
+    // is routinely `exec`ed under `sh`/`dash` as a login shell, and the edit buffer works there,
+    // so it stays as an explicit extra rather than being folded into `Shell::all()`.
+    let shell_enabled = Shell::all()
+        .iter()
+        .map(Shell::as_str)
+        .chain(std::iter::once("dash"))
         .chain(USER_ENABLED_SHELLS.iter().map(|s| s.as_str()))
         .any(|s| shell == Some(s));
 

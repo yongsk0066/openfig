@@ -8,10 +8,7 @@ use std::sync::Arc;
 
 pub use env::Env;
 pub use fs::Fs;
-pub use platform::{
-    Os,
-    Platform,
-};
+pub use platform::Os;
 use process_info::FakePid;
 pub use process_info::ProcessInfo;
 pub use providers::{
@@ -19,7 +16,6 @@ pub use providers::{
     ContextProvider,
     EnvProvider,
     FsProvider,
-    PlatformProvider,
 };
 
 pub trait Shim {
@@ -37,7 +33,6 @@ pub struct Context {
     #[allow(dead_code)]
     fs: Fs,
     env: Env,
-    platform: Platform,
     process_info: ProcessInfo,
 }
 
@@ -47,7 +42,6 @@ impl Context {
         Arc::new_cyclic(|ctx| Self {
             fs: Default::default(),
             env: Default::default(),
-            platform: Default::default(),
             process_info: ProcessInfo::new(ctx.clone()),
         })
     }
@@ -56,7 +50,6 @@ impl Context {
         Arc::new(Self {
             fs: Fs::new_fake(),
             env: Env::new_fake(),
-            platform: Platform::new_fake(Os::current()),
             process_info: ProcessInfo::new_fake(FakePid::default()),
         })
     }
@@ -69,10 +62,6 @@ impl Context {
         &self.env
     }
 
-    pub fn platform(&self) -> &Platform {
-        &self.platform
-    }
-
     pub fn process_info(&self) -> &ProcessInfo {
         &self.process_info
     }
@@ -82,7 +71,6 @@ impl Context {
 pub struct ContextBuilder {
     fs: Option<Fs>,
     env: Option<Env>,
-    platform: Option<Platform>,
     process_info: Option<ProcessInfo>,
 }
 
@@ -95,11 +83,9 @@ impl ContextBuilder {
     pub fn build(self) -> Arc<Context> {
         let fs = self.fs.unwrap_or_default();
         let env = self.env.unwrap_or_default();
-        let platform = self.platform.unwrap_or_default();
         Arc::new_cyclic(|ctx| Context {
             fs,
             env,
-            platform,
             process_info: if let Some(process_info) = self.process_info {
                 process_info
             } else {
@@ -110,11 +96,6 @@ impl ContextBuilder {
 
     pub fn with_env(mut self, env: Env) -> Self {
         self.env = Some(env);
-        self
-    }
-
-    pub fn with_platform(mut self, platform: Platform) -> Self {
-        self.platform = Some(platform);
         self
     }
 
@@ -169,7 +150,6 @@ mod tests {
         assert!(ctx.fs().is_real());
         assert!(ctx.env().is_real());
         assert!(ctx.process_info().is_real());
-        assert!(ctx.platform().is_real());
     }
 
     #[tokio::test]

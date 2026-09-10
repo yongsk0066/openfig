@@ -4,7 +4,6 @@ use crate::{
     Context,
     Env,
     Fs,
-    Platform,
 };
 
 pub trait ContextProvider {
@@ -71,25 +70,6 @@ where
 {
     fn fs(&self) -> &Fs {
         self.context().fs()
-    }
-}
-
-pub trait PlatformProvider {
-    fn platform(&self) -> &Platform;
-}
-
-impl PlatformProvider for Platform {
-    fn platform(&self) -> &Platform {
-        self
-    }
-}
-
-impl<T> PlatformProvider for T
-where
-    T: ContextProvider,
-{
-    fn platform(&self) -> &Platform {
-        self.context().platform()
     }
 }
 

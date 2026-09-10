@@ -9,10 +9,8 @@ use clap::{
 use eyre::{
     Result,
     WrapErr,
-    bail,
 };
 use fig_ipc::local::open_ui_element;
-use fig_os_shim::Os;
 use fig_proto::local::UiElement;
 use fig_settings::JsonStore;
 use fig_util::{
@@ -58,7 +56,7 @@ pub struct SettingsArgs {
 }
 
 impl SettingsArgs {
-    pub async fn execute(&self, cli_context: &CliContext) -> Result<ExitCode> {
+    pub async fn execute(&self, _cli_context: &CliContext) -> Result<ExitCode> {
         macro_rules! print_connection_error {
             () => {
                 println!("{}", app_not_running_message());
@@ -68,15 +66,10 @@ impl SettingsArgs {
         match self.cmd {
             Some(SettingsSubcommands::Open) => {
                 let file = directories::settings_path().context("Could not get settings path")?;
-                if cli_context.context().platform().os() == Os::Mac {
-                    tokio::process::Command::new("open").arg(file).output().await?;
-                    Ok(ExitCode::SUCCESS)
-                } else if let Ok(editor) = cli_context.context().env().get("EDITOR") {
-                    tokio::process::Command::new(editor).arg(file).spawn()?.wait().await?;
-                    Ok(ExitCode::SUCCESS)
-                } else {
-                    bail!("The EDITOR environment variable is not set")
-                }
+                // macOS-only fork, so the `$EDITOR` fallback that used to sit behind an
+                // `os() == Os::Mac` check was unreachable.
+                tokio::process::Command::new("open").arg(file).output().await?;
+                Ok(ExitCode::SUCCESS)
             },
             None => match &self.key {
                 Some(key) => match (&self.value, self.delete) {

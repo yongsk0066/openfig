@@ -274,8 +274,6 @@ mod tests {
     use fig_os_shim::{
         ContextBuilder,
         Env,
-        Os,
-        Platform,
     };
     use fig_util::env_var::{
         PROCESS_LAUNCHED_BY_Q,
@@ -304,7 +302,6 @@ mod tests {
     #[derive(Default, Debug)]
     struct Test {
         name: String,
-        os: Option<Os>,
         env: Option<Env>,
         parent: Option<FakePid>,
         grandparent_exe: Option<PathBuf>,
@@ -313,11 +310,6 @@ mod tests {
     }
 
     impl Test {
-        fn os(mut self, os: Os) -> Self {
-            self.os = Some(os);
-            self
-        }
-
         fn env(mut self, slice: &[(&str, &str)]) -> Self {
             self.env = Some(Env::from_slice(slice));
             self
@@ -359,9 +351,6 @@ mod tests {
                     current_pid.parent = Some(Box::new(Pid::new_fake(parent)));
                 }
                 ctx = ctx.with_process_info(ProcessInfo::new_fake(current_pid));
-
-                let os = self.os.unwrap_or(Os::Mac);
-                ctx = ctx.with_platform(Platform::new_fake(os));
 
                 ctx.build()
             };
@@ -429,7 +418,6 @@ mod tests {
         let tests = [
             test("no grandparentparent id").parent_exe("/usr/bin/zsh").expect(1),
             test("on mac with valid parent and invalid grandparent")
-                .os(Os::Mac)
                 .parent_exe("/usr/bin/zsh")
                 .grandparent_exe("/usr/bin/invalid")
                 .expect(2),
@@ -445,7 +433,6 @@ mod tests {
     fn should_launch_tests() {
         let tests = [
             test("on mac with valid parent and special grandparent")
-                .os(Os::Mac)
                 .parent_exe("/usr/bin/zsh")
                 .grandparent_exe("/usr/bin/tmux")
                 .expect(0),

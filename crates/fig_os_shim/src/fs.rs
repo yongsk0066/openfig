@@ -39,6 +39,15 @@ mod inner {
     }
 }
 
+/// The error the in-memory [`Fs`] returns for an operation it does not model.
+///
+/// These arms used to be `panic!("unimplemented")`, which turns "a test used a fake filesystem for
+/// something it does not model" into an abort inside library code. `Fs::new_chroot()` implements
+/// all of them against a real temporary directory and is what callers that need them should use.
+fn fake_fs_unimplemented() -> io::Error {
+    io::Error::other("operation is not modelled by the in-memory Fs; use Fs::new_chroot()")
+}
+
 impl Fs {
     pub fn new() -> Self {
         Self::default()
@@ -71,7 +80,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::File::create_new(path).await,
             Inner::Chroot(root) => fs::File::create_new(append(root.path(), path)).await,
-            Inner::Fake(_) => Err(io::Error::other("unimplemented")),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -80,7 +89,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::create_dir(path).await,
             Inner::Chroot(root) => fs::create_dir(append(root.path(), path)).await,
-            Inner::Fake(_) => Err(io::Error::other("unimplemented")),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -89,7 +98,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::create_dir_all(path).await,
             Inner::Chroot(root) => fs::create_dir_all(append(root.path(), path)).await,
-            Inner::Fake(_) => Err(io::Error::other("unimplemented")),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -101,7 +110,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::File::open(path).await,
             Inner::Chroot(root) => fs::File::open(append(root.path(), path)).await,
-            Inner::Fake(_) => Err(io::Error::other("unimplemented")),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -193,7 +202,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::remove_file(path).await,
             Inner::Chroot(root) => fs::remove_file(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -205,7 +214,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::remove_dir_all(path).await,
             Inner::Chroot(root) => fs::remove_dir_all(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -220,7 +229,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::rename(from, to).await,
             Inner::Chroot(root) => fs::rename(append(root.path(), from), append(root.path(), to)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -234,7 +243,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::copy(from, to).await,
             Inner::Chroot(root) => fs::copy(append(root.path(), from), append(root.path(), to)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -249,7 +258,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::try_exists(path).await,
             Inner::Chroot(root) => fs::try_exists(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -262,7 +271,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => path.as_ref().exists(),
             Inner::Chroot(root) => append(root.path(), path).exists(),
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => false,
         }
     }
 
@@ -284,7 +293,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => TempDir::new(),
             Inner::Chroot(root) => TempDir::new_in(root.path()),
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -298,7 +307,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::symlink(original, link).await,
             Inner::Chroot(root) => fs::symlink(append(root.path(), original), append(root.path(), link)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -312,7 +321,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => std::os::unix::fs::symlink(original, link),
             Inner::Chroot(root) => std::os::unix::fs::symlink(append(root.path(), original), append(root.path(), link)),
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -332,7 +341,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::symlink_metadata(path).await,
             Inner::Chroot(root) => fs::symlink_metadata(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -344,7 +353,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::read_link(path).await,
             Inner::Chroot(root) => Ok(append(root.path(), fs::read_link(append(root.path(), path)).await?)),
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 
@@ -356,7 +365,7 @@ impl Fs {
         match &self.0 {
             Inner::Real => fs::read_dir(path).await,
             Inner::Chroot(root) => fs::read_dir(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
+            Inner::Fake(_) => Err(fake_fs_unimplemented()),
         }
     }
 }

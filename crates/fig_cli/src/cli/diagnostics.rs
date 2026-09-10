@@ -128,7 +128,6 @@ use std::collections::BTreeMap;
 use fig_os_shim::{
     Context,
     Os,
-    PlatformProvider,
 };
 use fig_util::consts::build::HASH;
 use fig_util::{
@@ -327,7 +326,7 @@ impl CurrentEnvironment {
             .ok()
             .map(|path| path.to_string_lossy().replace(&username, "/USER"));
 
-        let os = ctx.platform().os();
+        let os = Os::Mac;
         let terminal = Terminal::parent_terminal(&ctx);
 
         let in_ssh = crate::util::system_info::in_ssh();

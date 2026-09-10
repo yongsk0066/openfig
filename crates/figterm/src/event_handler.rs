@@ -10,7 +10,6 @@ use fig_proto::remote_hooks::{
     new_preexec_hook,
     new_prompt_hook,
 };
-// use fig_telemetry::sentry::configure_scope;
 use flume::Sender;
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -22,9 +21,7 @@ use crate::history::{
     HistoryCommand,
     HistorySender,
 };
-use crate::inline::on_prompt;
 use crate::{
-    INSERT_ON_NEW_CMD,
     MainLoopEvent,
     shell_state_to_context,
 };
@@ -60,23 +57,10 @@ impl EventListener for EventHandler {
                 let hook = new_prompt_hook(Some(context));
                 let message = hook_to_message(hook);
 
-                let insert_on_new_cmd = INSERT_ON_NEW_CMD.lock().unwrap().take();
-
                 if let Some(cwd) = &shell_state.local_context.current_working_directory {
                     if cwd.exists() {
                         std::env::set_current_dir(cwd).ok();
                     }
-                }
-
-                if let Some((text, bracketed, execute)) = insert_on_new_cmd {
-                    self.main_loop_sender
-                        .send(MainLoopEvent::Insert {
-                            insert: text.into_bytes(),
-                            unlock: false,
-                            bracketed,
-                            execute,
-                        })
-                        .unwrap();
                 }
 
                 self.main_loop_sender
@@ -114,8 +98,6 @@ impl EventListener for EventHandler {
                 }
             },
             Event::CommandInfo(command_info) => {
-                tokio::spawn(on_prompt());
-
                 let context = shell_state_to_context(shell_state);
                 let hook = new_postexec_hook(context, command_info.command.clone(), command_info.exit_code);
                 let message = hook_to_message(hook);

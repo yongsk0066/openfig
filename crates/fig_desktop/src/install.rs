@@ -35,10 +35,7 @@ pub async fn run_install() {
         .is_ok_and(|path| path.exists())
         && !fig_settings::state::get_bool_or(MIGRATED_KEY, false)
     {
-        let set = fig_settings::state::set_value(MIGRATED_KEY, true);
-        if set.is_ok() {
-            fig_telemetry::send_fig_user_migrated().await;
-        }
+        let _ = fig_settings::state::set_value(MIGRATED_KEY, true);
     }
 
     if let Err(err) = set_previous_version(current_version()) {
@@ -92,7 +89,6 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
         create_launch_agent,
     };
     use fig_util::{
-        CHAT_BINARY_NAME,
         OLD_CLI_BINARY_NAMES,
         OLD_PTY_BINARY_NAMES,
         Shell,
@@ -192,17 +188,6 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
             }
         },
         None => error!("Failed to find {CLI_BINARY_NAME} in bundle"),
-    }
-
-    // install chat to ~/.local/bin
-    match get_bundle_path_for_executable(CHAT_BINARY_NAME) {
-        Some(qchat_path) => {
-            let dest = local_bin.join(CHAT_BINARY_NAME);
-            if let Err(err) = symlink(&qchat_path, dest).await {
-                error!(%err, "Failed to symlink {CHAT_BINARY_NAME}");
-            }
-        },
-        None => error!("Failed to find {CHAT_BINARY_NAME} in bundle"),
     }
 
     if let Some(bundle_path) = get_bundle_path() {

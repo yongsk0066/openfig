@@ -500,7 +500,6 @@ impl PlatformStateImpl {
                             && terminal_cursor_backing_installed
                             && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
                             && accessibility_is_enabled();
-                        // && fig_request::fig_auth::is_logged_in();
 
                         enabled_proxy
                             .send_event(Event::WindowEvent {
@@ -586,18 +585,6 @@ impl PlatformStateImpl {
             },
             PlatformBoundEvent::AccessibilityUpdated { enabled } => {
                 let _was_enabled = ACCESSIBILITY_ENABLED.swap(enabled, Ordering::SeqCst);
-                // if enabled && !was_enabled {
-                //     tokio::runtime::Handle::current().spawn(async move {
-                //         fig_telemetry::emit_track(fig_telemetry::TrackEvent::new(
-                //             fig_telemetry::TrackEventType::GrantedAXPermission,
-                //             fig_telemetry::TrackSource::Desktop,
-                //             env!("CARGO_PKG_VERSION").into(),
-                //             std::iter::empty::<(&str, &str)>(),
-                //         ))
-                //         .await
-                //         .ok();
-                //     });
-                // }
 
                 let proxy = self.proxy.clone();
                 let notifications_state = notifications_state.clone();

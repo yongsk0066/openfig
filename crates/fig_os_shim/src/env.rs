@@ -142,11 +142,6 @@ impl Env {
         }
     }
 
-    pub fn in_cloudshell(&self) -> bool {
-        self.get("AWS_EXECUTION_ENV")
-            .is_ok_and(|v| v.trim().eq_ignore_ascii_case("cloudshell"))
-    }
-
     pub fn in_ssh(&self) -> bool {
         self.get("SSH_CLIENT").is_ok() || self.get("SSH_CONNECTION").is_ok() || self.get("SSH_TTY").is_ok()
     }
@@ -172,14 +167,6 @@ impl Env {
         self.get_os("Q_LOG_STDOUT").is_some()
     }
 
-    pub fn amazon_q_sigv4(&self) -> bool {
-        self.get("AMAZON_Q_SIGV4").is_ok_and(|v| !v.is_empty())
-    }
-
-    pub fn amazon_q_chat_shell(&self) -> String {
-        self.get("AMAZON_Q_CHAT_SHELL").unwrap_or_else(|_| "bash".to_string())
-    }
-
     pub fn q_cli_client_application(&self) -> Result<String, VarError> {
         self.get("Q_CLI_CLIENT_APPLICATION")
     }
@@ -196,28 +183,12 @@ impl Env {
         self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_inline_shell_completion_cache_enabled(&self) -> bool {
-        self.get_os("Q_INLINE_SHELL_COMPLETION_CACHE_DISABLE").is_none()
-    }
-
-    pub fn q_inline_shell_completion_history_count(&self) -> Result<String, VarError> {
-        self.get("Q_INLINE_SHELL_COMPLETION_HISTORY_COUNT")
-    }
-
-    pub fn q_inline_shell_completion_debounce_ms(&self) -> Result<String, VarError> {
-        self.get("Q_INLINE_SHELL_COMPLETION_DEBOUNCE_MS")
-    }
-
     pub fn q_backend(&self) -> Result<String, VarError> {
         self.get("Q_BACKEND")
     }
 
     pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
         self.get("Q_PROMPT_OFFSET_WORKAROUND")
-    }
-
-    pub fn q_use_sendmessage(&self) -> bool {
-        self.get("Q_USE_SENDMESSAGE").is_ok_and(|v| !v.is_empty())
     }
 
     pub fn q_custom_cert(&self) -> Result<String, VarError> {
@@ -264,16 +235,10 @@ mod tests {
     #[test]
     fn test_in_envs() {
         let env = Env::from_slice(&[]);
-        assert!(!env.in_cloudshell());
         assert!(!env.in_ssh());
 
-        let env = Env::from_slice(&[("AWS_EXECUTION_ENV", "CloudShell"), ("SSH_CLIENT", "1")]);
-        assert!(env.in_cloudshell());
+        let env = Env::from_slice(&[("SSH_CLIENT", "1")]);
         assert!(env.in_ssh());
-
-        let env = Env::from_slice(&[("AWS_EXECUTION_ENV", "CLOUDSHELL\n")]);
-        assert!(env.in_cloudshell());
-        assert!(!env.in_ssh());
     }
 
     #[test]

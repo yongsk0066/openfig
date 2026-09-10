@@ -278,13 +278,6 @@ pub fn settings_path() -> Result<PathBuf> {
     Ok(fig_data_dir()?.join("settings.json"))
 }
 
-/// The path to the midway cookie
-///
-/// Path: `$HOME/.midway/cookie`
-pub fn midway_cookie_path() -> Result<PathBuf> {
-    Ok(home_dir()?.join(".midway").join("cookie"))
-}
-
 utf8_dir!(home_dir);
 utf8_dir!(home_local_bin);
 utf8_dir!(fig_data_dir);
@@ -315,7 +308,6 @@ mod tests {
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());
-        assert!(midway_cookie_path().is_ok());
         assert!(themes_dir(&ctx).is_ok());
     }
 
@@ -413,11 +405,6 @@ mod tests {
     #[test]
     fn snapshot_settings_path() {
         assert_directory!(settings_path(), @"$HOME/Library/Application Support/amazon-q/settings.json");
-    }
-
-    #[test]
-    fn snapshot_midway_cookie_path() {
-        assert_directory!(midway_cookie_path(), @"$HOME/.midway/cookie");
     }
 
     #[test]

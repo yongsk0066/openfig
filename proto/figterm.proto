@@ -10,12 +10,7 @@ message FigtermRequestMessage {
     InsertTextRequest insert_text = 2;
     SetBufferRequest set_buffer = 3;
     DiagnosticsRequest diagnostics = 4;
-    InsertOnNewCmdRequest insert_on_new_cmd = 5;
     UpdateShellContextRequest update_shell_context = 6;
-    InlineShellCompletionRequest inline_shell_completion = 8;
-    InlineShellCompletionAcceptRequest inline_shell_completion_accept = 9;
-    TelemetryRequest telemtety = 10;
-    InlineShellCompletionSetEnabledRequest inline_shell_completion_set_enabled = 11;
   }
 }
 
@@ -23,7 +18,6 @@ message FigtermRequestMessage {
 message FigtermResponseMessage {
   oneof response {
     DiagnosticsResponse diagnostics = 1;
-    InlineShellCompletionResponse inline_shell_completion = 2;
   }
 }
 
@@ -125,15 +119,6 @@ message DiagnosticsResponse {
   optional uint32 cursor_position = 5;
 }
 
-message InsertOnNewCmdRequest {
-  // text to insert on new command
-  string text = 1;
-  // if to execute the command immediately
-  bool execute = 2;
-  // if to bracket the text
-  bool bracketed = 3;
-}
-
 // Command to update values in the shell context
 //
 // Each field needs an associated bool that indicates if it should be
@@ -144,28 +129,4 @@ message UpdateShellContextRequest {
   repeated fig_common.EnvironmentVariable environment_variables = 2;
   bool update_alias = 3;
   optional string alias = 4;
-}
-
-message InlineShellCompletionRequest {
-  // The text to complete
-  string buffer = 1;
-}
-
-message InlineShellCompletionResponse {
-  // The text to insert
-  optional string insert_text = 1;
-}
-
-message InlineShellCompletionAcceptRequest {
-  string buffer = 1;
-  string suggestion = 2;
-}
-
-message InlineShellCompletionSetEnabledRequest {
-  bool enabled = 1;
-}
-
-message TelemetryRequest {
-  // A json blob containing the event
-  string event_blob = 1;
 }

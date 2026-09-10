@@ -1,7 +1,6 @@
 pub mod cli;
 mod event_handler;
 pub mod history;
-pub mod inline;
 pub mod input;
 pub mod interceptor;
 pub mod ipc;
@@ -28,11 +27,9 @@ use std::time::{
 use alacritty_terminal::Term;
 use alacritty_terminal::ansi::Processor;
 use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{
     ShellState,
     SizeInfo,
-    TextBuffer,
 };
 use anyhow::{
     Context as _,
@@ -61,7 +58,6 @@ use fig_proto::remote_hooks::{
     new_edit_buffer_hook,
 };
 use fig_settings::state;
-use fig_util::consts::CLI_BINARY_NAME;
 use fig_util::env_var::{
     Q_LOG_LEVEL,
     Q_SHELL,
@@ -130,7 +126,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 const BUFFER_SIZE: usize = 16384;
 
-static INSERT_ON_NEW_CMD: Mutex<Option<(String, bool, bool)>> = Mutex::new(None);
 static INSERTION_LOCKED_AT: RwLock<Option<SystemTime>> = RwLock::new(None);
 static EXPECTED_BUFFER: Mutex<String> = Mutex::new(String::new());
 
@@ -371,7 +366,6 @@ fn launch_shell(command: Option<&[String]>) -> Result<()> {
 
 fn figterm_main(command: Option<&[String]>) -> Result<()> {
     fig_settings::settings::init_global().ok();
-    fig_telemetry::init_global_telemetry_emitter();
 
     let session_id = match std::env::var("MOCK_QTERM_SESSION_ID") {
         Ok(id) => id,
@@ -483,8 +477,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
             newline_mode: false,
         };
 
-        let ai_enabled = fig_settings::settings::get_bool_or("ai.terminal-hash-sub", true);
-
         if let Ok(shell) = get_parent_shell() {
             let path = std::path::Path::new(&shell);
             let name = path.file_name().and_then(|name| name.to_str()).unwrap_or(shell.as_str());
@@ -576,31 +568,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                         let preexec = term.shell_state().preexec;
 
                                         debug!(?event, ?raw, %preexec,  "Got key event");
-
-                                        if !preexec && ai_enabled && event.key == KeyCode::Enter && event.modifiers == input::Modifiers::NONE {
-                                            if let Some(TextBuffer { buffer, cursor_idx }) = term.get_current_buffer() {
-                                                let buffer = buffer.trim();
-                                                if buffer.len() > 1 && buffer.starts_with('#') && term.columns() > buffer.len() {
-                                                    write_buffer.extend(
-                                                        &std::iter::repeat_n(b'\x08', buffer.len()
-                                                            .max(cursor_idx.unwrap_or(0)))
-                                                            .collect::<Vec<_>>()
-                                                    );
-                                                    write_buffer.extend(
-                                                        format!(
-                                                            "{} translate '{}'\r",
-                                                            CLI_BINARY_NAME,
-                                                            buffer
-                                                                .trim_start_matches('#')
-                                                                .trim()
-                                                                .replace('\'', "'\"'\"'")
-                                                            ).as_bytes()
-                                                    );
-                                                    master.write_all(&write_buffer).await?;
-                                                    continue 'select_loop;
-                                                }
-                                            }
-                                        }
 
                                         // if we are in CSI u mode we try to encode first, otherwise we try to send the raw bytes first
                                         let raw = if csi_u_set {
@@ -766,10 +733,8 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                 message,
                                 sender.clone(),
                                 &term,
-                                &history_sender,
                                 &mut master,
                                 &mut key_interceptor,
-                                &session_id,
                             ).await?;
                         }
                         Err(err) => {
@@ -801,7 +766,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         };
 
         let _ = stop_ipc_tx.send(());
-        fig_telemetry::finish_telemetry().await;
 
         result
     });

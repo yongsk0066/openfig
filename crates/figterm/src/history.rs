@@ -1,9 +1,3 @@
-use fig_settings::history::{
-    HistoryColumn,
-    Order,
-    OrderBy,
-    WhereExpression,
-};
 use flume::Sender;
 use tracing::{
     error,
@@ -12,17 +6,8 @@ use tracing::{
 
 use crate::HOSTNAME;
 
-#[derive(Debug)]
-pub struct HistoryQueryParams {
-    pub limit: usize,
-}
-
 pub enum HistoryCommand {
     Insert(alacritty_terminal::term::CommandInfo),
-    Query(
-        HistoryQueryParams,
-        Sender<Option<Vec<fig_settings::history::CommandInfo>>>,
-    ),
 }
 
 pub type HistorySender = Sender<HistoryCommand>;
@@ -55,26 +40,6 @@ pub async fn spawn_history_task() -> HistorySender {
 
                     if let Err(err) = history.insert_command_history(&command_info) {
                         error!(%err, "Failed to insert command into history");
-                    }
-                },
-                HistoryCommand::Query(query, sender) => {
-                    match history.rows(
-                        Some(WhereExpression::NotNull(HistoryColumn::ExitCode)),
-                        vec![OrderBy::new(HistoryColumn::Id, Order::Desc)],
-                        query.limit,
-                        0,
-                    ) {
-                        Ok(rows) => {
-                            if let Err(err) = sender.send(Some(rows)) {
-                                error!(%err, "Failed to send history query result");
-                            }
-                        },
-                        Err(err) => {
-                            error!(%err, "Failed to query history");
-                            if let Err(err) = sender.send(None) {
-                                error!(%err, "Failed to send history query result");
-                            }
-                        },
                     }
                 },
             }

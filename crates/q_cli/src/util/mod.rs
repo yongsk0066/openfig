@@ -1,6 +1,5 @@
 mod cli_context;
 pub mod desktop;
-mod region_check;
 pub mod spinner;
 
 use std::env;
@@ -30,15 +29,12 @@ use dialoguer::theme::ColorfulTheme;
 use eyre::{
     Context,
     ContextCompat,
-    Error,
     Result,
     bail,
 };
 use fig_ipc::local::quit_command;
 use fig_util::consts::APP_BUNDLE_ID;
-use fig_util::directories::home_local_bin;
 use fig_util::{
-    CHAT_BINARY_NAME,
     CLI_BINARY_NAME,
     PRODUCT_NAME,
 };
@@ -48,7 +44,6 @@ use globset::{
     GlobSetBuilder,
 };
 use regex::Regex;
-pub use region_check::region_check;
 use tracing::warn;
 
 /// Glob patterns against full paths
@@ -117,11 +112,6 @@ pub fn app_path_from_bundle_id(bundle_id: impl AsRef<OsStr>) -> Option<String> {
     Some(path.trim().split('\n').next()?.into())
 }
 
-pub fn qchat_path() -> Result<PathBuf> {
-    use macos_utils::bundle::get_bundle_path_for_executable;
-
-    Ok(get_bundle_path_for_executable(CHAT_BINARY_NAME).unwrap_or(home_local_bin()?.join(CHAT_BINARY_NAME)))
-}
 pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
     if !desktop_app_running() {
         if verbose {
@@ -179,14 +169,6 @@ pub fn app_not_running_message() -> String {
         "\n{}\n{PRODUCT_NAME} app might not be running, to launch {PRODUCT_NAME} run: {}\n",
         format!("Unable to connect to {PRODUCT_NAME} app").bold(),
         format!("{CLI_BINARY_NAME} launch").magenta()
-    )
-}
-
-pub fn login_message() -> String {
-    format!(
-        "{}\nLooks like you aren't logged in to {PRODUCT_NAME}, to login run: {}",
-        "Not logged in".bold(),
-        format!("{CLI_BINARY_NAME} login").magenta()
     )
 }
 
@@ -265,17 +247,6 @@ pub fn dialoguer_theme() -> ColorfulTheme {
         prompt_prefix: dialoguer::console::style("?".into()).for_stderr().magenta(),
         ..ColorfulTheme::default()
     }
-}
-
-pub async fn assert_logged_in() -> Result<(), Error> {
-    if !(fig_os_shim::Env::new().amazon_q_sigv4() || fig_auth::is_logged_in().await) {
-        bail!(
-            "You are not logged in, please log in with {}",
-            format!("{CLI_BINARY_NAME} login",).bold()
-        );
-    }
-
-    Ok(())
 }
 
 pub async fn is_brew_reinstall() -> bool {

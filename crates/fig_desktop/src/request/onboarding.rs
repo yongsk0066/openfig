@@ -25,7 +25,7 @@ use super::{
 use crate::EventLoopProxy;
 use crate::event::Event;
 
-pub async fn post_login() {
+async fn finish_onboarding() {
     fig_settings::state::set_value("desktop.completedOnboarding", true).ok();
 }
 
@@ -71,7 +71,7 @@ where
             result
         },
         OnboardingAction::FinishOnboarding => {
-            post_login().await;
+            finish_onboarding().await;
             RequestResult::success()
         },
         OnboardingAction::LaunchShellOnboarding => {
@@ -105,10 +105,6 @@ where
                 } => RequestResult::error(message),
                 _ => RequestResult::error("Failed to prompt for accessibility permissions"),
             }
-        },
-        OnboardingAction::PostLogin => {
-            post_login().await;
-            RequestResult::success()
         },
         OnboardingAction::CloseAccessibilityPromptWindow | OnboardingAction::RequestRestart => {
             RequestResult::error("Unimplemented")

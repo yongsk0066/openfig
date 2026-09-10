@@ -1,4 +1,3 @@
-mod inline_shell_completion;
 pub mod local_state;
 pub mod should_figterm_launch;
 
@@ -75,10 +74,6 @@ use tracing::{
     trace,
 };
 
-use self::inline_shell_completion::{
-    inline_shell_completion,
-    inline_shell_completion_accept,
-};
 use crate::cli::installation::install_cli;
 
 #[derive(Debug, Args, PartialEq, Eq)]
@@ -200,16 +195,6 @@ pub enum InternalSubcommand {
     Uuidgen,
     DumpState {
         component: StateComponent,
-    },
-    InlineShellCompletion {
-        #[arg(long, allow_hyphen_values = true)]
-        buffer: String,
-    },
-    InlineShellCompletionAccept {
-        #[arg(long, allow_hyphen_values = true)]
-        buffer: String,
-        #[arg(long, allow_hyphen_values = true)]
-        suggestion: String,
     },
 }
 
@@ -389,13 +374,6 @@ impl InternalSubcommand {
                 let mut integrations_uninstalled = false;
                 let mut data_dir_removed = false;
 
-                // let emit = tokio::spawn(fig_telemetry::emit_track(TrackEvent::new(
-                //     TrackEventType::UninstalledApp,
-                //     TrackSource::Cli,
-                //     env!("CARGO_PKG_VERSION").into(),
-                //     std::iter::empty::<(&str, &str)>(),
-                // )));
-
                 let users = users
                     .split(' ')
                     .map(|line| line.trim())
@@ -539,10 +517,6 @@ impl InternalSubcommand {
 
                 println!("{}", state.json);
                 Ok(ExitCode::SUCCESS)
-            },
-            InternalSubcommand::InlineShellCompletion { buffer } => Ok(inline_shell_completion(buffer).await),
-            InternalSubcommand::InlineShellCompletionAccept { buffer, suggestion } => {
-                Ok(inline_shell_completion_accept(buffer, suggestion).await)
             },
         }
     }

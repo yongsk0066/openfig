@@ -25,12 +25,3 @@ fn debug_get_index() -> Result<()> {
         .code(predicate::in_iter([0, 1]));
     Ok(())
 }
-
-#[test]
-fn debug_refresh_auth_token() -> Result<()> {
-    cli()
-        .args(["debug", "refresh-auth-token"])
-        .assert()
-        .code(predicate::in_iter([0, 1]));
-    Ok(())
-}

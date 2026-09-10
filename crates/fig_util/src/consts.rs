@@ -7,7 +7,6 @@ pub const APP_PROCESS_NAME: &str = "q_desktop";
 pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
 pub const CLI_BINARY_NAME: &str = "q";
-pub const CHAT_BINARY_NAME: &str = "qchat";
 pub const PTY_BINARY_NAME: &str = "qterm";
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
@@ -35,10 +34,6 @@ pub mod url {
     pub const USER_MANUAL: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line.html";
     pub const AUTOCOMPLETE_WIKI: &str =
         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html";
-    pub const CHAT_WIKI: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-chat.html";
-    pub const TRANSLATE_WIKI: &str =
-        "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-conversation.html";
-    pub const TELEMETRY_WIKI: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/opt-out-IDE.html";
 }
 
 /// Build time env vars

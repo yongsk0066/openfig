@@ -37,7 +37,6 @@ message Clientbound {
       figterm.InsertTextRequest insert_text = 101;
       figterm.SetBufferRequest set_buffer = 102;
       figterm.DiagnosticsRequest diagnostics = 103;
-      figterm.InsertOnNewCmdRequest insert_on_new_cmd = 107;
 
       fig.ReadFileRequest read_file = 105;
 

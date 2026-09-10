@@ -5,7 +5,6 @@ import { Button } from "../../ui/button";
 import Lockup from "../../svg/logo";
 import onboarding from "@/data/onboarding";
 import { useStatusCheck } from "@/hooks/store/useStatusCheck";
-import LoginModal from "./login";
 import InstallModal from "./install";
 import { useLocalState, useRefreshLocalState } from "@/hooks/store/useState";
 import migrate_dark from "@assets/images/fig-migration/dark.png?url";
@@ -88,11 +87,13 @@ export default function OnboardingModal() {
   if (
     ["dotfiles", "accessibility"].includes(check.id)
   ) {
-    return <InstallModal check={check} skip={skipInstall} next={nextStep} />;
-  }
-
-  if (check.id === "login") {
-    return <LoginModal next={finish} />;
+    return (
+      <InstallModal
+        check={check}
+        skip={skipInstall}
+        next={step === onboarding.length - 1 ? finish : nextStep}
+      />
+    );
   }
 
   return null;

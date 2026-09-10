@@ -6,7 +6,6 @@ use std::env::{
 
 use camino::Utf8PathBuf;
 use fig_os_shim::Context;
-use fig_util::directories::midway_cookie_path;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
@@ -40,7 +39,6 @@ pub struct Constants {
     new_uri_format: bool,
     support_api_proto: bool,
     api_proto_url: String,
-    midway: bool,
     macos_version: String,
 }
 
@@ -92,7 +90,6 @@ impl Constants {
             new_uri_format: true,
             support_api_proto,
             api_proto_url: "api://localhost".to_string(),
-            midway: midway_cookie_path().is_ok_and(|p| p.is_file()),
             macos_version: macos_utils::os::OperatingSystemVersion::get().to_string(),
         }
     }

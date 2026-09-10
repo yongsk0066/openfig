@@ -23,10 +23,7 @@ use anstream::{
     println,
 };
 use async_trait::async_trait;
-use checks::{
-    BashVersionCheck,
-    MidwayCheck,
-};
+use checks::BashVersionCheck;
 use clap::Args;
 use crossterm::style::Stylize;
 use crossterm::terminal::{
@@ -97,11 +94,7 @@ use tokio::io::AsyncBufReadExt;
 
 use super::app::restart_fig;
 use super::diagnostics::verify_integration;
-use crate::util::desktop::{
-    LaunchArgs,
-    desktop_app_running,
-    launch_fig_desktop,
-};
+use crate::util::desktop::desktop_app_running;
 use crate::util::{
     app_path_from_bundle_id,
     is_executable_in_path,
@@ -353,15 +346,7 @@ trait DoctorCheck<T = ()>: Sync
 where
     T: Sync + Send + Sized,
 {
-    // Name should be _static_ across different user's devices. It is used to generate
-    // a unique id for the check used in analytics. If name cannot be unique for some reason, you
-    // should override analytics_event_name with the unique name to be sent for analytics.
     fn name(&self) -> Cow<'static, str>;
-
-    fn analytics_event_name(&self) -> String {
-        let name = self.name().to_ascii_lowercase();
-        Regex::new(r"[^a-zA-Z0-9]+").unwrap().replace_all(&name, "_").into()
-    }
 
     async fn get_type(&self, _: &T, _platform: Platform) -> DoctorCheckType {
         DoctorCheckType::NormalCheck
@@ -657,64 +642,6 @@ impl DoctorCheck for FigIntegrationsCheck {
     }
 }
 
-struct InlineCheck;
-
-#[async_trait]
-impl DoctorCheck for InlineCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Inline".into()
-    }
-
-    async fn get_type(&self, _: &(), _: Platform) -> DoctorCheckType {
-        let shell = get_shell_context().await;
-        let inline_enabled = fig_settings::settings::get_bool_or("inline.enabled", true);
-        let is_zsh = matches!(shell, Ok(Some(Shell::Zsh)));
-
-        if is_zsh && inline_enabled {
-            DoctorCheckType::NormalCheck
-        } else if !is_zsh {
-            DoctorCheckType::NoCheck
-        } else {
-            DoctorCheckType::SoftCheck
-        }
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        if !fig_settings::settings::get_bool_or("inline.enabled", true) {
-            return Err(DoctorError::Warning(
-                format!(
-                    "Inline is disabled, to re-enable run: {}",
-                    format!("{CLI_BINARY_NAME} inline enable").magenta()
-                )
-                .into(),
-            ));
-        }
-
-        if fig_os_shim::Env::new().q_using_zsh_autosuggestions() {
-            return Err(DoctorError::Error {
-                reason: "Using zsh-autosuggestions is not supported at the same time as Inline".into(),
-                info: vec![
-                    "To fix either:".into(),
-                    format!(
-                        "- Remove zsh-autosuggestions from {} and restart your terminal",
-                        "~/.zshrc".bold()
-                    )
-                    .into(),
-                    format!(
-                        "- Disable Inline by running: {}",
-                        format!("{CLI_BINARY_NAME} inline disable").magenta()
-                    )
-                    .into(),
-                ],
-                fix: None,
-                error: None,
-            });
-        }
-
-        Ok(())
-    }
-}
-
 struct PtySocketCheck;
 
 #[async_trait]
@@ -895,10 +822,6 @@ impl DoctorCheck<Option<Shell>> for DotfileCheck {
         let path = self.short_path();
         let shell = self.integration.get_shell();
         format!("{shell} {path} integration check").into()
-    }
-
-    fn analytics_event_name(&self) -> String {
-        format!("dotfile_check_{}", self.integration.file_name())
     }
 
     async fn get_type(&self, current_shell: &Option<Shell>, _platform: Platform) -> DoctorCheckType {
@@ -1514,25 +1437,6 @@ impl DoctorCheck for WindowsConsoleCheck {
     }
 }
 
-struct LoginStatusCheck;
-
-#[async_trait]
-impl DoctorCheck for LoginStatusCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Auth".into()
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        if !fig_util::system_info::in_cloudshell() && !fig_auth::is_logged_in().await {
-            return Err(doctor_error!(
-                "Not authenticated. Please run {}",
-                format!("{CLI_BINARY_NAME} login").bold()
-            ));
-        }
-        Ok(())
-    }
-}
-
 struct DashboardHostCheck;
 
 #[async_trait]
@@ -1635,11 +1539,6 @@ where
 
         if config.all {
             continue;
-        }
-
-        if result.is_err() {
-            let analytics_event_name = check.analytics_event_name();
-            fig_telemetry::send_doctor_check_failed(analytics_event_name).await;
         }
 
         if let Err(DoctorError::Error { reason, fix, error, .. }) = result {
@@ -1755,22 +1654,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         })?;
     }
 
-    run_checks(
-        "Let's check if you're logged in...".into(),
-        vec![&LoginStatusCheck {}],
-        config,
-        &mut spinner,
-    )
-    .await?;
-
-    // If user is logged in, try to launch fig
-    launch_fig_desktop(LaunchArgs {
-        wait_for_socket: true,
-        open_dashboard: false,
-        verbose: false,
-    })
-    .ok();
-
     let shell_integrations: Vec<_> = [Shell::Bash, Shell::Zsh]
         .into_iter()
         .map(|shell| shell.get_shell_integrations(&Env::new()))
@@ -1822,8 +1705,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 &PluginDevModeCheck,
                 &DashboardHostCheck,
                 &AutocompleteHostCheck,
-                &MidwayCheck,
-                &InlineCheck,
             ],
             config,
             &mut spinner,

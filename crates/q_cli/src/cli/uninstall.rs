@@ -38,7 +38,6 @@ pub async fn uninstall_command(no_confirm: bool) -> Result<ExitCode> {
 }
 
 async fn uninstall(ctx: std::sync::Arc<fig_os_shim::Context>) -> Result<()> {
-    fig_auth::logout().await.ok();
     fig_integrations::install::uninstall(fig_integrations::install::InstallComponents::all(), ctx).await?;
 
     Ok(())

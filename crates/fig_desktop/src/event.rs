@@ -29,9 +29,6 @@ pub enum Event {
     SetTrayVisible(bool),
 
     ReloadAccessibility,
-    ReloadTray {
-        is_logged_in: bool,
-    },
 
     ShowMessageNotification(ShowMessageNotification),
 }

@@ -1,6 +1,6 @@
 import * as EditBufferNotifications from "./editbuffer.js";
 import * as Event from "./event.js";
-import * as Fig from "@aws/amazon-q-developer-cli-proto/fig";
+import * as Fig from "@fig/proto/fig";
 import * as fs from "./filesystem.js";
 import * as History from "./history.js";
 import * as Install from "./install.js";

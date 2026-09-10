@@ -1,10 +1,9 @@
 {
-  "name": "@amzn/tsconfig",
+  "name": "@fig/tsconfig",
   "version": "0.1.0",
   "private": true,
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "files": [
     "base.json",
     "dom.json"

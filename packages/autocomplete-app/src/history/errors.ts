@@ -1,4 +1,4 @@
-import { createErrorInstance } from "@aws/amazon-q-developer-cli-shared/errors";
+import { createErrorInstance } from "@fig/shared/errors";
 
 export const MissingSpecError = createErrorInstance("MissingSpecError");
 export const HistoryReadingError = createErrorInstance("HistoryReadingError");

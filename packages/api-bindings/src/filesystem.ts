@@ -7,7 +7,7 @@ import {
   sendAppendToFileRequest,
   sendCreateDirectoryRequest,
 } from "./requests.js";
-import { type FilePath, FilePathSchema } from "@aws/amazon-q-developer-cli-proto/fig";
+import { type FilePath, FilePathSchema } from "@fig/proto/fig";
 
 function filePath(options: Omit<FilePath, "$typeName">) {
   return create(FilePathSchema, options);

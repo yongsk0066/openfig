@@ -1,5 +1,5 @@
 {
-  "name": "fig-api-tests",
+  "name": "@fig/api-tests",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
-    "@amzn/types": "workspace:^",
-    "@aws/amazon-q-developer-cli-api-bindings": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
+    "@fig/types": "workspace:^",
+    "@fig/api-bindings": "workspace:^",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

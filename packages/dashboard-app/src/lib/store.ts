@@ -4,7 +4,7 @@ import {
   State as ApiState,
   Install,
   Platform,
-} from "@aws/amazon-q-developer-cli-api-bindings";
+} from "@fig/api-bindings";
 import { PlatformInfo } from "@/types/preferences";
 
 type KV = Record<string, unknown>;

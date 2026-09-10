@@ -1,6 +1,6 @@
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import * as settings from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { Suggestion } from "@fig/shared/internal";
+import { SETTINGS } from "@fig/api-bindings-wrappers";
+import * as settings from "@fig/api-bindings-wrappers";
 import { MockInstance, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   getStaticArgSuggestions,

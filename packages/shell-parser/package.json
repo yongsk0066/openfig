@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-shell-parser",
+  "name": "@fig/shell-parser",
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "type": "module",
   "exports": "./src/index.ts",
   "publishConfig": {
@@ -15,10 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws/amazon-q-developer-cli-shared": "workspace:^"
+    "@fig/shared": "workspace:^"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
     "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-proto",
+  "name": "@fig/proto",
   "version": "0.2.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "files": [
     "dist",
     "package.json"
@@ -24,7 +23,7 @@
     "@bufbuild/protobuf": "catalog:"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
     "@bufbuild/buf": "catalog:",
     "@bufbuild/protoc-gen-es": "catalog:",
     "typescript": "catalog:"

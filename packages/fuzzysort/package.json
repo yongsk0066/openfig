@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-fuzzysort",
+  "name": "@fig/fuzzysort",
   "version": "0.1.0",
   "license": "MIT",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "type": "module",
   "exports": "./fuzzysort.js",
   "types": "./fuzzysort.d.ts",

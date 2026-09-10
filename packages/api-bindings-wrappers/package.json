@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-api-bindings-wrappers",
+  "name": "@fig/api-bindings-wrappers",
   "version": "0.2.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -13,13 +12,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws/amazon-q-developer-cli-api-bindings": "workspace:~",
+    "@fig/api-bindings": "workspace:~",
     "loglevel": "^1.9.2"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
-    "@amzn/types": "workspace:^",
-    "@aws/amazon-q-developer-cli-shared": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
+    "@fig/types": "workspace:^",
+    "@fig/shared": "workspace:^",
     "@withfig/autocomplete-types": "catalog:",
     "typescript": "catalog:"
   },

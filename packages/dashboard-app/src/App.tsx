@@ -9,7 +9,7 @@ import Keybindings from "./pages/settings/keybindings";
 import Licenses from "./pages/licenses";
 import { Suspense, useContext, useEffect, useRef } from "react";
 import Modal from "./components/modal";
-import { Event } from "@aws/amazon-q-developer-cli-api-bindings";
+import { Event } from "@fig/api-bindings";
 import InstallModal from "./components/installs/modal";
 import { getIconFromName } from "./lib/icons";
 import { StoreContext } from "./context/zustand";
@@ -20,7 +20,7 @@ import { useLocalStateZodDefault } from "./hooks/store/useState";
 import { z } from "zod";
 import { useState } from "react";
 import { usePlatformInfo } from "./hooks/store/usePlatformInfo";
-import { Platform } from "@aws/amazon-q-developer-cli-api-bindings";
+import { Platform } from "@fig/api-bindings";
 import { matchesPlatformRestrictions } from "./lib/platform";
 
 function App() {

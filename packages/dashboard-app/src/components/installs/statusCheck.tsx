@@ -1,5 +1,5 @@
 import { InstallCheckWithInstallKey } from "@/types/preferences";
-import { Install } from "@aws/amazon-q-developer-cli-api-bindings";
+import { Install } from "@fig/api-bindings";
 import { useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { Check, ChevronDown, X } from "lucide-react";

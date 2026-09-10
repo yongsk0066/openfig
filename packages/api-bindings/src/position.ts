@@ -1,4 +1,4 @@
-import { PointSchema, SizeSchema } from "@aws/amazon-q-developer-cli-proto/fig";
+import { PointSchema, SizeSchema } from "@fig/proto/fig";
 import { sendPositionWindowRequest, sendDragWindowRequest } from "./requests.js";
 import { create } from "@bufbuild/protobuf";
 

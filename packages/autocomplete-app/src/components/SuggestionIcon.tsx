@@ -1,6 +1,6 @@
 import React from "react";
-import { Suggestion, SuggestionType } from "@aws/amazon-q-developer-cli-shared/internal";
-import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
+import { Suggestion, SuggestionType } from "@fig/shared/internal";
+import { localProtocol } from "@fig/shared/utils";
 
 type SuggestionIconProps = {
   suggestion: Suggestion;

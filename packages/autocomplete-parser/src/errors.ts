@@ -1,4 +1,4 @@
-import { createErrorInstance } from "@aws/amazon-q-developer-cli-shared/errors";
+import { createErrorInstance } from "@fig/shared/errors";
 
 // LoadSpecErrors
 export const MissingSpecError = createErrorInstance("MissingSpecError");

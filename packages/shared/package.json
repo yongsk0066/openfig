@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-shared",
+  "name": "@fig/shared",
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "type": "module",
   "exports": {
     "./*": "./src/*.ts"
@@ -16,9 +15,9 @@
     "@fig/autocomplete-shared": "^1.1.2"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
-    "@amzn/types": "workspace:^",
-    "@aws/amazon-q-developer-cli-fuzzysort": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
+    "@fig/types": "workspace:^",
+    "@fig/fuzzysort": "workspace:^",
     "@withfig/autocomplete-types": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

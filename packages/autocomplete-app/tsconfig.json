@@ -19,7 +19,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "types": ["@withfig/autocomplete-types", "@amzn/types", "node"]
+    "types": ["@withfig/autocomplete-types", "@fig/types", "node"]
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

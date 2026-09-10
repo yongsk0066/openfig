@@ -1,4 +1,4 @@
-import { Annotation } from "@aws/amazon-q-developer-cli-autocomplete-parser";
+import { Annotation } from "@fig/autocomplete-parser";
 import { MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getCustomSuggestions } from "../customSuggestionsGenerator";
 import * as helpers from "../helpers";

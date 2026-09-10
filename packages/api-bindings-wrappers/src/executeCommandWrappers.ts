@@ -1,6 +1,6 @@
-import { Process } from "@aws/amazon-q-developer-cli-api-bindings";
-import { withTimeout } from "@aws/amazon-q-developer-cli-shared/utils";
-import { createErrorInstance } from "@aws/amazon-q-developer-cli-shared/errors";
+import { Process } from "@fig/api-bindings";
+import { withTimeout } from "@fig/shared/utils";
+import { createErrorInstance } from "@fig/shared/errors";
 import logger from "loglevel";
 import { cleanOutput, executeCommandTimeout } from "./executeCommand.js";
 import { fread } from "./fs.js";

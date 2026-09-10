@@ -1,12 +1,12 @@
-import { WindowPosition, Settings } from "@aws/amazon-q-developer-cli-api-bindings";
-import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { WindowPosition, Settings } from "@fig/api-bindings";
+import { SETTINGS } from "@fig/api-bindings-wrappers";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { RowComponentProps } from "react-window";
 
 import logger from "loglevel";
-import { getCWDForFilesAndFolders } from "@aws/amazon-q-developer-cli-shared/utils";
+import { getCWDForFilesAndFolders } from "@fig/shared/utils";
 import * as jsxRuntime from "react/jsx-runtime";
-import * as figApiBindings from "@aws/amazon-q-developer-cli-api-bindings";
+import * as figApiBindings from "@fig/api-bindings";
 import { getMaxHeight, getMaxWidth, POPOUT_WIDTH } from "./window";
 import { useParseArgumentsEffect } from "./parser/hooks";
 import { loadHistory } from "./history";

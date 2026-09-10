@@ -1,8 +1,7 @@
 {
-  "name": "@amzn/autocomplete-app",
+  "name": "@fig/autocomplete-app",
   "version": "1.0.0",
   "private": true,
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
   "type": "module",
   "scripts": {
     "set-host": "fig settings developer.autocomplete.host http://localhost:3124",
@@ -16,11 +15,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws/amazon-q-developer-cli-api-bindings": "workspace:~",
-    "@aws/amazon-q-developer-cli-api-bindings-wrappers": "workspace:^",
-    "@aws/amazon-q-developer-cli-autocomplete-parser": "workspace:^",
-    "@aws/amazon-q-developer-cli-proto": "workspace:^",
-    "@aws/amazon-q-developer-cli-shell-parser": "workspace:^",
+    "@fig/api-bindings": "workspace:~",
+    "@fig/api-bindings-wrappers": "workspace:^",
+    "@fig/autocomplete-parser": "workspace:^",
+    "@fig/proto": "workspace:^",
+    "@fig/shell-parser": "workspace:^",
     "@bufbuild/protobuf": "catalog:",
     "@fig/autocomplete-helpers": "^2.0.0",
     "@fig/autocomplete-shared": "^1.1.2",
@@ -34,9 +33,9 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@amzn/types": "workspace:^",
-    "@aws/amazon-q-developer-cli-fuzzysort": "workspace:^",
-    "@aws/amazon-q-developer-cli-shared": "workspace:^",
+    "@fig/types": "workspace:^",
+    "@fig/fuzzysort": "workspace:^",
+    "@fig/shared": "workspace:^",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
@@ -51,8 +50,8 @@
     "vitest": "catalog:"
   },
   "bundledDependencies": [
-    "@aws/amazon-q-developer-cli-fuzzysort",
-    "@aws/amazon-q-developer-cli-shared"
+    "@fig/fuzzysort",
+    "@fig/shared"
   ],
   "browserslist": [
     "defaults",

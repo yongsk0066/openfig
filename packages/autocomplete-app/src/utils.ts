@@ -1,5 +1,5 @@
-import { fs } from "@aws/amazon-q-developer-cli-api-bindings";
-import { isInDevMode } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { fs } from "@fig/api-bindings";
+import { isInDevMode } from "@fig/api-bindings-wrappers";
 
 // Logging functions
 const DEFAULT_CONSOLE = {

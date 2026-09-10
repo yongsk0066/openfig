@@ -1,14 +1,14 @@
 import { Metadata, convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import logger from "loglevel";
 import { folders, filepaths } from "@fig/autocomplete-generators";
-import * as Internal from "@aws/amazon-q-developer-cli-shared/internal";
+import * as Internal from "@fig/shared/internal";
 import {
   SuggestionFlag,
   SuggestionFlags,
   makeArray,
   SpecLocationSource,
-} from "@aws/amazon-q-developer-cli-shared/utils";
-import { Command, getCommand } from "@aws/amazon-q-developer-cli-shell-parser";
+} from "@fig/shared/utils";
+import { Command, getCommand } from "@fig/shell-parser";
 import {
   findOption,
   getCurrentArg,

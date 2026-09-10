@@ -214,17 +214,17 @@ importers:
 
   packages/api-bindings:
     dependencies:
-      '@aws/amazon-q-developer-cli-proto':
-        specifier: workspace:^
-        version: link:../../proto
       '@bufbuild/protobuf':
         specifier: 'catalog:'
         version: 2.14.1
+      '@fig/proto':
+        specifier: workspace:^
+        version: link:../../proto
     devDependencies:
-      '@amzn/tsconfig':
+      '@fig/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
-      '@amzn/types':
+      '@fig/types':
         specifier: workspace:^
         version: link:../types
       '@types/node':
@@ -239,22 +239,22 @@ importers:
 
   packages/api-bindings-wrappers:
     dependencies:
-      '@aws/amazon-q-developer-cli-api-bindings':
+      '@fig/api-bindings':
         specifier: workspace:~
         version: link:../api-bindings
       loglevel:
         specifier: ^1.9.2
         version: 1.9.2
     devDependencies:
-      '@amzn/tsconfig':
-        specifier: workspace:^
-        version: link:../tsconfig
-      '@amzn/types':
-        specifier: workspace:^
-        version: link:../types
-      '@aws/amazon-q-developer-cli-shared':
+      '@fig/shared':
         specifier: workspace:^
         version: link:../shared
+      '@fig/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@fig/types':
+        specifier: workspace:^
+        version: link:../types
       '@withfig/autocomplete-types':
         specifier: 'catalog:'
         version: 1.31.0
@@ -264,30 +264,30 @@ importers:
 
   packages/autocomplete-app:
     dependencies:
-      '@aws/amazon-q-developer-cli-api-bindings':
-        specifier: workspace:~
-        version: link:../api-bindings
-      '@aws/amazon-q-developer-cli-api-bindings-wrappers':
-        specifier: workspace:^
-        version: link:../api-bindings-wrappers
-      '@aws/amazon-q-developer-cli-autocomplete-parser':
-        specifier: workspace:^
-        version: link:../autocomplete-parser
-      '@aws/amazon-q-developer-cli-proto':
-        specifier: workspace:^
-        version: link:../../proto
-      '@aws/amazon-q-developer-cli-shell-parser':
-        specifier: workspace:^
-        version: link:../shell-parser
       '@bufbuild/protobuf':
         specifier: 'catalog:'
         version: 2.14.1
+      '@fig/api-bindings':
+        specifier: workspace:~
+        version: link:../api-bindings
+      '@fig/api-bindings-wrappers':
+        specifier: workspace:^
+        version: link:../api-bindings-wrappers
       '@fig/autocomplete-helpers':
         specifier: ^2.0.0
         version: 2.0.0
+      '@fig/autocomplete-parser':
+        specifier: workspace:^
+        version: link:../autocomplete-parser
       '@fig/autocomplete-shared':
         specifier: ^1.1.2
         version: 1.1.2
+      '@fig/proto':
+        specifier: workspace:^
+        version: link:../../proto
+      '@fig/shell-parser':
+        specifier: workspace:^
+        version: link:../shell-parser
       deep-object-diff:
         specifier: ^1.1.9
         version: 1.1.9
@@ -313,15 +313,15 @@ importers:
         specifier: 'catalog:'
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.4.0(react@19.3.0))
     devDependencies:
-      '@amzn/types':
-        specifier: workspace:^
-        version: link:../types
-      '@aws/amazon-q-developer-cli-fuzzysort':
+      '@fig/fuzzysort':
         specifier: workspace:^
         version: link:../fuzzysort
-      '@aws/amazon-q-developer-cli-shared':
+      '@fig/shared':
         specifier: workspace:^
         version: link:../shared
+      '@fig/types':
+        specifier: workspace:^
+        version: link:../types
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.2.2(@types/node@26.5.1)(jiti@1.21.7)(terser@5.39.0)(tsx@4.19.4)(yaml@2.7.1))
@@ -361,15 +361,12 @@ importers:
 
   packages/autocomplete-parser:
     dependencies:
-      '@aws/amazon-q-developer-cli-api-bindings':
+      '@fig/api-bindings':
         specifier: workspace:^
         version: link:../api-bindings
-      '@aws/amazon-q-developer-cli-api-bindings-wrappers':
+      '@fig/api-bindings-wrappers':
         specifier: workspace:^
         version: link:../api-bindings-wrappers
-      '@aws/amazon-q-developer-cli-shell-parser':
-        specifier: workspace:^
-        version: link:../shell-parser
       '@fig/autocomplete-generators':
         specifier: ^2.4.0
         version: 2.4.0
@@ -379,6 +376,9 @@ importers:
       '@fig/autocomplete-shared':
         specifier: ^1.1.2
         version: 1.1.2
+      '@fig/shell-parser':
+        specifier: workspace:^
+        version: link:../shell-parser
       loglevel:
         specifier: ^1.9.2
         version: 1.9.2
@@ -389,15 +389,15 @@ importers:
         specifier: 'catalog:'
         version: 4.6.1
     devDependencies:
-      '@amzn/tsconfig':
-        specifier: workspace:^
-        version: link:../tsconfig
-      '@amzn/types':
-        specifier: workspace:^
-        version: link:../types
-      '@aws/amazon-q-developer-cli-shared':
+      '@fig/shared':
         specifier: workspace:^
         version: link:../shared
+      '@fig/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@fig/types':
+        specifier: workspace:^
+        version: link:../types
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
@@ -416,7 +416,7 @@ importers:
 
   packages/dashboard-app:
     dependencies:
-      '@aws/amazon-q-developer-cli-api-bindings':
+      '@fig/api-bindings':
         specifier: workspace:^
         version: link:../api-bindings
       '@radix-ui/react-collapsible':
@@ -468,7 +468,7 @@ importers:
         specifier: 'catalog:'
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.4.0(react@19.3.0))
     devDependencies:
-      '@amzn/types':
+      '@fig/types':
         specifier: workspace:^
         version: link:../types
       '@tailwindcss/vite':
@@ -504,15 +504,15 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2
     devDependencies:
-      '@amzn/tsconfig':
-        specifier: workspace:^
-        version: link:../tsconfig
-      '@amzn/types':
-        specifier: workspace:^
-        version: link:../types
-      '@aws/amazon-q-developer-cli-fuzzysort':
+      '@fig/fuzzysort':
         specifier: workspace:^
         version: link:../fuzzysort
+      '@fig/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@fig/types':
+        specifier: workspace:^
+        version: link:../types
       '@withfig/autocomplete-types':
         specifier: 'catalog:'
         version: 1.31.0
@@ -525,11 +525,11 @@ importers:
 
   packages/shell-parser:
     dependencies:
-      '@aws/amazon-q-developer-cli-shared':
+      '@fig/shared':
         specifier: workspace:^
         version: link:../shared
     devDependencies:
-      '@amzn/tsconfig':
+      '@fig/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
       '@vitest/coverage-v8':
@@ -556,30 +556,30 @@ importers:
         specifier: 'catalog:'
         version: 2.14.1
     devDependencies:
-      '@amzn/tsconfig':
-        specifier: workspace:^
-        version: link:../packages/tsconfig
       '@bufbuild/buf':
         specifier: 'catalog:'
         version: 1.72.0
       '@bufbuild/protoc-gen-es':
         specifier: 'catalog:'
         version: 2.14.1(@bufbuild/protobuf@2.14.1)(supports-color@8.1.1)
+      '@fig/tsconfig':
+        specifier: workspace:^
+        version: link:../packages/tsconfig
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
 
   tests/fig-api:
     devDependencies:
-      '@amzn/tsconfig':
-        specifier: workspace:^
-        version: link:../../packages/tsconfig
-      '@amzn/types':
-        specifier: workspace:^
-        version: link:../../packages/types
-      '@aws/amazon-q-developer-cli-api-bindings':
+      '@fig/api-bindings':
         specifier: workspace:^
         version: link:../../packages/api-bindings
+      '@fig/tsconfig':
+        specifier: workspace:^
+        version: link:../../packages/tsconfig
+      '@fig/types':
+        specifier: workspace:^
+        version: link:../../packages/types
       '@types/node':
         specifier: 'catalog:'
         version: 26.5.1

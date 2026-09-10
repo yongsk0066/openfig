@@ -1,4 +1,4 @@
-import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
+import { localProtocol } from "@fig/shared/utils";
 
 const generateSpec = async (tokenArray: string[] | undefined): Promise<Fig.Subcommand> => {
   // Throw an error if we find an option in the tokenArray (allows us to

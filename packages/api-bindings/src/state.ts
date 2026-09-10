@@ -1,7 +1,7 @@
 import {
   LocalStateChangedNotification,
   NotificationType,
-} from "@aws/amazon-q-developer-cli-proto/fig";
+} from "@fig/proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
 import { sendGetLocalStateRequest, sendUpdateLocalStateRequest } from "./requests.js";

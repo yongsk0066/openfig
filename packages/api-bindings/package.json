@@ -1,9 +1,8 @@
 {
-  "name": "@aws/amazon-q-developer-cli-api-bindings",
+  "name": "@fig/api-bindings",
   "version": "0.2.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "type": "module",
   "exports": "./src/index.ts",
   "scripts": {
@@ -11,12 +10,12 @@
     "codegen": "node codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
   "dependencies": {
-    "@aws/amazon-q-developer-cli-proto": "workspace:^",
+    "@fig/proto": "workspace:^",
     "@bufbuild/protobuf": "catalog:"
   },
   "devDependencies": {
-    "@amzn/tsconfig": "workspace:^",
-    "@amzn/types": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
+    "@fig/types": "workspace:^",
     "@types/node": "catalog:",
     "ts-morph": "catalog:",
     "typescript": "catalog:"

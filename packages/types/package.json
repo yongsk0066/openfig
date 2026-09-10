@@ -1,10 +1,9 @@
 {
-  "name": "@amzn/types",
+  "name": "@fig/types",
   "version": "0.1.0",
   "private": true,
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "OpenFig contributors",
   "files": [
     "global.d.ts"
   ],

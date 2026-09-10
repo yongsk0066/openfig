@@ -1,7 +1,7 @@
 import { UserPrefView } from "@/components/preference/list";
 import { Button } from "@/components/ui/button";
 import settings from "@/data/preferences";
-import { Native } from "@aws/amazon-q-developer-cli-api-bindings";
+import { Native } from "@fig/api-bindings";
 
 export default function Page() {
   return (

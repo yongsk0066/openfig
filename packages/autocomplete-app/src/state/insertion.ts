@@ -1,13 +1,13 @@
 import logger from "loglevel";
 import { StoreApi } from "zustand";
-import { Shell } from "@aws/amazon-q-developer-cli-api-bindings";
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
+import { Shell } from "@fig/api-bindings";
+import { Suggestion } from "@fig/shared/internal";
 import {
   makeArray,
   longestCommonPrefix,
   ensureTrailingSlash,
-} from "@aws/amazon-q-developer-cli-shared/utils";
-import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+} from "@fig/shared/utils";
+import { SETTINGS } from "@fig/api-bindings-wrappers";
 import { NamedSetState, AutocompleteState, Visibility } from "./types";
 import { isMatchingType, getNameMatch, getQueryTermForSuggestion } from "../suggestions/helpers";
 import { updateAutocompleteIndexFromUserInsert } from "../suggestions/sorting";

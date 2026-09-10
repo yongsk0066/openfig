@@ -1592,7 +1592,6 @@ dependencies = [
  "dirs 7.0.0",
  "nix 0.31.3",
  "serde",
- "sysinfo 0.39.6",
  "tempfile",
  "tokio",
 ]

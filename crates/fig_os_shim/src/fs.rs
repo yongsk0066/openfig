@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs::Permissions;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{
@@ -358,52 +357,6 @@ impl Fs {
             Inner::Real => fs::read_dir(path).await,
             Inner::Chroot(root) => fs::read_dir(append(root.path(), path)).await,
             Inner::Fake(_) => panic!("unimplemented"),
-        }
-    }
-
-    /// Returns the canonical, absolute form of a path with all intermediate
-    /// components normalized and symbolic links resolved.
-    ///
-    /// This is a proxy to [`tokio::fs::canonicalize`].
-    pub async fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, io::Error> {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Real => fs::canonicalize(path).await,
-            Inner::Chroot(root) => fs::canonicalize(append(root.path(), path)).await,
-            Inner::Fake(_) => panic!("unimplemented"),
-        }
-    }
-
-    /// Changes the permissions found on a file or a directory.
-    ///
-    /// This is a proxy to [`tokio::fs::set_permissions`]
-    pub async fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), io::Error> {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Real => fs::set_permissions(path, perm).await,
-            Inner::Chroot(root) => fs::set_permissions(append(root.path(), path), perm).await,
-            Inner::Fake(_) => panic!("unimplemented"),
-        }
-    }
-
-    /// For test [Fs]'s that use a different root, returns an absolute path.
-    ///
-    /// This must be used for any paths indirectly used by code using a chroot
-    /// [Fs].
-    pub fn chroot_path(&self, path: impl AsRef<Path>) -> PathBuf {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Chroot(root) => append(root.path(), path),
-            _ => path.as_ref().to_path_buf(),
-        }
-    }
-
-    /// See [Fs::chroot_path].
-    pub fn chroot_path_str(&self, path: impl AsRef<Path>) -> String {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Chroot(root) => append(root.path(), path).to_string_lossy().to_string(),
-            _ => path.as_ref().to_path_buf().to_string_lossy().to_string(),
         }
     }
 }

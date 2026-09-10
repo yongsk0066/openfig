@@ -37,7 +37,6 @@ mod inner {
     pub(super) struct Fake {
         pub vars: HashMap<String, String>,
         pub cwd: PathBuf,
-        pub current_exe: PathBuf,
     }
 
     impl Default for Fake {
@@ -45,7 +44,6 @@ mod inner {
             Self {
                 vars: HashMap::default(),
                 cwd: PathBuf::from("/"),
-                current_exe: PathBuf::from("/current_exe"),
             }
         }
     }
@@ -134,14 +132,6 @@ impl Env {
         }
     }
 
-    pub fn current_exe(&self) -> Result<PathBuf, io::Error> {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Real => std::env::current_exe(),
-            Inner::Fake(fake) => Ok(fake.lock().unwrap().current_exe.clone()),
-        }
-    }
-
     pub fn in_ssh(&self) -> bool {
         self.get("SSH_CLIENT").is_ok() || self.get("SSH_CONNECTION").is_ok() || self.get("SSH_TTY").is_ok()
     }
@@ -167,32 +157,16 @@ impl Env {
         self.get_os("Q_LOG_STDOUT").is_some()
     }
 
-    pub fn q_cli_client_application(&self) -> Result<String, VarError> {
-        self.get("Q_CLI_CLIENT_APPLICATION")
-    }
-
     pub fn q_term(&self) -> Result<String, VarError> {
         self.get("Q_TERM")
-    }
-
-    pub fn q_using_zsh_autosuggestions(&self) -> bool {
-        self.get_os("Q_USING_ZSH_AUTOSUGGESTIONS").is_some()
     }
 
     pub fn q_init_snapshot_test(&self) -> bool {
         self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_backend(&self) -> Result<String, VarError> {
-        self.get("Q_BACKEND")
-    }
-
     pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
         self.get("Q_PROMPT_OFFSET_WORKAROUND")
-    }
-
-    pub fn q_custom_cert(&self) -> Result<String, VarError> {
-        self.get("Q_CUSTOM_CERT")
     }
 }
 

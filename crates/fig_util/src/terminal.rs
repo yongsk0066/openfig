@@ -51,18 +51,6 @@ pub fn xterm_bundle_ids() -> &'static [&'static str] {
     })
 }
 
-pub fn current_terminal() -> Option<&'static Terminal> {
-    static CURRENT_TERMINAL: OnceLock<Option<Terminal>> = OnceLock::new();
-    CURRENT_TERMINAL
-        .get_or_init(|| Terminal::parent_terminal(&Context::new()))
-        .as_ref()
-}
-
-pub fn current_terminal_version() -> Option<&'static str> {
-    static CURRENT_TERMINAL_VERSION: OnceLock<Option<String>> = OnceLock::new();
-    CURRENT_TERMINAL_VERSION.get_or_init(Terminal::version).as_deref()
-}
-
 /// Checks if the current process is inside of one of the pseudoterminals listed under
 /// [`SPECIAL_TERMINALS`], returning the terminal if true.
 pub fn in_special_terminal(ctx: &Context) -> Option<Terminal> {
@@ -216,16 +204,6 @@ impl Terminal {
         None
     }
 
-    pub fn version() -> Option<String> {
-        static RE: OnceLock<Option<regex::Regex>> = OnceLock::new();
-        let re = RE.get_or_init(|| regex::Regex::new("[0-9\\-\\._]+").ok()).as_ref()?;
-        let version = std::env::var("TERM_PROGRAM_VERSION").ok()?;
-        match re.captures(&version).is_some() {
-            true => Some(version),
-            false => None,
-        }
-    }
-
     pub fn internal_id(&self) -> Cow<'static, str> {
         match self {
             Terminal::Iterm => "iterm".into(),
@@ -328,20 +306,6 @@ impl Terminal {
 
             _ => &[],
         }
-    }
-
-    pub fn supports_fancy_boxes(&self) -> bool {
-        !matches!(
-            self,
-            Terminal::VSCode
-                | Terminal::VSCodeInsiders
-                | Terminal::VSCodium
-                | Terminal::Cursor
-                | Terminal::CursorNightly
-                | Terminal::Windsurf
-                | Terminal::WindsurfNext
-                | Terminal::Trae
-        )
     }
 
     /// Other pseudoterminal that we want to launch within

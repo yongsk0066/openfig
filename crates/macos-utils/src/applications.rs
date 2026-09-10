@@ -1,27 +1,10 @@
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{
-    NSString,
-    NSURL,
-};
-
 #[derive(Debug)]
 pub struct MacOSApplication {
     pub name: Option<String>,
     pub bundle_identifier: Option<String>,
     pub bundle_path: Option<String>,
     pub process_identifier: libc::pid_t,
-}
-
-impl MacOSApplication {
-    pub fn terminate(&self) {
-        use nix::sys::signal::{
-            self,
-            Signal,
-        };
-        use nix::unistd::Pid;
-
-        signal::kill(Pid::from_raw(self.process_identifier), Signal::SIGTERM).ok();
-    }
 }
 
 pub fn running_applications() -> Vec<MacOSApplication> {
@@ -42,21 +25,6 @@ pub fn running_applications() -> Vec<MacOSApplication> {
             }
         })
         .collect()
-}
-
-pub fn running_applications_matching(bundle_identifier: &str) -> Vec<MacOSApplication> {
-    running_applications()
-        .into_iter()
-        .filter(|app| matches!(&app.bundle_identifier, Some(bundle_id) if bundle_id.as_str() == bundle_identifier))
-        .collect()
-}
-
-pub fn launch_application(bundle_path: &str) {
-    let bundle_nsstring = NSString::from_str(bundle_path);
-    let bundle_nsurl = NSURL::fileURLWithPath_isDirectory(&bundle_nsstring, true);
-
-    let workspace = NSWorkspace::sharedWorkspace();
-    workspace.openURL(&bundle_nsurl);
 }
 
 #[cfg(test)]

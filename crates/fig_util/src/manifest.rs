@@ -95,21 +95,6 @@ pub enum Os {
     Other(String),
 }
 
-impl Os {
-    pub fn current() -> Self {
-        match std::env::consts::OS {
-            "macos" => Os::Macos,
-            "linux" => Os::Linux,
-            "windows" => Os::Windows,
-            _ => panic!("Unsupported OS: {}", std::env::consts::OS),
-        }
-    }
-
-    pub fn is_current_os(&self) -> bool {
-        self == &Os::current()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
@@ -121,10 +106,6 @@ pub enum Channel {
 }
 
 impl Channel {
-    pub fn all() -> &'static [Self] {
-        &[Channel::Stable, Channel::Beta, Channel::Qa, Channel::Nightly]
-    }
-
     pub fn id(&self) -> &'static str {
         match self {
             Channel::Stable => "stable",
@@ -180,12 +161,6 @@ pub fn manifest() -> &'static Manifest {
         packaged_at: "unknown".into(),
         packaged_by: "unknown".into(),
     })
-}
-
-/// Gets the version from the manifest
-#[deprecated = "versions are unified, use env!(\"CARGO_PKG_VERSION\")"]
-pub fn version() -> Option<&'static str> {
-    Some(env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]

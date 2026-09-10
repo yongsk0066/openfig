@@ -171,12 +171,6 @@ impl LaunchdPlist {
         plist
     }
 
-    /// Set the label
-    pub fn _label(mut self, label: impl Into<String>) -> LaunchdPlist {
-        self.label = label.into();
-        self
-    }
-
     /// Set the program
     pub fn program(mut self, program: impl Into<String>) -> LaunchdPlist {
         self.program = Some(program.into());
@@ -271,16 +265,6 @@ impl LaunchdPlist {
     /// Set the throttle interval
     pub fn throttle_interval(mut self, interval: i64) -> LaunchdPlist {
         self.throttle_interval = Some(interval);
-        self
-    }
-
-    /// Set the watch paths
-    pub fn watch_paths<I, T>(mut self, watch_paths: I) -> LaunchdPlist
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<String>,
-    {
-        self.watch_paths = Some(watch_paths.into_iter().map(|s| s.into()).collect());
         self
     }
 

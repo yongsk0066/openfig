@@ -6,8 +6,6 @@ use camino::Utf8PathBuf;
 use fig_os_shim::{
     Context,
     EnvProvider,
-    FsProvider,
-    Shim,
 };
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -62,25 +60,6 @@ pub fn home_dir() -> Result<PathBuf> {
     dirs::home_dir().ok_or(DirectoryError::NoHomeDirectory)
 }
 
-pub fn home_dir_ctx<Ctx: FsProvider + EnvProvider>(ctx: &Ctx) -> Result<PathBuf> {
-    if ctx.env().is_real() {
-        home_dir()
-    } else {
-        ctx.env()
-            .get("HOME")
-            .map_err(|_err| DirectoryError::NoHomeDirectory)
-            .and_then(|h| {
-                if h.is_empty() {
-                    Err(DirectoryError::NoHomeDirectory)
-                } else {
-                    Ok(h)
-                }
-            })
-            .map(PathBuf::from)
-            .map(|p| ctx.fs().chroot_path(p))
-    }
-}
-
 /// The directory of the users `$HOME/.local/bin` directory
 ///
 /// MacOS path: `$HOME/.local/bin``
@@ -90,44 +69,11 @@ pub fn home_local_bin() -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn home_local_bin_ctx(ctx: &Context) -> Result<PathBuf> {
-    let mut path = home_dir_ctx(ctx)?;
-    path.push(".local/bin");
-    Ok(path)
-}
-
-/// The config directory
-///
-/// - MacOS: `$HOME/Library/Application Support`
-pub fn config_dir() -> Result<PathBuf> {
-    dirs::config_dir().ok_or(DirectoryError::NoHomeDirectory)
-}
-
 /// The app data directory
 ///
 /// - MacOS: `$HOME/Library/Application Support/{data_dir}`
 pub fn fig_data_dir() -> Result<PathBuf> {
     Ok(dirs::data_local_dir()
-        .ok_or(DirectoryError::NoHomeDirectory)?
-        .join(DATA_DIR_NAME))
-}
-
-pub fn fig_data_dir_ctx(fs: &impl FsProvider) -> Result<PathBuf> {
-    Ok(fs.fs().chroot_path(fig_data_dir()?))
-}
-
-/// The user's local data directory.
-///
-/// - MacOS: `$HOME/Library/Application Support`
-pub fn local_data_dir<Ctx: FsProvider + EnvProvider>(ctx: &Ctx) -> Result<PathBuf> {
-    Ok(home_dir_ctx(ctx)?.join("Library/Application Support"))
-}
-
-/// The app cache directory
-///
-/// - MacOS: `$HOME/Library/Caches/{data_dir}`
-pub fn cache_dir() -> Result<PathBuf> {
-    Ok(dirs::cache_dir()
         .ok_or(DirectoryError::NoHomeDirectory)?
         .join(DATA_DIR_NAME))
 }

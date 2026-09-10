@@ -91,7 +91,6 @@ pub mod system_paths {
     /// System installation paths
     pub const APPLICATIONS_DIR: &str = "/Applications";
     pub const USR_LOCAL_BIN: &str = "/usr/local/bin";
-    pub const USR_SHARE: &str = "/usr/share";
     pub const OPT_HOMEBREW_BIN: &str = "/opt/homebrew/bin";
 }
 

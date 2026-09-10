@@ -80,12 +80,6 @@ use nix::libc::pid_t;
 
 pid_decl!(pid_t);
 
-impl RawPid {
-    pub fn as_u32(&self) -> u32 {
-        self.0 as _
-    }
-}
-
 impl From<nix::unistd::Pid> for RawPid {
     fn from(pid: nix::unistd::Pid) -> Self {
         RawPid(pid.as_raw())
@@ -129,14 +123,6 @@ impl Pid {
         match self {
             Pid::Real(ctx, raw) => cmdline(ctx.clone(), raw),
             Pid::Fake(fake) => fake.cmdline.clone(),
-        }
-    }
-
-    /// Returns the process id.
-    pub fn as_u32(&self) -> u32 {
-        match self {
-            Pid::Real(_, raw) => raw.as_u32(),
-            Pid::Fake(fake) => fake.pid,
         }
     }
 }

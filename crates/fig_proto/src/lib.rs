@@ -126,10 +126,6 @@ impl FigMessage {
         FigMessage::encode(FigMessageType::Json, serde_json::to_vec(&json)?.into())
     }
 
-    pub fn message_pack(message_pack: impl Serialize) -> Result<Bytes, FigMessageEncodeError> {
-        FigMessage::encode(FigMessageType::MessagePack, rmp_serde::to_vec(&message_pack)?.into())
-    }
-
     pub fn encode_buf(&self, dst: &mut BytesMut) -> Result<(), FigMessageEncodeError> {
         let body = &self.inner;
         let message_type = self.message_type;

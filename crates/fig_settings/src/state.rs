@@ -33,14 +33,6 @@ impl State {
         Self(inner::Inner::Fake(db))
     }
 
-    pub fn from_slice(slice: &[(&str, Value)]) -> Self {
-        let fake = Self::new_fake();
-        for (key, value) in slice {
-            fake.set_value(key, value.clone()).unwrap();
-        }
-        fake
-    }
-
     fn database(&self) -> Result<&Db> {
         match &self.0 {
             inner::Inner::Real => Ok(database()?),
@@ -100,12 +92,6 @@ impl State {
     pub fn get_int_or(&self, key: impl AsRef<str>, default: i64) -> i64 {
         self.get_int(key).ok().flatten().unwrap_or(default)
     }
-
-    // Atomic style operations
-
-    pub fn atomic_bool_or(&self, key: impl AsRef<str>, or: bool) -> Result<bool> {
-        self.database()?.atomic_bool_or(key, or)
-    }
 }
 
 pub trait StateProvider {
@@ -144,22 +130,6 @@ pub fn get_bool(key: impl AsRef<str>) -> Result<Option<bool>> {
 
 pub fn get_bool_or(key: impl AsRef<str>, default: bool) -> bool {
     State::new().get_bool_or(key, default)
-}
-
-pub fn get_string(key: impl AsRef<str>) -> Result<Option<String>> {
-    State::new().get_string(key)
-}
-
-pub fn get_string_or(key: impl AsRef<str>, default: impl Into<String>) -> String {
-    State::new().get_string_or(key, default)
-}
-
-pub fn get_int(key: impl AsRef<str>) -> Result<Option<i64>> {
-    State::new().get_int(key)
-}
-
-pub fn get_int_or(key: impl AsRef<str>, default: i64) -> i64 {
-    State::new().get_int_or(key, default)
 }
 
 #[cfg(test)]

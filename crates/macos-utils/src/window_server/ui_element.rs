@@ -23,10 +23,8 @@ use accessibility_sys::{
     kAXFullScreenAttribute,
     kAXGroupRole,
     kAXManualAccessibilityAttribute,
-    kAXParentAttribute,
     kAXRoleAttribute,
     kAXScrollAreaRole,
-    kAXSubroleAttribute,
     kAXTextFieldRole,
     kAXWebAreaRole,
 };
@@ -186,15 +184,6 @@ impl UIElement {
 
     pub fn role(&self) -> Result<CFString> {
         self.get_attr::<CFString>(kAXRoleAttribute)
-    }
-
-    pub fn subrole(&self) -> Result<CFString> {
-        self.get_attr::<CFString>(kAXSubroleAttribute)
-    }
-
-    pub fn parent(&self) -> Result<Self> {
-        let parent = self.get_attr::<AXUIElement>(kAXParentAttribute)?;
-        Ok(parent.into())
     }
 
     pub fn is_fullscreen(&self) -> Result<bool> {

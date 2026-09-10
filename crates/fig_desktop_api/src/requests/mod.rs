@@ -41,43 +41,17 @@ impl RequestResultImpl for RequestResult {
 #[derive(Debug)]
 pub enum Error {
     Custom(Cow<'static, str>),
-    Wrapped {
-        context: Option<Cow<'static, str>>,
-        source: Box<Error>,
-    },
-    Std(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Custom(v) => f.write_str(v),
-            Error::Wrapped {
-                context: Some(context), ..
-            } => f.write_str(context),
-            Error::Wrapped { source, .. } => source.fmt(f),
-            Error::Std(v) => v.fmt(f),
         }
     }
 }
 
 impl std::error::Error for Error {}
-
-impl Error {
-    pub fn from_std(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Error::Wrapped {
-            context: None,
-            source: Box::new(Error::Std(Box::new(error))),
-        }
-    }
-
-    pub fn wrap_err(self, context: impl Into<Cow<'static, str>>) -> Self {
-        Error::Wrapped {
-            context: Some(context.into()),
-            source: Box::new(self),
-        }
-    }
-}
 
 impl From<String> for Error {
     fn from(s: String) -> Self {

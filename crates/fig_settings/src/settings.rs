@@ -177,10 +177,6 @@ pub fn get_value(key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
     Settings::new().get_value(key)
 }
 
-pub fn get<T: DeserializeOwned>(key: impl AsRef<str>) -> Result<Option<T>> {
-    Settings::new().get(key)
-}
-
 pub fn get_bool(key: impl AsRef<str>) -> Result<Option<bool>> {
     Settings::new().get_bool(key)
 }
@@ -195,14 +191,6 @@ pub fn get_string(key: impl AsRef<str>) -> Result<Option<String>> {
 
 pub fn get_string_opt(key: impl AsRef<str>) -> Option<String> {
     Settings::new().get_string_opt(key)
-}
-
-pub fn get_string_or(key: impl AsRef<str>, default: String) -> String {
-    Settings::new().get_string_or(key, default)
-}
-
-pub fn get_int(key: impl AsRef<str>) -> Result<Option<i64>> {
-    Settings::new().get_int(key)
 }
 
 pub fn get_int_or(key: impl AsRef<str>, default: i64) -> i64 {

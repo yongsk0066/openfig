@@ -10,7 +10,6 @@ use objc2_app_kit::{
     NSWorkspace,
 };
 use objc2_foundation::{
-    NSDictionary,
     NSDistributedNotificationCenter,
     NSNotification,
     NSNotificationCenter,
@@ -40,11 +39,6 @@ impl NotificationCenter {
         Self::new(center)
     }
 
-    pub fn default_center() -> Self {
-        let center = NSNotificationCenter::defaultCenter();
-        Self::new(center)
-    }
-
     pub fn distributed_center() -> Self {
         let center = NSDistributedNotificationCenter::defaultCenter();
         Self {
@@ -57,19 +51,6 @@ impl NotificationCenter {
         match &self.inner {
             Inner::NotificationCenter(i) => i.removeObserver(observer),
             Inner::DistributedNotificationCenter(i) => i.removeObserver(observer),
-        }
-    }
-
-    pub fn post_notification(&self, notification_name: &NSNotificationName, user_info: &NSDictionary) {
-        unsafe {
-            match &self.inner {
-                Inner::NotificationCenter(i) => {
-                    i.postNotificationName_object_userInfo(notification_name, None, Some(user_info))
-                },
-                Inner::DistributedNotificationCenter(i) => {
-                    i.postNotificationName_object_userInfo(notification_name, None, Some(user_info))
-                },
-            }
         }
     }
 
@@ -114,9 +95,4 @@ pub unsafe fn get_app_from_notification(notification: &NSNotification) -> Option
     let bundle_id_str = ns_string!("NSWorkspaceApplicationKey");
     let app = user_info.objectForKey(bundle_id_str);
     app.map(|app| Retained::<AnyObject>::cast(app))
-}
-
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn get_user_info_from_notification(notification: &NSNotification) -> Option<Retained<NSDictionary>> {
-    notification.userInfo()
 }

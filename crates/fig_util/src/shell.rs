@@ -102,23 +102,11 @@ impl Shell {
         }
     }
 
-    pub fn get_data_path(&self) -> Result<PathBuf, directories::DirectoryError> {
-        Ok(directories::fig_data_dir()?.join("shell").join(format!("{self}.json")))
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             Shell::Bash => "bash",
             Shell::Zsh => "zsh",
         }
-    }
-
-    pub fn is_bash(&self) -> bool {
-        matches!(self, Shell::Bash)
-    }
-
-    pub fn is_zsh(&self) -> bool {
-        matches!(self, Shell::Zsh)
     }
 }
 

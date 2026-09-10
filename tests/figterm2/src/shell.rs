@@ -189,13 +189,6 @@ impl Shell {
         })
     }
 
-    pub fn write(&mut self, data: &str) -> Result<()> {
-        self.writer.write_all(data.as_bytes())?;
-        self.writer.flush()?;
-
-        Ok(())
-    }
-
     pub async fn typed(&mut self, text: &str) -> Result<()> {
         println!("tying: {text}");
         for c in text.chars() {

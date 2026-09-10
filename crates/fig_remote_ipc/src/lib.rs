@@ -10,13 +10,10 @@ use fig_proto::local::{
 };
 use fig_proto::remote::clientbound;
 use figterm::FigtermState;
-use tokio::time::Instant;
 use uuid::Uuid;
 
 pub mod figterm;
 pub mod remote;
-
-pub type AuthCode = Option<(u32, Instant)>;
 
 #[async_trait::async_trait]
 pub trait RemoteHookHandler {

@@ -33,15 +33,6 @@ impl<T> BufferedReader<T> {
             buffer: BytesMut::new(),
         }
     }
-
-    pub fn buffer(&self) -> &[u8] {
-        self.buffer.as_ref()
-    }
-
-    /// Converts into inner `BufStream<UnixStream>`
-    pub fn into_inner(self) -> T {
-        self.inner
-    }
 }
 
 impl<T> AsyncWrite for BufferedReader<T>

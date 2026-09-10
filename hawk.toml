@@ -1,0 +1,44 @@
+# hawk (astral-sh) — workspace-aware lint for unnecessary `pub` visibility.
+#
+# hawk uses `rustc_private`, so it must run on the toolchain it was built
+# against (1.98.1, the same one this repo pins). Vendored crates are not ours
+# to edit, so keep them out of the analysis:
+#
+#   cargo +1.98.1 hawk check --manifest-path Cargo.toml \
+#       --exclude-crate alacritty_terminal \
+#       --exclude-crate accessibility \
+#       --exclude-crate accessibility_sys
+#
+# `--exclude-crate` is a command-line-only option; hawk.toml exclusions select a
+# module or a file, not a whole crate, and these crates also declare items at
+# their crate root.
+#
+# hawk is experimental and stays out of the CI gate; run it by hand now and
+# then.
+
+# Only these three binaries ship. Without a hawk.toml hawk would treat every
+# workspace binary as production, which would include the `fig-api-mock` test
+# server and make everything it touches look reachable.
+
+[[production]]
+package = "fig_desktop"
+bin = "fig_desktop"
+reason = "shipped desktop app binary"
+
+[[production]]
+package = "fig_cli"
+bin = "fig_cli"
+reason = "shipped CLI binary"
+
+[[production]]
+package = "figterm"
+bin = "figterm"
+reason = "shipped shell integration binary"
+
+# `fig_proto::proto` is `include!`d from prost's build-script output in OUT_DIR.
+# The files hawk points at live in the target directory and are regenerated on
+# every build, so nothing there can be edited.
+[[exclude]]
+crate = "fig_proto"
+module = "proto"
+reason = "prost-generated code, included from OUT_DIR"

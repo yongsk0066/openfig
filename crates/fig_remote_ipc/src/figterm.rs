@@ -94,14 +94,6 @@ impl FigtermState {
         guard.linked_sessions.get_mut(session_id).map(f)
     }
 
-    pub fn get(&self, session_id: &Uuid) -> Option<MappedFairMutexGuard<'_, FigtermSession>> {
-        MutexGuard::<'_, RawFairMutex, InnerFigtermState>::try_map(
-            self.inner.lock(),
-            |guard: &mut InnerFigtermState| guard.linked_sessions.get_mut(session_id),
-        )
-        .ok()
-    }
-
     pub fn most_recent(&self) -> Option<MappedFairMutexGuard<'_, FigtermSession>> {
         MutexGuard::<'_, RawFairMutex, InnerFigtermState>::try_map(
             self.inner.lock(),

@@ -44,10 +44,6 @@ impl OSVersion {
             },
         }
     }
-
-    pub fn user_readable(&self) -> Vec<String> {
-        vec![format!("{self}")]
-    }
 }
 
 impl std::fmt::Display for OSVersion {
@@ -127,20 +123,4 @@ pub fn in_codespaces() -> bool {
 pub fn in_ci() -> bool {
     static IN_CI: OnceLock<bool> = OnceLock::new();
     *IN_CI.get_or_init(|| fig_os_shim::Env::new().in_ci())
-}
-
-pub fn get_platform() -> &'static str {
-    if let Some(over_ride) = option_env!("Q_OVERRIDE_PLATFORM") {
-        over_ride
-    } else {
-        std::env::consts::OS
-    }
-}
-
-pub fn get_arch() -> &'static str {
-    if let Some(over_ride) = option_env!("Q_OVERRIDE_ARCH") {
-        over_ride
-    } else {
-        std::env::consts::ARCH
-    }
 }

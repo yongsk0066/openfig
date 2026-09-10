@@ -15,7 +15,3 @@ pub fn get_bundle_path_for_executable(executable: &str) -> Option<PathBuf> {
         if full_path.exists() { Some(full_path) } else { None }
     })
 }
-
-pub fn get_bundle_resource_path() -> Option<PathBuf> {
-    get_bundle_path().map(|path| path.join("Contents").join("Resources"))
-}

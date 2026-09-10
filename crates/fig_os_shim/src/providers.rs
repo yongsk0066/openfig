@@ -5,7 +5,6 @@ use crate::{
     Env,
     Fs,
     Platform,
-    SysInfo,
 };
 
 pub trait ContextProvider {
@@ -91,25 +90,6 @@ where
 {
     fn platform(&self) -> &Platform {
         self.context().platform()
-    }
-}
-
-pub trait SysInfoProvider {
-    fn sysinfo(&self) -> &SysInfo;
-}
-
-impl SysInfoProvider for SysInfo {
-    fn sysinfo(&self) -> &SysInfo {
-        self
-    }
-}
-
-impl<T> SysInfoProvider for T
-where
-    T: ContextProvider,
-{
-    fn sysinfo(&self) -> &SysInfo {
-        self.context().sysinfo()
     }
 }
 

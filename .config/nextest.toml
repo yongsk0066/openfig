@@ -1,0 +1,11 @@
+# figterm2 spawns a real login shell per test, and each one runs the *installed* `q` from the
+# shell integration (`q _ should-figterm-launch`, `q _ get-shell`) before exec'ing the pty binary.
+# Running several of those at once is enough contention to make a shell miss its startup window,
+# which showed up as intermittent "figterm never connected" failures. They are only ~10 s in
+# total, so serialise them.
+[test-groups.figterm2]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'package(figterm2)'
+test-group = 'figterm2'

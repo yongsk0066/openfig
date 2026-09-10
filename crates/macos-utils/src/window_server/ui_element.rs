@@ -56,6 +56,7 @@ use core_graphics::display::{
     CGRect,
 };
 use core_graphics::window::{
+    self,
     CGWindowID,
     kCGWindowBounds,
     kCGWindowLayer,
@@ -304,14 +305,14 @@ impl UIElement {
             let window_id = self.get_window_id().ok()?;
             let windows = if all_windows {
                 CFArray::<CFDictionary>::wrap_under_create_rule(display::CGWindowListCopyWindowInfo(
-                    display::kCGWindowListOptionAll,
-                    display::kCGNullWindowID,
+                    window::kCGWindowListOptionAll,
+                    window::kCGNullWindowID,
                 ))
             } else {
                 CFArray::<CFDictionary>::wrap_under_create_rule(display::CGWindowListCopyWindowInfo(
-                    display::kCGWindowListOptionOnScreenOnly
-                        | display::kCGWindowListExcludeDesktopElements
-                        | display::kCGWindowListOptionIncludingWindow,
+                    window::kCGWindowListOptionOnScreenOnly
+                        | window::kCGWindowListExcludeDesktopElements
+                        | window::kCGWindowListOptionIncludingWindow,
                     window_id,
                 ))
             };

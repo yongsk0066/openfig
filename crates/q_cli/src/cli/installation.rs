@@ -11,7 +11,7 @@ use eyre::{
     Result,
     bail,
 };
-use fig_install::{
+use fig_integrations::install::{
     InstallComponents,
     install,
 };

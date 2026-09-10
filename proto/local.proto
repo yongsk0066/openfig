@@ -22,7 +22,6 @@ message Command {
     LogoutCommand logout = 102;
     RestartCommand restart = 103;
     QuitCommand quit = 104;
-    UpdateCommand update = 105;
     DiagnosticsCommand diagnostics = 106;
     ReportWindowCommand report_window = 107;
     RestartSettingsListenerCommand restart_settings_listener = 108;
@@ -91,10 +90,6 @@ message RestartCommand {}
 message QuitCommand {}
 
 message UninstallCommand {}
-
-message UpdateCommand {
-  bool force = 1;
-}
 
 message DiagnosticsCommand {}
 

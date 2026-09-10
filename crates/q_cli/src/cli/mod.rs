@@ -18,7 +18,6 @@ mod telemetry;
 mod theme;
 mod translate;
 mod uninstall;
-mod update;
 mod user;
 
 use std::io::{
@@ -145,9 +144,6 @@ pub enum CliRootCommands {
         #[arg(long, short = 'y')]
         no_confirm: bool,
     },
-    /// Update the Amazon Q application
-    #[command(alias("upgrade"))]
-    Update(update::UpdateArgs),
     /// Run diagnostic tests
     #[command(alias("diagnostics"))]
     Diagnostic(diagnostics::DiagnosticArgs),
@@ -234,7 +230,6 @@ impl CliRootCommands {
             CliRootCommands::Settings(_) => "settings",
             CliRootCommands::Setup(_) => "setup",
             CliRootCommands::Uninstall { .. } => "uninstall",
-            CliRootCommands::Update(_) => "update",
             CliRootCommands::Diagnostic(_) => "diagnostics",
             CliRootCommands::Init(_) => "init",
             CliRootCommands::Theme(_) => "theme",
@@ -343,7 +338,6 @@ impl Cli {
                     installation::install_cli(args.into(), no_confirm, force, global).await
                 },
                 CliRootCommands::Uninstall { no_confirm } => uninstall::uninstall_command(no_confirm).await,
-                CliRootCommands::Update(args) => args.execute().await,
                 CliRootCommands::Diagnostic(args) => args.execute().await,
                 CliRootCommands::Init(args) => args.execute().await,
                 CliRootCommands::User(user) => user.execute().await,
@@ -580,7 +574,6 @@ async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
         open_dashboard: true,
-        immediate_update: true,
         verbose: true,
     })?;
 
@@ -646,8 +639,7 @@ mod test {
 
     /// This test validates that the restart command maintains the same CLI facing definition
     ///
-    /// If this changes, you must also change how it is called from within fig_install
-    /// and (possibly) other locations as well
+    /// If this changes, you must also change how it is called from other locations
     #[test]
     fn test_restart() {
         assert_parse!(["restart", "app"], CliRootCommands::Restart {

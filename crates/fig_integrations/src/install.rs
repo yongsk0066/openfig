@@ -1,9 +1,12 @@
+//! Install and uninstall of the components the app manages: shell integrations, the
+//! binaries in `~/.local/bin`, the SSH integration, the input method and the desktop app.
+//!
+//! Moved here from the former installer crate (which also owned the self-update
+//! pipeline) so that the update machinery could be deleted.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fig_integrations::Integration;
-use fig_integrations::shell::ShellExt;
-use fig_integrations::ssh::SshIntegration;
 use fig_os_shim::{
     Context,
     Env,
@@ -18,7 +21,13 @@ use fig_util::{
     directories,
 };
 
-use crate::Error;
+use crate::Integration;
+use crate::error::{
+    Error,
+    Result,
+};
+use crate::shell::ShellExt;
+use crate::ssh::SshIntegration;
 
 bitflags::bitflags! {
     /// The different components that can be installed.
@@ -44,7 +53,7 @@ impl InstallComponents {
     }
 }
 
-pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Result<(), Error> {
+pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Result<()> {
     let ssh_result = if components.contains(InstallComponents::SSH) {
         SshIntegration::new()?.uninstall().await
     } else {
@@ -69,7 +78,6 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
             }
         };
 
-        // let folders = [directories::home_local_bin()?, Path::new("/usr/local/bin").into()];
         let folders = [directories::home_local_bin()?];
 
         let mut all_binary_names = vec![CLI_BINARY_NAME, CHAT_BINARY_NAME, PTY_BINARY_NAME];
@@ -94,35 +102,22 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
         }
     }
 
-    #[cfg(target_os = "linux")]
-    if components.contains(InstallComponents::GNOME_SHELL_EXTENSION) {
-        let shell_extensions = dbus::gnome_shell::ShellExtensions::new(Arc::downgrade(&ctx));
-        super::os::uninstall_gnome_extension(&ctx, &shell_extensions).await?;
-    }
-
-    #[cfg(target_os = "linux")]
-    if components.contains(InstallComponents::DESKTOP_ENTRY) {
-        super::os::uninstall_desktop_entries(&ctx).await?;
-    }
-
-    let daemon_result = Ok(());
-
     #[cfg(target_os = "macos")]
     if components.contains(InstallComponents::INPUT_METHOD) {
-        use fig_integrations::Error;
-        use fig_integrations::input_method::{
+        use crate::input_method::{
             InputMethod,
             InputMethodError,
         };
 
         match InputMethod::default().uninstall().await {
             Ok(_) | Err(Error::InputMethod(InputMethodError::CouldNotListInputSources)) => {},
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(err),
         }
     }
 
     if components.contains(InstallComponents::DESKTOP_APP) {
-        super::os::uninstall_desktop(&ctx).await?;
+        #[cfg(target_os = "macos")]
+        uninstall_desktop(&ctx).await?;
         // Must be last -- this will kill the running desktop process if this is
         // called from the desktop app.
         let quit_res = tokio::process::Command::new("killall")
@@ -130,16 +125,14 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
             .output()
             .await;
         if let Err(err) = quit_res {
-            tracing::warn!("Failed to quit running Fig app: {err}");
+            tracing::warn!("Failed to quit running desktop app: {err}");
         }
     }
 
-    daemon_result
-        .and(shell_integration_result)
-        .and(ssh_result.map_err(|e| e.into()))
+    shell_integration_result.and(ssh_result)
 }
 
-pub async fn install(components: InstallComponents, env: &Env) -> Result<(), Error> {
+pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
     if components.contains(InstallComponents::SHELL_INTEGRATIONS) {
         let mut errs: Vec<Error> = vec![];
         for shell in Shell::all() {
@@ -147,12 +140,12 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<(), Err
                 Ok(integrations) => {
                     for integration in integrations {
                         if let Err(e) = integration.install().await {
-                            errs.push(e.into());
+                            errs.push(e);
                         }
                     }
                 },
                 Err(e) => {
-                    errs.push(e.into());
+                    errs.push(e);
                 },
             }
         }
@@ -168,9 +161,103 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<(), Err
 
     #[cfg(target_os = "macos")]
     if components.contains(InstallComponents::INPUT_METHOD) {
-        use fig_integrations::input_method::InputMethod;
+        use crate::input_method::InputMethod;
         InputMethod::default().install().await?;
     }
 
     Ok(())
+}
+
+/// Removes everything the desktop app left on the machine: the launch agent, the defaults
+/// domain, the data directory and the app bundle itself.
+#[cfg(target_os = "macos")]
+async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
+    use fig_util::consts::APP_BUNDLE_ID;
+    use tokio::fs;
+    use tracing::{
+        error,
+        warn,
+    };
+
+    // Remove launch agents
+    if let Ok(home) = directories::home_dir() {
+        let launch_agents = home.join("Library").join("LaunchAgents");
+        remove_in_dir_with_prefix_unless(&launch_agents, "com.amazon.codewhisperer.", |p| p.contains("daemon")).await;
+    } else {
+        warn!("Could not find home directory");
+    }
+
+    // Delete defaults
+    tokio::process::Command::new("defaults")
+        .args(["delete", APP_BUNDLE_ID])
+        .output()
+        .await
+        .map_err(|err| warn!("Failed to delete defaults: {err}"))
+        .ok();
+
+    tokio::process::Command::new("defaults")
+        .args(["delete", "com.amazon.codewhisperer.shared"])
+        .output()
+        .await
+        .map_err(|err| warn!("Failed to delete defaults: {err}"))
+        .ok();
+
+    // Delete data dir
+    if let Ok(fig_data_dir) = directories::fig_data_dir() {
+        for file in std::fs::read_dir(fig_data_dir).ok().into_iter().flatten().flatten() {
+            if let Ok(metadata) = file.metadata() {
+                if metadata.is_dir() {
+                    fs::remove_dir_all(file.path())
+                        .await
+                        .map_err(|err| warn!("Failed to remove data dir: {err}"))
+                        .ok();
+                } else {
+                    fs::remove_file(file.path())
+                        .await
+                        .map_err(|err| warn!("Failed to remove data dir: {err}"))
+                        .ok();
+                }
+            }
+        }
+    }
+
+    let app_path = fig_util::app_bundle_path();
+    if app_path.exists() {
+        fs::remove_dir_all(&app_path)
+            .await
+            .map_err(|err| warn!("Failed to remove {app_path:?}: {err}"))
+            .ok();
+    }
+
+    // Remove the previous codewhisperer data dir only if it is a symlink.
+    if let Ok(old_fig_data_dir) = directories::old_fig_data_dir() {
+        if old_fig_data_dir.exists() {
+            if let Ok(metadata) = fs::symlink_metadata(&old_fig_data_dir).await {
+                if metadata.is_symlink() {
+                    fs::remove_file(&old_fig_data_dir)
+                        .await
+                        .map_err(|err| error!("Failed to remove the old fig data dir {old_fig_data_dir:?}: {err}"))
+                        .ok();
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn remove_in_dir_with_prefix_unless(dir: &std::path::Path, prefix: &str, unless: impl Fn(&str) -> bool) {
+    use tokio::fs;
+
+    if let Ok(mut entries) = fs::read_dir(dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with(prefix) && !unless(name) {
+                    fs::remove_file(entry.path()).await.ok();
+                    fs::remove_dir_all(entry.path()).await.ok();
+                }
+            }
+        }
+    }
 }

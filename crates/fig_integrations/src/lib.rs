@@ -6,6 +6,7 @@ pub mod file;
 pub mod gnome_extension;
 #[cfg(target_os = "macos")]
 pub mod input_method;
+pub mod install;
 pub mod intellij;
 pub mod shell;
 pub mod ssh;

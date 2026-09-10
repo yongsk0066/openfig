@@ -455,15 +455,6 @@ pub fn settings_path() -> Result<PathBuf> {
     Ok(fig_data_dir()?.join("settings.json"))
 }
 
-/// The path to the lock file used to indicate that the app is updating
-///
-/// - Linux: `$HOME/.local/share/{data_dir}/update.lock`
-/// - MacOS: `$HOME/Library/Application Support/{data_dir}/update.lock`
-/// - Windows: `%LOCALAPPDATA%\{data_dir}\update.lock`
-pub fn update_lock_path(ctx: &impl FsProvider) -> Result<PathBuf> {
-    Ok(fig_data_dir_ctx(ctx)?.join("update.lock"))
-}
-
 /// The path to the midway cookie
 ///
 /// Path: `$HOME/.midway/cookie`
@@ -565,7 +556,6 @@ mod linux_tests {
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());
-        assert!(update_lock_path(&ctx).is_ok());
         assert!(midway_cookie_path().is_ok());
     }
 }
@@ -746,14 +736,6 @@ mod tests {
         linux!(settings_path(), @"$HOME/.local/share/amazon-q/settings.json");
         macos!(settings_path(), @"$HOME/Library/Application Support/amazon-q/settings.json");
         windows!(settings_path(), @r"C:\Users\$USER\AppData\Local\AmazonQ\settings.json");
-    }
-
-    #[test]
-    fn snapshot_update_lock_path() {
-        let ctx = Context::new();
-        linux!(update_lock_path(&ctx), @"$HOME/.local/share/amazon-q/update.lock");
-        macos!(update_lock_path(&ctx), @"$HOME/Library/Application Support/amazon-q/update.lock");
-        windows!(update_lock_path(&ctx), @r"C:\Users\$USER\AppData\Local\AmazonQ\update.lock");
     }
 
     #[test]

@@ -207,10 +207,6 @@ impl Env {
         self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_desktop_release_url(&self) -> Result<String, VarError> {
-        self.get("Q_DESKTOP_RELEASE_URL")
-    }
-
     pub fn q_inline_shell_completion_cache_enabled(&self) -> bool {
         self.get_os("Q_INLINE_SHELL_COMPLETION_CACHE_DISABLE").is_none()
     }

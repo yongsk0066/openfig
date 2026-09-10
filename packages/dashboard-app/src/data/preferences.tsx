@@ -40,15 +40,6 @@ const generalPreferences = [
       //   popular: false,
       // },
       {
-        id: "app.disableAutoupdates",
-        title: "Automatic updates",
-        description: "Automatically update when new versions are released.",
-        type: "boolean",
-        default: false,
-        inverted: true,
-        popular: false,
-      },
-      {
         id: "app.hideMenubarIcon",
         title: "Display Menu Bar icon",
         description: `${PRODUCT_NAME} icon will appear in the Menu Bar while ${PRODUCT_NAME} is running.`,
@@ -62,15 +53,6 @@ const generalPreferences = [
   {
     title: "Advanced",
     properties: [
-      {
-        id: "app.beta",
-        title: "Beta",
-        description:
-          "Opt into more frequent updates with all the newest features (and bugs).",
-        type: "boolean",
-        default: false,
-        popular: false,
-      },
       // {
       //   id: "cli.tips.disabled",
       //   title: "Terminal Tips",

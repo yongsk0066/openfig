@@ -58,12 +58,10 @@ where
             }
         },
         OnboardingAction::Uninstall => {
-            use fig_install::{
+            use fig_integrations::install::{
                 InstallComponents,
                 uninstall,
             };
-
-            fig_util::open_url(fig_install::UNINSTALL_URL).ok();
 
             let result = match uninstall(InstallComponents::all(), ctx.context_arc()).await {
                 Ok(_) => RequestResult::success(),

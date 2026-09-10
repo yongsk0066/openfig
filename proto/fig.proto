@@ -31,8 +31,6 @@ message ClientOriginatedMessage {
     AggregateSessionMetricActionRequest aggregate_session_metric_action_request = 135;
     // UserLoginRequest user_login_request = 136;
     UserLogoutRequest user_logout_request = 137;
-    CheckForUpdatesRequest check_for_updates_request = 138;
-    UpdateApplicationRequest update_application_request = 139;
     HistoryQueryRequest history_query_request = 140;
     AuthStatusRequest auth_status_request = 141;
     AuthBuilderIdStartDeviceAuthorizationRequest auth_builder_id_start_device_authorization_request = 142;
@@ -66,7 +64,6 @@ message ServerOriginatedMessage {
     GetLocalStateResponse get_local_state_response = 110;
     RunProcessResponse run_process_response = 111;
     InstallResponse install_response = 113;
-    CheckForUpdatesResponse check_for_updates_response = 114;
     HistoryQueryResponse history_query_response = 115;
     AuthStatusResponse auth_status_response = 116;
     AuthBuilderIdStartDeviceAuthorizationResponse auth_builder_id_start_device_authorization_response = 117;
@@ -416,23 +413,6 @@ message WindowFocusRequest {
 
 message OpenInExternalApplicationRequest {
   optional string url = 1;
-}
-
-/// Updating actions
-
-// check for updates and return the latest version
-message CheckForUpdatesRequest {}
-
-message CheckForUpdatesResponse {
-  optional bool is_update_available = 1;
-  optional string version = 2;
-}
-
-// update to the latest version available
-message UpdateApplicationRequest {
-  optional bool ignore_rollout = 1;
-  optional bool interactive = 2;
-  optional bool relaunch_dashboard = 3;
 }
 
 /// Actions

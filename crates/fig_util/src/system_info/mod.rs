@@ -9,12 +9,7 @@ use serde::{
     Deserialize,
     Serialize,
 };
-use sha2::{
-    Digest,
-    Sha256,
-};
 
-use crate::Error;
 use crate::manifest::is_minimal;
 
 /// The support level for different platforms
@@ -290,65 +285,9 @@ pub fn in_ci() -> bool {
     *IN_CI.get_or_init(|| fig_os_shim::Env::new().in_ci())
 }
 
-#[cfg(target_os = "macos")]
-fn raw_system_id() -> Result<String, Error> {
-    let output = std::process::Command::new("ioreg")
-        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-        .output()?;
-
-    let output = String::from_utf8_lossy(&output.stdout);
-
-    let machine_id: String = output
-        .lines()
-        .find(|line| line.contains("IOPlatformUUID"))
-        .ok_or(Error::HwidNotFound)?
-        .split('=')
-        .nth(1)
-        .ok_or(Error::HwidNotFound)?
-        .trim()
-        .trim_start_matches('"')
-        .trim_end_matches('"')
-        .into();
-
-    Ok(machine_id)
-}
-
-#[cfg(target_os = "linux")]
-fn raw_system_id() -> Result<String, Error> {
-    for path in ["/var/lib/dbus/machine-id", "/etc/machine-id"] {
-        if std::path::Path::new(path).exists() {
-            return Ok(std::fs::read_to_string(path)?);
-        }
-    }
-    Err(Error::HwidNotFound)
-}
-
-#[cfg(target_os = "windows")]
-fn raw_system_id() -> Result<String, Error> {
-    use winreg::RegKey;
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-
-    let rkey = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(r"SOFTWARE\Microsoft\Cryptography")?;
-    let id: String = rkey.get_value("MachineGuid")?;
-
-    Ok(id)
-}
-
 #[cfg(target_os = "freebsd")]
 fn raw_system_id() -> Result<String, Error> {
     Err(Error::HwidNotFound)
-}
-
-pub fn get_system_id() -> Option<&'static str> {
-    static SYSTEM_ID: OnceLock<Option<String>> = OnceLock::new();
-    SYSTEM_ID
-        .get_or_init(|| {
-            let hwid = raw_system_id().ok()?;
-            let mut hasher = Sha256::new();
-            hasher.update(hwid);
-            Some(format!("{:x}", hasher.finalize()))
-        })
-        .as_deref()
 }
 
 pub fn get_platform() -> &'static str {
@@ -371,10 +310,4 @@ pub fn get_arch() -> &'static str {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_get_system_id() {
-        let id = get_system_id();
-        assert!(id.is_some());
-        assert_eq!(id.unwrap().len(), 64);
-    }
 }

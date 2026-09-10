@@ -33,7 +33,7 @@ use eyre::{
     Result,
     bail,
 };
-use fig_install::InstallComponents;
+use fig_integrations::install::InstallComponents;
 #[cfg(target_os = "macos")]
 use fig_integrations::input_method::InputMethod;
 use fig_ipc::local::send_hook_to_socket;
@@ -62,7 +62,6 @@ use fig_proto::util::get_shell;
 use fig_util::directories::{
     figterm_socket_path,
     logs_dir,
-    update_lock_path,
 };
 use fig_util::env_var::QTERM_SESSION_ID;
 use fig_util::{
@@ -86,7 +85,6 @@ use tracing::{
     error,
     info,
     trace,
-    warn,
 };
 
 use self::inline_shell_completion::{
@@ -237,7 +235,6 @@ pub enum InternalSubcommand {
     #[cfg(target_os = "linux")]
     /// Checks for sandboxing
     DetectSandbox,
-    OpenUninstallPage,
     /// Displays prompt to install remote shell integrations
     SshLocalCommand {
         remote_dest: String,
@@ -253,26 +250,6 @@ pub enum InternalSubcommand {
     },
     DumpState {
         component: StateComponent,
-    },
-    /// Currently only used by macOS after finishing an update. The old binary calls `FinishUpdate`
-    /// on the new binary at the end of updating.
-    FinishUpdate {
-        #[arg(long)]
-        relaunch_dashboard: bool,
-        #[arg(long)]
-        delete_bundle: Option<String>,
-    },
-    #[cfg(target_os = "macos")]
-    SwapFiles {
-        from: PathBuf,
-        to: PathBuf,
-        #[arg(long)]
-        not_same_bundle_name: bool,
-    },
-    #[cfg(target_os = "macos")]
-    BrewUninstall {
-        #[arg(long)]
-        zap: bool,
     },
     /// Generates an SSH configuration file
     ///
@@ -325,14 +302,14 @@ impl InternalSubcommand {
                     if option_env!("Q_IS_PACKAGE_MANAGED").is_some() {
                         println!("Please uninstall using your package manager");
                     } else {
-                        fig_install::uninstall(InstallComponents::BINARY, Arc::clone(&ctx)).await?;
+                        fig_integrations::install::uninstall(InstallComponents::BINARY, Arc::clone(&ctx)).await?;
                         println!("\n{}\n", "The binary was successfully uninstalled".bold());
                     }
                 }
 
                 let mut components = components;
                 components.set(InstallComponents::BINARY, false);
-                fig_install::uninstall(components, Arc::clone(&ctx)).await?;
+                fig_integrations::install::uninstall(components, Arc::clone(&ctx)).await?;
                 Ok(ExitCode::SUCCESS)
             },
             InternalSubcommand::PreCmd { alias } => Ok(pre_cmd(alias).await),
@@ -681,27 +658,6 @@ impl InternalSubcommand {
                 };
                 Ok(ExitCode::from(exit_code))
             },
-            InternalSubcommand::OpenUninstallPage => {
-                let url = fig_install::UNINSTALL_URL;
-                match fig_util::open_url(url) {
-                    Ok(()) => Ok(ExitCode::SUCCESS),
-                    Err(err) => {
-                        warn!(%err, "Failed to open uninstall directly, trying to open via desktop app");
-
-                        match fig_ipc::local::send_command_to_socket(fig_proto::local::command::Command::OpenBrowser(
-                            fig_proto::local::OpenBrowserCommand { url: url.into() },
-                        ))
-                        .await
-                        {
-                            Ok(_) => Ok(ExitCode::SUCCESS),
-                            Err(err) => {
-                                error!(%err, "Failed to open uninstall via desktop, no more options");
-                                Ok(ExitCode::FAILURE)
-                            },
-                        }
-                    },
-                }
-            },
             InternalSubcommand::PromptSsh { .. } => Ok(ExitCode::SUCCESS),
             InternalSubcommand::SshLocalCommand { remote_dest, uuid } => {
                 // Ensure desktop app is running to avoid SSH errors on stdout when local side of
@@ -709,7 +665,6 @@ impl InternalSubcommand {
                 launch_fig_desktop(LaunchArgs {
                     wait_for_socket: true,
                     open_dashboard: false,
-                    immediate_update: false,
                     verbose: false,
                 })
                 .ok();
@@ -755,101 +710,6 @@ impl InternalSubcommand {
                 .context("Failed to send dump state command")?;
 
                 println!("{}", state.json);
-                Ok(ExitCode::SUCCESS)
-            },
-            InternalSubcommand::FinishUpdate {
-                relaunch_dashboard,
-                delete_bundle,
-            } => {
-                // Wait some time for the previous installation to close
-                tokio::time::sleep(Duration::from_millis(100)).await;
-
-                crate::util::quit_fig(false).await.ok();
-
-                tokio::time::sleep(Duration::from_millis(200)).await;
-
-                if let Some(bundle_path) = delete_bundle {
-                    let path = std::path::Path::new(&bundle_path);
-                    if path.exists() {
-                        tokio::fs::remove_dir_all(&path)
-                            .await
-                            .map_err(|err| tracing::warn!("Failed to remove {path:?}: {err}"))
-                            .ok();
-                    }
-
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                }
-
-                launch_fig_desktop(LaunchArgs {
-                    wait_for_socket: false,
-                    open_dashboard: relaunch_dashboard,
-                    immediate_update: false,
-                    verbose: false,
-                })
-                .ok();
-
-                let _ = tokio::fs::remove_file(update_lock_path(&fig_os_shim::Context::new())?).await;
-
-                Ok(ExitCode::SUCCESS)
-            },
-            #[cfg(target_os = "macos")]
-            InternalSubcommand::SwapFiles {
-                from,
-                to,
-                not_same_bundle_name,
-            } => {
-                use std::io::stderr;
-                use std::os::unix::prelude::OsStrExt;
-
-                let from_cstr = match std::ffi::CString::new(from.as_os_str().as_bytes()).context("Invalid from path") {
-                    Ok(cstr) => cstr,
-                    Err(err) => {
-                        writeln!(stderr(), "Invalid from path: {err}").ok();
-                        return Ok(ExitCode::FAILURE);
-                    },
-                };
-
-                let to_cstr = match std::ffi::CString::new(to.as_os_str().as_bytes()) {
-                    Ok(cstr) => cstr,
-                    Err(err) => {
-                        writeln!(stderr(), "Invalid to path: {err}").ok();
-                        return Ok(ExitCode::FAILURE);
-                    },
-                };
-
-                match fig_install::macos::install(from_cstr, to_cstr, !not_same_bundle_name) {
-                    Ok(_) => {
-                        writeln!(stdout(), "success").ok();
-                        Ok(ExitCode::SUCCESS)
-                    },
-                    Err(err) => {
-                        writeln!(stderr(), "Failed to swap files: {err}").ok();
-                        Ok(ExitCode::FAILURE)
-                    },
-                }
-            },
-            #[cfg(target_os = "macos")]
-            InternalSubcommand::BrewUninstall { zap } => {
-                use fig_install::UNINSTALL_URL;
-
-                let brew_is_reinstalling = crate::util::is_brew_reinstall().await;
-
-                if brew_is_reinstalling {
-                    // If we're reinstalling, we don't want to uninstall
-                    return Ok(ExitCode::SUCCESS);
-                } else if let Err(err) = fig_util::open_url_async(UNINSTALL_URL).await {
-                    error!(%err, %UNINSTALL_URL, "Failed to open uninstall url");
-                }
-
-                let components = if zap {
-                    // All except the desktop app
-                    InstallComponents::all() & !InstallComponents::DESKTOP_APP
-                } else {
-                    InstallComponents::SHELL_INTEGRATIONS | InstallComponents::SSH
-                };
-                fig_install::uninstall(components, fig_os_shim::Context::new())
-                    .await
-                    .ok();
                 Ok(ExitCode::SUCCESS)
             },
             InternalSubcommand::GenerateSsh(args) => args.execute().await,

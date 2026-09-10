@@ -44,7 +44,6 @@ dashmap.workspace = true
 fig_api_client.workspace = true
 fig_auth.workspace = true
 fig_desktop_api.workspace = true
-fig_install.workspace = true
 fig_integrations = { workspace = true, features = ["dispatch"] }
 fig_ipc.workspace = true
 fig_log.workspace = true

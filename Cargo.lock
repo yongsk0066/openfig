@@ -8,7 +8,7 @@ version = "0.1.6"
 dependencies = [
  "accessibility-sys",
  "cocoa",
- "core-foundation 0.10.1",
+ "core-foundation",
  "objc",
  "thiserror 2.0.20",
 ]
@@ -17,7 +17,7 @@ dependencies = [
 name = "accessibility-sys"
 version = "0.1.3"
 dependencies = [
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-foundation-sys",
  "core-graphics",
 ]
@@ -63,7 +63,6 @@ name = "alacritty_terminal"
 version = "1.19.7"
 dependencies = [
  "bitflags 2.13.2",
- "camino",
  "fig_os_shim",
  "serde",
  "serde_json",
@@ -106,12 +105,6 @@ checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "anes"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
@@ -745,12 +738,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cast"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
-
-[[package]]
 name = "cc"
 version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -844,33 +831,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ciborium"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42e69ffd6f0917f5c029256a24d0161db17cea3997d185db0d35926308770f0e"
-dependencies = [
- "ciborium-io",
- "ciborium-ll",
- "serde",
-]
-
-[[package]]
-name = "ciborium-io"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
-
-[[package]]
-name = "ciborium-ll"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
-dependencies = [
- "ciborium-io",
- "half",
-]
-
-[[package]]
 name = "clang-sys"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -952,7 +912,7 @@ dependencies = [
  "bitflags 2.13.2",
  "block",
  "cocoa-foundation",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-graphics",
  "foreign-types",
  "libc",
@@ -967,7 +927,7 @@ checksum = "81411967c50ee9a1fc11365f8c585f863a22a9697c89239c452292c40ba79b0d"
 dependencies = [
  "bitflags 2.13.2",
  "block",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-graphics-types",
  "objc",
 ]
@@ -1082,15 +1042,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
-name = "convert_case"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baaaa0ecca5b51987b9423ccdc971514dd8b0bb7b4060b983d3664dad3f1f89f"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
 name = "cookie"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1098,16 +1049,6 @@ checksum = "1a373e3602691c3cdea496d2f0ee5935151e6168fe87739483c463db1b2f2f87"
 dependencies = [
  "time",
  "version_check",
-]
-
-[[package]]
-name = "core-foundation"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -1133,7 +1074,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa95a34622365fa5bbf40b20b75dba8dfa8c94c734aea8ac9a5ca38af14316f1"
 dependencies = [
  "bitflags 2.13.2",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-graphics-types",
  "foreign-types",
  "libc",
@@ -1146,7 +1087,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d44a101f213f6c4cdc1853d4b78aef6db6bdfa3468798cc1d9912f4735013eb"
 dependencies = [
  "bitflags 2.13.2",
- "core-foundation 0.10.1",
+ "core-foundation",
  "libc",
 ]
 
@@ -1175,39 +1116,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8498c871161e1742aaa9d52551b2d6ebdd4c3d45a3be423e3728f33b955be550"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "criterion"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bf7af66b0989381bd0be551bd7cc91912a655a58c6918420c9527b1fd8b4679"
-dependencies = [
- "anes",
- "cast",
- "ciborium",
- "clap",
- "criterion-plot",
- "itertools 0.13.0",
- "num-traits",
- "oorandom",
- "plotters",
- "rayon",
- "regex",
- "serde",
- "serde_json",
- "tinytemplate",
- "walkdir",
-]
-
-[[package]]
-name = "criterion-plot"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
-dependencies = [
- "cast",
- "itertools 0.10.5",
 ]
 
 [[package]]
@@ -1364,7 +1272,7 @@ version = "0.99.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6edb4b64a43d977b8e99788fe3a04d483834fba1215a7e02caa415b626497f7f"
 dependencies = [
- "convert_case 0.4.0",
+ "convert_case",
  "proc-macro2",
  "quote",
  "rustc_version",
@@ -1557,12 +1465,6 @@ name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
-
-[[package]]
-name = "endian-type"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
 
 [[package]]
 name = "enumflags2"
@@ -1763,19 +1665,14 @@ name = "fig_cli"
 version = "1.19.7"
 dependencies = [
  "anstream 0.6.21",
- "appkit-nsworkspace-bindings",
  "assert_cmd",
  "async-trait",
- "base64",
- "bitflags 2.13.2",
  "bytes",
  "clap",
  "clap_complete",
  "clap_complete_fig",
  "color-eyre",
  "color-print",
- "convert_case 0.8.0",
- "criterion",
  "crossterm",
  "ctrlc",
  "dialoguer",
@@ -1788,21 +1685,15 @@ dependencies = [
  "fig_proto",
  "fig_settings",
  "fig_util",
- "flume",
  "futures",
  "glob",
  "globset",
- "indicatif",
- "indoc",
  "insta",
- "macos-utils",
  "mimalloc",
  "nix 0.29.0",
- "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
  "owo-colors",
- "parking_lot",
  "paste",
  "predicates",
  "rand 0.9.5",
@@ -1813,17 +1704,10 @@ dependencies = [
  "spinners",
  "sysinfo",
  "tempfile",
- "thiserror 2.0.20",
- "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
- "unicode-width 0.2.2",
- "url",
  "uuid",
  "walkdir",
- "which",
- "whoami",
 ]
 
 [[package]]
@@ -1835,10 +1719,8 @@ dependencies = [
  "async-trait",
  "base64",
  "bytes",
- "camino",
  "clap",
  "cocoa",
- "core-foundation 0.10.1",
  "core-graphics",
  "dashmap",
  "fig_desktop_api",
@@ -1852,25 +1734,19 @@ dependencies = [
  "fig_util",
  "flume",
  "fnv",
- "http",
  "image",
  "infer",
- "keyboard-types 0.8.3",
  "libc",
  "macos-utils",
  "mime",
- "moka",
  "muda",
  "nix 0.29.0",
  "notify",
  "objc",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
  "parking_lot",
  "paste",
  "percent-encoding",
- "rand 0.9.5",
  "regex",
  "rfd",
  "semver",
@@ -1878,18 +1754,13 @@ dependencies = [
  "serde_json",
  "shellexpand",
  "sysinfo",
- "system-configuration",
  "tao",
  "tempfile",
- "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "tray-icon",
  "url",
  "uuid",
- "which",
- "whoami",
  "wry",
 ]
 
@@ -1916,8 +1787,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "tracing-subscriber",
- "uuid",
  "which",
  "whoami",
 ]
@@ -1926,13 +1795,9 @@ dependencies = [
 name = "fig_diagnostic"
 version = "1.19.7"
 dependencies = [
- "clap",
- "fig_ipc",
  "fig_os_shim",
- "fig_proto",
  "fig_util",
  "serde",
- "serde_json",
  "sysinfo",
  "time",
  "tokio",
@@ -1944,16 +1809,11 @@ dependencies = [
 name = "fig_integrations"
 version = "1.19.7"
 dependencies = [
- "accessibility-sys",
  "async-trait",
  "bitflags 2.13.2",
  "clap",
- "dirs 5.0.1",
  "fig_os_shim",
- "fig_settings",
  "fig_util",
- "indoc",
- "insta",
  "nix 0.29.0",
  "owo-colors",
  "regex",
@@ -1970,21 +1830,15 @@ name = "fig_ipc"
 version = "1.19.7"
 dependencies = [
  "async-trait",
- "base64",
  "bytes",
  "fig_proto",
  "fig_util",
- "flate2",
  "nix 0.29.0",
  "pin-project-lite",
- "rand 0.9.5",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
- "tokio-util",
  "tracing",
- "uuid",
- "whoami",
 ]
 
 [[package]]
@@ -1992,8 +1846,6 @@ name = "fig_log"
 version = "1.19.7"
 dependencies = [
  "fig_os_shim",
- "fig_util",
- "parking_lot",
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
@@ -2021,7 +1873,6 @@ dependencies = [
  "bytes",
  "fig_util",
  "hex",
- "nix 0.29.0",
  "prost",
  "prost-build",
  "prost-reflect",
@@ -2044,7 +1895,6 @@ dependencies = [
  "flume",
  "parking_lot",
  "serde",
- "time",
  "tokio",
  "tracing",
  "uuid",
@@ -2064,27 +1914,21 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
- "tokio",
  "tracing",
- "url",
- "uuid",
 ]
 
 [[package]]
 name = "fig_util"
 version = "1.19.7"
 dependencies = [
- "appkit-nsworkspace-bindings",
  "camino",
  "clap",
- "core-foundation 0.10.1",
  "dirs 5.0.1",
  "fig_os_shim",
  "hex",
  "indoc",
  "insta",
  "libc",
- "macos-utils",
  "nix 0.29.0",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
@@ -2094,13 +1938,10 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "sha2",
  "strum 0.27.2",
- "sysinfo",
  "thiserror 2.0.20",
  "time",
  "tokio",
- "tracing",
  "uuid",
  "whoami",
 ]
@@ -2117,7 +1958,6 @@ dependencies = [
  "bstr",
  "bytes",
  "clap",
- "crossterm",
  "dashmap",
  "fig_ipc",
  "fig_log",
@@ -2128,30 +1968,18 @@ dependencies = [
  "filedescriptor",
  "flume",
  "fnv",
- "indoc",
  "memmem",
  "mimalloc",
  "nix 0.29.0",
  "num-traits",
- "parking_lot",
  "pin-project",
  "portable-pty",
  "predicates",
- "radix_trie",
- "regex",
- "semver",
- "serde",
- "serde_json",
  "shell-color",
- "shell-words",
- "shellexpand",
  "shlex 1.3.0",
  "sysinfo",
- "tempfile",
- "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "uuid",
  "which",
 ]
@@ -2162,7 +1990,6 @@ version = "1.19.7"
 dependencies = [
  "anyhow",
  "async-trait",
- "fig_ipc",
  "fig_proto",
  "fig_remote_ipc",
  "fig_util",
@@ -3096,19 +2923,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indicatif"
-version = "0.17.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "183b3088984b400f4cfac3620d5e076c84da5364016b4f49473de574b2586235"
-dependencies = [
- "console 0.15.11",
- "number_prefix",
- "portable-atomic",
- "unicode-width 0.2.2",
- "web-time",
-]
-
-[[package]]
 name = "indoc"
 version = "2.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3198,15 +3012,6 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
-
-[[package]]
-name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itertools"
@@ -3335,16 +3140,6 @@ dependencies = [
  "bitflags 2.13.2",
  "serde",
  "unicode-segmentation",
-]
-
-[[package]]
-name = "keyboard-types"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
-dependencies = [
- "bitflags 2.13.2",
- "serde",
 ]
 
 [[package]]
@@ -3595,7 +3390,7 @@ dependencies = [
  "appkit-nsworkspace-bindings",
  "block2 0.5.1",
  "cocoa",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-graphics",
  "dashmap",
  "flume",
@@ -3776,26 +3571,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moka"
-version = "0.12.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4293f18e7567a1caf3c584855554377025c65e0aa445344d04171f5ad63d19b9"
-dependencies = [
- "async-lock",
- "crossbeam-channel",
- "crossbeam-epoch",
- "crossbeam-utils",
- "equivalent",
- "event-listener",
- "futures-util",
- "parking_lot",
- "portable-atomic",
- "smallvec",
- "tagptr",
- "uuid",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3814,7 +3589,7 @@ dependencies = [
  "crossbeam-channel",
  "dpi",
  "gtk",
- "keyboard-types 0.7.0",
+ "keyboard-types",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
@@ -3874,15 +3649,6 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
-
-[[package]]
-name = "nibble_vec"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
-dependencies = [
- "smallvec",
-]
 
 [[package]]
 name = "nix"
@@ -4264,12 +4030,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "number_prefix"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
-
-[[package]]
 name = "objc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4579,12 +4339,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "oorandom"
-version = "11.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4864,34 +4618,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
-name = "plotters"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aeb6f403d7a4911efb1e33402027fc44f29b5bf6def3effcc22d7bb75f2b747"
-dependencies = [
- "num-traits",
- "plotters-backend",
- "plotters-svg",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
-name = "plotters-backend"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df42e13c12958a16b3f7f4386b9ab1f3e7933914ecea48da7139435263a4172a"
-
-[[package]]
-name = "plotters-svg"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51bae2ac328883f7acdfea3d66a7c35751187f870bc81f94563733a154d7a670"
-dependencies = [
- "plotters-backend",
-]
-
-[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4936,12 +4662,6 @@ name = "pollster"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
-
-[[package]]
-name = "portable-atomic"
-version = "1.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
 name = "portable-pty"
@@ -5366,16 +5086,6 @@ dependencies = [
  "r2d2",
  "rusqlite",
  "uuid",
-]
-
-[[package]]
-name = "radix_trie"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c069c179fcdc6a2fe24d8d18305cf085fdbd4f922c041943e203685d6a1c58fd"
-dependencies = [
- "endian-type",
- "nibble_vec",
 ]
 
 [[package]]
@@ -6409,27 +6119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "system-configuration"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
-dependencies = [
- "bitflags 2.13.2",
- "core-foundation 0.9.4",
- "system-configuration-sys",
-]
-
-[[package]]
-name = "system-configuration-sys"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
-
-[[package]]
 name = "system-deps"
 version = "6.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6443,12 +6132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tagptr"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
-
-[[package]]
 name = "tao"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6456,7 +6139,7 @@ checksum = "3731d04d4ac210cd5f344087733943b9bfb1a32654387dad4d1c70de21aee2c9"
 dependencies = [
  "bitflags 2.13.2",
  "cocoa",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-graphics",
  "crossbeam-channel",
  "dispatch",
@@ -6676,16 +6359,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tinytemplate"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "tokio"
 version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6711,21 +6384,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.5",
-]
-
-[[package]]
-name = "tokio-util"
-version = "0.7.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "494815d09bf52b5548659851081238f0ca39ff638363907596da739561c62c52"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-io",
- "futures-sink",
- "libc",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]

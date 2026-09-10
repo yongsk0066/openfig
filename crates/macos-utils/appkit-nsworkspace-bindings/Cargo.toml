@@ -11,3 +11,7 @@ bindgen = "0.71.1"
 
 [dependencies]
 objc.workspace = true
+
+[package.metadata.cargo-machete]
+# bindgen is used from build_mac.rs; objc is used by the generated bindings.
+ignored = ["bindgen", "objc"]

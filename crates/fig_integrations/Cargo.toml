@@ -11,16 +11,11 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-accessibility-sys = { path = "../macos-utils/accessibility-master/accessibility-sys", version = "0.1.3" }
 async-trait.workspace = true
 bitflags.workspace = true
 clap.workspace = true
-dirs.workspace = true
 fig_os_shim.workspace = true
-fig_settings.workspace = true
 fig_util.workspace = true
-indoc.workspace = true
-insta.workspace = true
 nix.workspace = true
 owo-colors = "4.2.0"
 regex.workspace = true

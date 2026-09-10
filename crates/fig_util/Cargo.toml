@@ -14,16 +14,13 @@ workspace = true
 default = []
 
 [dependencies]
-appkit-nsworkspace-bindings.workspace = true
 camino.workspace = true
 clap.workspace = true
-core-foundation = "0.10.0"
 dirs.workspace = true
 fig_os_shim.workspace = true
 hex.workspace = true
 indoc.workspace = true
 libc.workspace = true
-macos-utils = { path = "../macos-utils" }
 nix.workspace = true
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSWorkspace"] }
@@ -33,13 +30,10 @@ rand.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2 = "0.10.9"
 strum = { version = "0.27.1", features = ["derive"] }
-sysinfo.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
-tracing.workspace = true
 whoami.workspace = true
 
 [dev-dependencies]

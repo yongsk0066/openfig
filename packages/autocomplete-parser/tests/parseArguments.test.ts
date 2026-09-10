@@ -1,8 +1,4 @@
-import {
-  Metadata,
-  convertSubcommand,
-  initializeDefault,
-} from "@fig/autocomplete-shared";
+import { Metadata, convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import logger from "loglevel";
 import { folders, filepaths } from "@fig/autocomplete-generators";
 import * as Internal from "@aws/amazon-q-developer-cli-shared/internal";
@@ -24,16 +20,7 @@ import {
 import { loadSubcommandCached } from "../src/loadSpec";
 import { cmdSpec } from "./mocks/spec";
 import { resetCaches } from "../src/caches";
-import {
-  afterEach,
-  beforeEach,
-  beforeAll,
-  describe,
-  it,
-  expect,
-  Mock,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, beforeAll, describe, it, expect, Mock, vi } from "vitest";
 
 vi.mock("../src/loadSpec", () => ({
   ...vi.importActual("../src/loadSpec.ts"),
@@ -78,11 +65,7 @@ describe("createArgState", () => {
     ];
     const baseArgs: Internal.Arg[] = [{ generators }];
     const state = createArgState(baseArgs);
-    expect(state.args![0].generators).toEqual([
-      { script: ["foo"] },
-      folders,
-      filepaths,
-    ]);
+    expect(state.args![0].generators).toEqual([{ script: ["foo"] }, folders, filepaths]);
   });
 
   it("should preserve templates other than filepaths and folders", () => {
@@ -93,17 +76,11 @@ describe("createArgState", () => {
     ];
     const baseArgs: Internal.Arg[] = [{ generators }];
     const state = createArgState(baseArgs);
-    expect(state.args![0].generators).toEqual([
-      { script: ["foo"] },
-      folders,
-      filepaths,
-    ]);
+    expect(state.args![0].generators).toEqual([{ script: ["foo"] }, folders, filepaths]);
   });
 
   it("should prefer filepaths generator over folders", () => {
-    const generators: Fig.Generator[] = [
-      { template: ["filepaths", "folders"] },
-    ];
+    const generators: Fig.Generator[] = [{ template: ["filepaths", "folders"] }];
     const baseArgs: Internal.Arg[] = [{ generators }];
     const state = createArgState(baseArgs);
     expect(state.args![0].generators).toEqual([filepaths]);
@@ -230,9 +207,7 @@ describe("findSubcommand", () => {
   });
 
   it("throws with invalid options", () => {
-    expect(() =>
-      findSubcommand(specWithSubcommands, "notASubcommand"),
-    ).toThrow();
+    expect(() => findSubcommand(specWithSubcommands, "notASubcommand")).toThrow();
   });
 });
 
@@ -328,18 +303,8 @@ describe.todo("parseArguments", () => {
     // User tried to pass arg to option that doesn't take any, consume as arg instead.
     ["cmd man --none=arg ", notSubcommands, man.args[1], ""],
     // User is still typing in arg for option.
-    [
-      "cmd man --opt=arg",
-      SuggestionFlag.Args,
-      optionArgs(man, "--opt")[0],
-      "arg",
-    ],
-    [
-      "cmd man --man=arg",
-      SuggestionFlag.Args,
-      optionArgs(man, "--man")[0],
-      "arg",
-    ],
+    ["cmd man --opt=arg", SuggestionFlag.Args, optionArgs(man, "--opt")[0], "arg"],
+    ["cmd man --man=arg", SuggestionFlag.Args, optionArgs(man, "--man")[0], "arg"],
     // User is still typing in arg for option that doesn't take arg.
     ["cmd man --none=arg", SuggestionFlag.Any, man.args[0], "--none=arg"],
   ])("option with equals sign: %p", testMan);
@@ -348,36 +313,16 @@ describe.todo("parseArguments", () => {
     // Test pnf options.
     ["cmd pnf -pnfo=arg ", SuggestionFlag.Any, null, ""],
     ["cmd pnf -pnfm=arg ", SuggestionFlag.Any, null, ""],
-    [
-      "cmd pnf -pnfo=arg",
-      SuggestionFlag.Args,
-      optionArgs(pnf, "-pnfo")[0],
-      "arg",
-    ],
-    [
-      "cmd pnf -pnfm=arg",
-      SuggestionFlag.Args,
-      optionArgs(pnf, "-pnfm")[0],
-      "arg",
-    ],
+    ["cmd pnf -pnfo=arg", SuggestionFlag.Args, optionArgs(pnf, "-pnfo")[0], "arg"],
+    ["cmd pnf -pnfm=arg", SuggestionFlag.Args, optionArgs(pnf, "-pnfm")[0], "arg"],
   ])("pnf options with equals sign: %p", testPnf);
 
   it.each([
     // Test req-eq options.
     ["cmd man --req-eq=arg ", SuggestionFlag.Any, man.args[0], ""],
     ["cmd man --req-sep=arg ", SuggestionFlag.Any, man.args[0], ""],
-    [
-      "cmd man --req-eq=",
-      SuggestionFlag.Args,
-      optionArgs(man, "--req-eq")[0],
-      "",
-    ],
-    [
-      "cmd man --req-sep=",
-      SuggestionFlag.Args,
-      optionArgs(man, "--req-sep")[0],
-      "",
-    ],
+    ["cmd man --req-eq=", SuggestionFlag.Args, optionArgs(man, "--req-eq")[0], ""],
+    ["cmd man --req-sep=", SuggestionFlag.Args, optionArgs(man, "--req-sep")[0], ""],
     ["cmd man --req-eq ", SuggestionFlag.Any, man.args[0], ""],
   ])("options that require an equal: %p", testMan);
 
@@ -385,18 +330,8 @@ describe.todo("parseArguments", () => {
     // Test req-sep options.
     ["cmd oas --req-sep:arg ", SuggestionFlag.Any, oas.args[0], ""],
     ["cmd oas --req-sep=arg ", SuggestionFlag.Any, oas.args[0], ""],
-    [
-      "cmd oas --req-sep:",
-      SuggestionFlag.Args,
-      optionArgs(oas, "--req-sep")[0],
-      "",
-    ],
-    [
-      "cmd oas --req-sep=",
-      SuggestionFlag.Args,
-      optionArgs(oas, "--req-sep")[0],
-      "",
-    ],
+    ["cmd oas --req-sep:", SuggestionFlag.Args, optionArgs(oas, "--req-sep")[0], ""],
+    ["cmd oas --req-sep=", SuggestionFlag.Args, optionArgs(oas, "--req-sep")[0], ""],
     ["cmd oas --req-sep ", SuggestionFlag.Any, oas.args[0], ""],
   ])("options that require a separator different from equals: %p", testOas);
 
@@ -425,12 +360,7 @@ describe.todo("parseArguments", () => {
     ["cmd -o arg ", SuggestionFlag.Any, null, ""],
     ["cmd --man arg ", SuggestionFlag.Any, null, ""],
     ["cmd --opt arg ", SuggestionFlag.Any, null, ""],
-    [
-      "cmd -v arg ",
-      SuggestionFlag.Args | SuggestionFlag.Options,
-      optionArgs(cmd, "-v")[0],
-      "",
-    ],
+    ["cmd -v arg ", SuggestionFlag.Args | SuggestionFlag.Options, optionArgs(cmd, "-v")[0], ""],
     ["cmd -n ", SuggestionFlag.Any, null, ""],
   ])("passing args to options: %p", testCmd);
 
@@ -514,9 +444,7 @@ describe.todo("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock)
-        .mockResolvedValueOnce(cmd)
-        .mockResolvedValueOnce(specToLoad);
+      (loadSubcommandCached as Mock).mockResolvedValueOnce(cmd).mockResolvedValueOnce(specToLoad);
     });
 
     it("loadSpec", async () => {
@@ -530,11 +458,7 @@ describe.todo("parseArguments", () => {
 
       expect(loadSubcommandCached).toBeCalledTimes(2);
       if (Array.isArray(location)) {
-        expect(loadSubcommandCached).toHaveBeenLastCalledWith(
-          location[0],
-          context,
-          logger,
-        );
+        expect(loadSubcommandCached).toHaveBeenLastCalledWith(location[0], context, logger);
       } else {
         expect(false);
       }
@@ -607,9 +531,7 @@ describe.todo("parseArguments", () => {
       const command = getCommand("cmd module moduleName ", {});
 
       const result = await parseArguments(command, context);
-      const { isModule } = makeArray(
-        findSubcommand(cmd, "module").args || [],
-      )[0];
+      const { isModule } = makeArray(findSubcommand(cmd, "module").args || [])[0];
       const moduleName = `${isModule}moduleName`;
 
       expect(loadSubcommandCached).toBeCalledTimes(2);
@@ -652,9 +574,7 @@ describe.todo("parseArguments", () => {
       expect(result.suggestionFlags).toBe(SuggestionFlag.Any);
       expect(result.searchTerm).toBe("");
       expect(result.annotations.length).toBe(2);
-      expect(result.completionObj).toBe(
-        cmd.subcommands.recursiveLoadSpecNestedNested,
-      );
+      expect(result.completionObj).toBe(cmd.subcommands.recursiveLoadSpecNestedNested);
     });
 
     it("should load the correct spec when nested loadSpec are used (1)", async () => {
@@ -672,12 +592,10 @@ describe.todo("parseArguments", () => {
       expect(result.searchTerm).toBe("");
       expect(result.annotations.length).toBe(3);
       expect(result.currentArg).toStrictEqual(
-        cmd.subcommands.recursiveLoadSpecNestedNested.subcommands
-          .doubleNestedSubcommand.args[0],
+        cmd.subcommands.recursiveLoadSpecNestedNested.subcommands.doubleNestedSubcommand.args[0],
       );
       expect(result.completionObj).toBe(
-        cmd.subcommands.recursiveLoadSpecNestedNested.subcommands
-          .doubleNestedSubcommand,
+        cmd.subcommands.recursiveLoadSpecNestedNested.subcommands.doubleNestedSubcommand,
       );
     });
   });
@@ -740,14 +658,11 @@ describe.todo("parseArguments", () => {
       expect(result.searchTerm).toBe("");
 
       // We mutate completionObj for generateSpec so check with toEqual instead of toBe.
-      const newSpec = await generateSpec!(
-        ["cmd", "generateSpec", ""],
-        async () => ({
-          status: 0,
-          stderr: "",
-          stdout: "",
-        }),
-      );
+      const newSpec = await generateSpec!(["cmd", "generateSpec", ""], async () => ({
+        status: 0,
+        stderr: "",
+        stdout: "",
+      }));
       const spec = convertSubcommand(newSpec, initializeDefault);
       expect(result.completionObj).toEqual({
         ...subcommand,

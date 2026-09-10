@@ -83,8 +83,7 @@ export const executeLoginShell = async ({
         return cleanOutput(output.stdout);
       }),
     );
-    const idx =
-      result.lastIndexOf(DONE_SOURCING_OSC) + DONE_SOURCING_OSC.length;
+    const idx = result.lastIndexOf(DONE_SOURCING_OSC) + DONE_SOURCING_OSC.length;
     const trimmed = result.slice(idx);
     const end = performance.now();
     logger.info(`Result of login shell command '${command}'`, {
@@ -98,5 +97,4 @@ export const executeLoginShell = async ({
   }
 };
 
-export const executeCommand: Fig.ExecuteCommandFunction = (args) =>
-  executeCommandTimeout(args);
+export const executeCommand: Fig.ExecuteCommandFunction = (args) => executeCommandTimeout(args);

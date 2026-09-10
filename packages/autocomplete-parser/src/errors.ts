@@ -2,9 +2,7 @@ import { createErrorInstance } from "@aws/amazon-q-developer-cli-shared/errors";
 
 // LoadSpecErrors
 export const MissingSpecError = createErrorInstance("MissingSpecError");
-export const WrongDiffVersionedSpecError = createErrorInstance(
-  "WrongDiffVersionedSpecError",
-);
+export const WrongDiffVersionedSpecError = createErrorInstance("WrongDiffVersionedSpecError");
 export const DisabledSpecError = createErrorInstance("DisabledSpecError");
 export const LoadLocalSpecError = createErrorInstance("LoadLocalSpecError");
 

@@ -40,9 +40,7 @@ const getTitle = (
 ) => {
   let elementId = 0;
 
-  const nameArray = item.displayName
-    ? [item.displayName]
-    : (makeArray(item.name) as string[]);
+  const nameArray = item.displayName ? [item.displayName] : (makeArray(item.name) as string[]);
 
   if (nameArray.length === 0) {
     return <></>;
@@ -93,11 +91,7 @@ const getTitle = (
                   },
                 ];
               }
-              if (
-                curr.type !== "text" &&
-                last.type !== "text" &&
-                last.type === curr.type
-              ) {
+              if (curr.type !== "text" && last.type !== "text" && last.type === curr.type) {
                 return [
                   ...acc.slice(0, -1),
                   {
@@ -171,9 +165,7 @@ const getTitle = (
     out = out.map((name) => {
       try {
         if (name.length > 0 && name[0].type === "text") {
-          const matches = name[0].text.match(
-            new RegExp(`^(${commonPrefix})(.*)`, "i"),
-          );
+          const matches = name[0].text.match(new RegExp(`^(${commonPrefix})(.*)`, "i"));
           if (matches) {
             return [
               {
@@ -253,10 +245,7 @@ const getTitle = (
             }
             if (t.type === "prefix") {
               return (
-                <mark
-                  className="bg-transparent text-inherit underline"
-                  key={t.id}
-                >
+                <mark className="bg-transparent text-inherit underline" key={t.id}>
                   {t.highlight}
                 </mark>
               );

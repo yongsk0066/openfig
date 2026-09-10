@@ -1,9 +1,6 @@
 import logger, { Logger } from "loglevel";
 import * as semver from "semver";
-import {
-  ensureTrailingSlash,
-  withTimeout,
-} from "@aws/amazon-q-developer-cli-shared/utils";
+import { ensureTrailingSlash, withTimeout } from "@aws/amazon-q-developer-cli-shared/utils";
 import {
   executeCommand,
   fread,
@@ -68,9 +65,7 @@ export async function importSpecFromFile(
 }
 
 // TODO: this is a problem for diff-versioned specs
-export async function importFromPublicCDN<T = SpecFileImport>(
-  name: string,
-): Promise<T> {
+export async function importFromPublicCDN<T = SpecFileImport>(name: string): Promise<T> {
   return withTimeout(
     20000,
     import(
@@ -100,13 +95,9 @@ export async function importFromLocalhost<T = SpecFileImport>(
 
 const cachedCLIVersions: Record<string, string | undefined> = {};
 
-export const getCachedCLIVersion = (key: string) =>
-  cachedCLIVersions[key] ?? null;
+export const getCachedCLIVersion = (key: string) => cachedCLIVersions[key] ?? null;
 
-export async function getVersionFromFullFile(
-  specData: SpecFileImport,
-  name: string,
-) {
+export async function getVersionFromFullFile(specData: SpecFileImport, name: string) {
   // if the default export is a function it is a versioned spec
   if (typeof specData.default === "function") {
     try {

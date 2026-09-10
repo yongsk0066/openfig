@@ -33,13 +33,7 @@ export default function SidebarLink({
     <NavLink
       to={path}
       className={({ isActive }) =>
-        error
-          ? isActive
-            ? activeErrorStyle
-            : errorStyle
-          : isActive
-            ? activeStyles
-            : defaultStyles
+        error ? (isActive ? activeErrorStyle : errorStyle) : isActive ? activeStyles : defaultStyles
       }
     >
       <div className="flex flex-row items-center gap-2 fill-current whitespace-nowrap">

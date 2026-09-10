@@ -4,30 +4,22 @@ import {
 } from "@aws/amazon-q-developer-cli-proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
-import {
-  sendGetSettingsPropertyRequest,
-  sendUpdateSettingsPropertyRequest,
-} from "./requests.js";
+import { sendGetSettingsPropertyRequest, sendUpdateSettingsPropertyRequest } from "./requests.js";
 
 export const didChange = {
   subscribe(
-    handler: (
-      notification: SettingsChangedNotification,
-    ) => NotificationResponse | undefined,
+    handler: (notification: SettingsChangedNotification) => NotificationResponse | undefined,
   ) {
-    return _subscribe(
-      { type: NotificationType.NOTIFY_ON_SETTINGS_CHANGE },
-      (notification) => {
-        switch (notification?.type?.case) {
-          case "settingsChangedNotification":
-            return handler(notification.type.value);
-          default:
-            break;
-        }
+    return _subscribe({ type: NotificationType.NOTIFY_ON_SETTINGS_CHANGE }, (notification) => {
+      switch (notification?.type?.case) {
+        case "settingsChangedNotification":
+          return handler(notification.type.value);
+        default:
+          break;
+      }
 
-        return { unsubscribe: false };
-      },
-    );
+      return { unsubscribe: false };
+    });
   },
 };
 

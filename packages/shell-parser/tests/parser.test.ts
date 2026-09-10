@@ -12,10 +12,7 @@ function parseCommand(command: string): string {
  * @param filePath The path to the file to parse
  * @param nameComment The first character of each title line
  */
-function getData(
-  filePath: string,
-  nameComment: string,
-): [name: string, value: string][] {
+function getData(filePath: string, nameComment: string): [name: string, value: string][] {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, "");
     return [];
@@ -40,9 +37,7 @@ function outputNewFile(
     filePath,
     data.reduce(
       (previous, current, index) =>
-        `${previous}${index > 0 ? "\n\n" : ""}${nameComment} ${current[0]}\n${
-          current[1]
-        }`,
+        `${previous}${index > 0 ? "\n\n" : ""}${nameComment} ${current[0]}\n${current[1]}`,
       "",
     ),
   );
@@ -78,9 +73,7 @@ describe("parser fixtures", () => {
     if (!process.env.NO_FIXTURES_EDIT) {
       const [newInputs, extraOutputs] = mapKeysDiff(inputData, outputData);
       extraOutputs.forEach((v) => outputData.delete(v));
-      newInputs.forEach((v) =>
-        outputData.set(v, parseCommand(inputData.get(v) ?? "")),
-      );
+      newInputs.forEach((v) => outputData.set(v, parseCommand(inputData.get(v) ?? "")));
       if (extraOutputs.length || newInputs.length) {
         outputNewFile(outputFile, "//", [...outputData.entries()]);
       }

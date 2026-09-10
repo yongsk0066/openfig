@@ -4,30 +4,22 @@ import {
 } from "@aws/amazon-q-developer-cli-proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
-import {
-  sendGetLocalStateRequest,
-  sendUpdateLocalStateRequest,
-} from "./requests.js";
+import { sendGetLocalStateRequest, sendUpdateLocalStateRequest } from "./requests.js";
 
 export const didChange = {
   subscribe(
-    handler: (
-      notification: LocalStateChangedNotification,
-    ) => NotificationResponse | undefined,
+    handler: (notification: LocalStateChangedNotification) => NotificationResponse | undefined,
   ) {
-    return _subscribe(
-      { type: NotificationType.NOTIFY_ON_LOCAL_STATE_CHANGED },
-      (notification) => {
-        switch (notification?.type?.case) {
-          case "localStateChangedNotification":
-            return handler(notification.type.value);
-          default:
-            break;
-        }
+    return _subscribe({ type: NotificationType.NOTIFY_ON_LOCAL_STATE_CHANGED }, (notification) => {
+      switch (notification?.type?.case) {
+        case "localStateChangedNotification":
+          return handler(notification.type.value);
+        default:
+          break;
+      }
 
-        return { unsubscribe: false };
-      },
-    );
+      return { unsubscribe: false };
+    });
   },
 };
 

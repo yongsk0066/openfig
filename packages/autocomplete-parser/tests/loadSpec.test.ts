@@ -1,40 +1,20 @@
 import logger from "loglevel";
-import {
-  SETTINGS,
-  updateSettings,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { SETTINGS, updateSettings } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { SpecLocationSource } from "@aws/amazon-q-developer-cli-shared/utils";
-import {
-  getSpecPath,
-  loadFigSubcommand,
-  loadSubcommandCached,
-} from "../src/loadSpec";
+import { getSpecPath, loadFigSubcommand, loadSubcommandCached } from "../src/loadSpec";
 import * as loadHelpers from "../src/loadHelpers";
-import {
-  expect,
-  it,
-  beforeAll,
-  describe,
-  beforeEach,
-  vi,
-  Mock,
-  afterEach,
-} from "vitest";
+import { expect, it, beforeAll, describe, beforeEach, vi, Mock, afterEach } from "vitest";
 
 const { importSpecFromFile } = loadHelpers;
 
 vi.mock("../src/loadHelpers", () => ({
-  importSpecFromFile: vi
-    .fn()
-    .mockResolvedValue({ default: { name: "loadFromFile" } }),
+  importSpecFromFile: vi.fn().mockResolvedValue({ default: { name: "loadFromFile" } }),
   getPrivateSpec: vi.fn().mockReturnValue(undefined),
   isDiffVersionedSpec: vi.fn(),
 }));
 
 vi.mock("@aws/amazon-q-developer-cli-api-bindings-wrappers", async () => ({
-  ...(await vi.importActual(
-    "@aws/amazon-q-developer-cli-api-bindings-wrappers",
-  )),
+  ...(await vi.importActual("@aws/amazon-q-developer-cli-api-bindings-wrappers")),
   executeCommand: vi.fn(),
 }));
 
@@ -56,9 +36,7 @@ describe("getSpecPath", () => {
   });
 
   it("works for specs containing a slash in the name", async () => {
-    expect(
-      await getSpecPath("@withfig/autocomplete-tools", cwd, false),
-    ).toEqual({
+    expect(await getSpecPath("@withfig/autocomplete-tools", cwd, false)).toEqual({
       type: SpecLocationSource.GLOBAL,
       name: "@withfig/autocomplete-tools",
     });
@@ -203,20 +181,11 @@ describe("loadSubcommandCached", () => {
       environmentVariables: {},
     };
 
-    await loadSubcommandCached(
-      { name: "git", type: SpecLocationSource.LOCAL },
-      context,
-    );
-    await loadSubcommandCached(
-      { name: "git", type: SpecLocationSource.LOCAL },
-      context,
-    );
+    await loadSubcommandCached({ name: "git", type: SpecLocationSource.LOCAL }, context);
+    await loadSubcommandCached({ name: "git", type: SpecLocationSource.LOCAL }, context);
     expect(loadFigSubcommand).toHaveBeenCalledTimes(1);
 
-    await loadSubcommandCached(
-      { name: "hg", type: SpecLocationSource.LOCAL },
-      context,
-    );
+    await loadSubcommandCached({ name: "hg", type: SpecLocationSource.LOCAL }, context);
     expect(loadFigSubcommand).toHaveBeenCalledTimes(2);
     (loadFigSubcommand as unknown) = oldLoadSpec;
   });

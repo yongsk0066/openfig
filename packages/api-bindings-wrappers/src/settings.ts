@@ -62,8 +62,5 @@ export const getSetting = <T = unknown>(key: SETTINGS, defaultValue?: any): T =>
 export const getSettings = () => settings;
 
 export function isInDevMode(): boolean {
-  return (
-    Boolean(getSetting(SETTINGS.DEV_MODE)) ||
-    Boolean(getSetting(SETTINGS.DEV_MODE_NPM))
-  );
+  return Boolean(getSetting(SETTINGS.DEV_MODE)) || Boolean(getSetting(SETTINGS.DEV_MODE_NPM));
 }

@@ -47,8 +47,7 @@ const autocompleteSettings: PrefSection[] = [
       {
         id: "autocomplete.alwaysSuggestCurrentToken",
         title: "Always suggest the current token",
-        description:
-          "Always add the current entered token as a suggestion at the top of the list",
+        description: "Always add the current entered token as a suggestion at the top of the list",
         type: "boolean",
         default: false,
         popular: false,
@@ -56,8 +55,7 @@ const autocompleteSettings: PrefSection[] = [
       {
         id: "autocomplete.fuzzySearch",
         title: "Fuzzy search",
-        description:
-          "Search suggestions using substring matching rather than prefix search.",
+        description: "Search suggestions using substring matching rather than prefix search.",
         type: "boolean",
         default: false,
         popular: false,
@@ -65,8 +63,7 @@ const autocompleteSettings: PrefSection[] = [
       {
         id: "autocomplete.preferVerboseSuggestions",
         title: "Prefer verbose suggestions",
-        description:
-          "Use the verbose version of the option/subcommand inserted.",
+        description: "Use the verbose version of the option/subcommand inserted.",
         example:
           "e.g. selecting `-m, --message` suggestion will insert `--message` rather than `-m`.",
         type: "boolean",
@@ -122,8 +119,7 @@ const autocompleteSettings: PrefSection[] = [
       {
         id: "autocomplete.immediatelyRunGitAliases",
         title: "Safe git aliases",
-        description:
-          "When disabled, Autocomplete will prevent instant execution of git aliases.",
+        description: "When disabled, Autocomplete will prevent instant execution of git aliases.",
         type: "boolean",
         default: true,
         popular: false,
@@ -141,8 +137,7 @@ const autocompleteSettings: PrefSection[] = [
       {
         id: "autocomplete.hideAutoExecuteSuggestion",
         title: "Always hide auto-execute suggestions",
-        description:
-          "Hide suggestions that will be ran automatically on insert.",
+        description: "Hide suggestions that will be ran automatically on insert.",
         type: "boolean",
         default: false,
         popular: false,

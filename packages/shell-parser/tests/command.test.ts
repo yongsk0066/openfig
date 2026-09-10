@@ -14,11 +14,7 @@ describe("getCommand", () => {
     expectText(getCommand("git co ", {})).toEqual(["git", "co", ""]);
     expectText(getCommand("git co ", aliases)).toEqual(["git", "co", ""]);
     expectText(getCommand("woman ", {})).toEqual(["woman", ""]);
-    expectText(getCommand("another string ", aliases)).toEqual([
-      "another",
-      "string",
-      "",
-    ]);
+    expectText(getCommand("another string ", aliases)).toEqual(["another", "string", ""]);
   });
 
   it("works with regular aliases", () => {

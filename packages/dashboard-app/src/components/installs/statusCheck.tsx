@@ -1,20 +1,12 @@
 import { InstallCheckWithInstallKey } from "@/types/preferences";
 import { Install } from "@aws/amazon-q-developer-cli-api-bindings";
 import { useEffect, useState } from "react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "../ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { useStatusCheck } from "@/hooks/store";
 
-export default function StatusCheck({
-  check,
-}: {
-  check: InstallCheckWithInstallKey;
-}) {
+export default function StatusCheck({ check }: { check: InstallCheckWithInstallKey }) {
   const [expanded, setExpanded] = useState(false);
   const [status, refreshStatus] = useStatusCheck(check.installKey);
   const [err, setErr] = useState("");
@@ -35,16 +27,10 @@ export default function StatusCheck({
   }, [refreshStatus]);
 
   return (
-    <Collapsible
-      className="flex gap-4 self-stretch"
-      open={expanded}
-      onOpenChange={setExpanded}
-    >
+    <Collapsible className="flex gap-4 self-stretch" open={expanded} onOpenChange={setExpanded}>
       <CollapsibleTrigger asChild className="mt-5 flex-none">
         <ChevronDown
-          className={`h-5 w-5 ${
-            expanded ? "rotate-0" : "-rotate-90"
-          } cursor-pointer text-zinc-400`}
+          className={`h-5 w-5 ${expanded ? "rotate-0" : "-rotate-90"} cursor-pointer text-zinc-400`}
         />
       </CollapsibleTrigger>
       <div className="flex flex-col border-b-[1px] border-zinc-200 dark:border-zinc-600 py-4 flex-auto gap-1">

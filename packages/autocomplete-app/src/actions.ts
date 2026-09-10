@@ -1,10 +1,7 @@
 import { SettingsMap } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import * as app from "./fig.json";
 import { create } from "@bufbuild/protobuf";
-import {
-  ActionAvailability,
-  ActionSchema,
-} from "@aws/amazon-q-developer-cli-proto/fig";
+import { ActionAvailability, ActionSchema } from "@aws/amazon-q-developer-cli-proto/fig";
 
 const SELECT_SUGGESTION_ACTION_PREFIX = "selectSuggestion";
 
@@ -69,24 +66,18 @@ export const ACTIONS = app.contributes.actions.map((action) => {
   });
 });
 
-const defaultSelectSuggestionKeybindings = app.contributes.actions.reduce(
-  (p, v) => {
-    if (v.identifier.startsWith("selectSuggestion")) {
-      return Object.assign(p, { [v.identifier]: v.defaultBindings });
-    }
-    return p;
-  },
-  {},
-);
+const defaultSelectSuggestionKeybindings = app.contributes.actions.reduce((p, v) => {
+  if (v.identifier.startsWith("selectSuggestion")) {
+    return Object.assign(p, { [v.identifier]: v.defaultBindings });
+  }
+  return p;
+}, {});
 let selectSuggestionKeybindings: Record<string, string[]> = {};
 
 export const updateSelectSuggestionKeybindings = (settings: SettingsMap) => {
   selectSuggestionKeybindings = {};
   for (const [key, value] of Object.entries(settings)) {
-    if (
-      typeof value === "string" &&
-      value.startsWith(SELECT_SUGGESTION_ACTION_PREFIX)
-    ) {
+    if (typeof value === "string" && value.startsWith(SELECT_SUGGESTION_ACTION_PREFIX)) {
       const keybinding = key.replace("autocomplete.keybindings.", "");
       if (!selectSuggestionKeybindings[value]) {
         selectSuggestionKeybindings[value] = [keybinding];

@@ -14,10 +14,7 @@ export function Svg({
   const sizeW = typeof size === "number" ? size : size[0];
   const sizeH = typeof size === "number" ? size : size[1] ? size[1] : size[0];
   return (
-    <div
-      style={{ height: `${sizeH}px`, width: `${sizeW}px` }}
-      className="relative"
-    >
+    <div style={{ height: `${sizeH}px`, width: `${sizeW}px` }} className="relative">
       <svg
         className={cn("fill-current absolute inset-0 h-full w-full", className)}
         viewBox={`0 0 ${ratio[0]} ${ratio[1]}`}

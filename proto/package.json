@@ -4,17 +4,14 @@
   "license": "MIT OR Apache-2.0",
   "author": "Amazon Web Services",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
-  "type": "module",
-  "exports": {
-    "./*": "./dist/*_pb.js",
-    "./package.json": "./package.json"
-  },
   "files": [
     "dist",
     "package.json"
   ],
-  "engines": {
-    "node": ">=18"
+  "type": "module",
+  "exports": {
+    "./*": "./dist/*_pb.js",
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "rm -rf dist && buf generate && tsc",
@@ -31,5 +28,8 @@
     "@bufbuild/buf": "^1.54.0",
     "@bufbuild/protoc-gen-es": "^2.2.5",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

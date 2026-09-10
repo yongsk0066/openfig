@@ -1,7 +1,7 @@
 {
   "name": "@amzn/autocomplete-app",
-  "private": true,
   "version": "1.0.0",
+  "private": true,
   "repository": "https://github.com/aws/amazon-q-developer-cli",
   "type": "module",
   "scripts": {
@@ -14,13 +14,9 @@
     "test": "vitest",
     "clean": "rm -rf dist"
   },
-  "browserslist": [
-    "defaults",
-    "Safari >= 11"
-  ],
   "dependencies": {
-    "@aws/amazon-q-developer-cli-api-bindings-wrappers": "workspace:^",
     "@aws/amazon-q-developer-cli-api-bindings": "workspace:~",
+    "@aws/amazon-q-developer-cli-api-bindings-wrappers": "workspace:^",
     "@aws/amazon-q-developer-cli-autocomplete-parser": "workspace:^",
     "@aws/amazon-q-developer-cli-proto": "workspace:^",
     "@aws/amazon-q-developer-cli-shell-parser": "workspace:^",
@@ -30,9 +26,9 @@
     "@juggle/resize-observer": "^3.4.0",
     "deep-object-diff": "^1.1.9",
     "loglevel": "^1.9.2",
+    "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-window": "^1.8.11",
-    "react": "^18.3.1",
     "tailwind-merge": "^3.2.0",
     "use-resize-observer": "^9.1.0",
     "util": "^0.12.5",
@@ -44,9 +40,9 @@
     "@aws/amazon-q-developer-cli-shared": "workspace:^",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.20",
+    "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/react-window": "^1.8.8",
-    "@types/react": "^18.3.18",
     "@types/semver": "^7.7.0",
     "@vitejs/plugin-legacy": "^6.1.1",
     "@vitejs/plugin-react": "^4.3.4",
@@ -62,5 +58,9 @@
   "bundledDependencies": [
     "@aws/amazon-q-developer-cli-fuzzysort",
     "@aws/amazon-q-developer-cli-shared"
+  ],
+  "browserslist": [
+    "defaults",
+    "Safari >= 11"
   ]
 }

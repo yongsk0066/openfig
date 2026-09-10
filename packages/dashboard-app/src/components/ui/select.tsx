@@ -94,9 +94,7 @@ const SelectItem = React.forwardRef<
 
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     {description && (
-      <span className="pl-1 text-xs text-muted-foreground break-all">
-        {description}
-      </span>
+      <span className="pl-1 text-xs text-muted-foreground break-all">{description}</span>
     )}
   </SelectPrimitive.Item>
 ));

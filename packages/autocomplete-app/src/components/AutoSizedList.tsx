@@ -22,10 +22,7 @@ export type AutoSizedHandleRef = {
 
 // List will attempt to be size (itemCount * itemSize) but will shrink and
 // scroll if necessary.
-const AutoSizedList: ForwardRefRenderFunction<
-  AutoSizedHandleRef,
-  AutoSizedListProps
-> = (
+const AutoSizedList: ForwardRefRenderFunction<AutoSizedHandleRef, AutoSizedListProps> = (
   {
     onResize = undefined,
     width: desiredWidth = undefined,
@@ -35,11 +32,7 @@ const AutoSizedList: ForwardRefRenderFunction<
   ref,
 ) => {
   const { itemCount, itemSize } = props;
-  const {
-    ref: wrapperRef,
-    height,
-    width,
-  } = useDynamicResizeObserver({ onResize });
+  const { ref: wrapperRef, height, width } = useDynamicResizeObserver({ onResize });
 
   // Scroll when selectedIndex changes.
   const listRef = useRef<List>() as MutableRefObject<List>;

@@ -57,16 +57,10 @@ describe("fieldsAreEqual", () => {
 
   it("should return false if any field is not equal or fields are not specified", () => {
     expect(fieldsAreEqual({ a: null }, { a: {} }, ["a"])).toEqual(false);
-    expect(fieldsAreEqual({ a: undefined }, { a: "hello" }, ["a"])).toEqual(
-      false,
-    );
+    expect(fieldsAreEqual({ a: undefined }, { a: "hello" }, ["a"])).toEqual(false);
     expect(fieldsAreEqual({ a: false }, { a: true }, ["a"])).toEqual(false);
     expect(
-      fieldsAreEqual(
-        { a: { b: { c: "hello" } } },
-        { a: { b: { c: "hell" } } },
-        ["a"],
-      ),
+      fieldsAreEqual({ a: { b: { c: "hello" } } }, { a: { b: { c: "hell" } } }, ["a"]),
     ).toEqual(false);
     expect(fieldsAreEqual({ a: "true" }, { b: "true" }, [])).toEqual(false);
   });
@@ -97,9 +91,7 @@ describe("makeArrayIfExists", () => {
 
 describe("longestCommonPrefix", () => {
   it("should return the shared match", () => {
-    expect(longestCommonPrefix(["foo", "foo bar", "foo hello world"])).toEqual(
-      "foo",
-    );
+    expect(longestCommonPrefix(["foo", "foo bar", "foo hello world"])).toEqual("foo");
   });
 
   it("should return nothing if not all items starts by the same chars", () => {
@@ -113,26 +105,18 @@ describe("compareNamedObjectsAlphabetically", () => {
   });
 
   it("should return 1 to sort alphabetically z against b for object with name", () => {
-    expect(
-      compareNamedObjectsAlphabetically({ name: "z" }, { name: "b" }),
-    ).toBeGreaterThan(0);
+    expect(compareNamedObjectsAlphabetically({ name: "z" }, { name: "b" })).toBeGreaterThan(0);
   });
 
   it("should return 1 to sort alphabetically c against x for object with name", () => {
-    expect(
-      compareNamedObjectsAlphabetically({ name: "c" }, { name: "x" }),
-    ).toBeLessThan(0);
+    expect(compareNamedObjectsAlphabetically({ name: "c" }, { name: "x" })).toBeLessThan(0);
   });
 
   it("should return 1 to sort alphabetically z against b for object with name array", () => {
-    expect(
-      compareNamedObjectsAlphabetically({ name: ["z"] }, { name: ["b"] }),
-    ).toBeGreaterThan(0);
+    expect(compareNamedObjectsAlphabetically({ name: ["z"] }, { name: ["b"] })).toBeGreaterThan(0);
   });
 
   it("should return 1 to sort alphabetically c against x for object with name array", () => {
-    expect(
-      compareNamedObjectsAlphabetically({ name: ["c"] }, { name: ["x"] }),
-    ).toBeLessThan(0);
+    expect(compareNamedObjectsAlphabetically({ name: ["c"] }, { name: ["x"] })).toBeLessThan(0);
   });
 });

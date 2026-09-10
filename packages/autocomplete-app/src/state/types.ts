@@ -33,10 +33,7 @@ type AutocompleteActions = {
   setVisibleState: (visibleState: Visibility) => void;
   scroll: (index: number, visibleState: Visibility) => void;
   setFigState: React.Dispatch<React.SetStateAction<FigState>>;
-  updateVisibilityPostInsert: (
-    suggestion: Suggestion,
-    isFullCompletion: boolean,
-  ) => void;
+  updateVisibilityPostInsert: (suggestion: Suggestion, isFullCompletion: boolean) => void;
   insertTextForItem: (item: Suggestion, execute?: boolean) => void;
   insertCommonPrefix: () => void;
   setHistoryModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -72,9 +69,5 @@ export type AutocompleteState = {
 } & AutocompleteActions;
 
 export declare type NamedSetState<T> = {
-  (
-    name: string,
-    partial: Partial<T> | ((s: T) => Partial<T>),
-    replace?: boolean,
-  ): void;
+  (name: string, partial: Partial<T> | ((s: T) => Partial<T>), replace?: boolean): void;
 };

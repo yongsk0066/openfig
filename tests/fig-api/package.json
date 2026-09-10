@@ -2,9 +2,9 @@
   "name": "fig-api-tests",
   "version": "1.0.0",
   "private": true,
-  "main": "index.js",
-  "type": "module",
   "license": "MIT",
+  "type": "module",
+  "main": "index.js",
   "scripts": {
     "test": "vitest"
   },

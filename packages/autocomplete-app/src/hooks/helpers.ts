@@ -48,13 +48,10 @@ export type SystemTheme = "light" | "dark";
 
 export const useSystemTheme = (): [SystemTheme] => {
   const getSystemTheme = () =>
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   const [systemTheme, setSystemTheme] = useState<SystemTheme>(getSystemTheme());
   useEffect(() => {
-    const listener = (e: MediaQueryListEvent) =>
-      setSystemTheme(e.matches ? "dark" : "light");
+    const listener = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? "dark" : "light");
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     if (query.addEventListener) {
       query.addEventListener("change", listener);

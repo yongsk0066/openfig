@@ -1,15 +1,7 @@
 import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
 import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import * as settings from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import {
-  MockInstance,
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { MockInstance, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   getStaticArgSuggestions,
   filterSuggestions,
@@ -72,9 +64,7 @@ describe("getStaticArgSuggestions", () => {
 
   it("returns empty array on empty suggestions object", () => {
     expect(getStaticArgSuggestions({ generators: [] })).toEqual([]);
-    expect(
-      getStaticArgSuggestions({ suggestions: [], generators: [] }),
-    ).toEqual([]);
+    expect(getStaticArgSuggestions({ suggestions: [], generators: [] })).toEqual([]);
   });
 });
 
@@ -262,9 +252,7 @@ describe("deduplicateSuggestions", () => {
       { name: "bar", icon: "icon1" },
       { name: "baz", icon: "icon1" },
     ];
-    expect(deduplicateSuggestions(suggestions, ["name"])).toStrictEqual(
-      expected,
-    );
+    expect(deduplicateSuggestions(suggestions, ["name"])).toStrictEqual(expected);
   });
 
   it("should remove duplicate suggestions by multiple fields", () => {
@@ -283,15 +271,11 @@ describe("deduplicateSuggestions", () => {
       { name: "foo", icon: "icon" },
       { name: "bar", icon: "icon2" },
     ];
-    expect(deduplicateSuggestions(suggestions, ["name", "icon"])).toStrictEqual(
-      expected,
-    );
+    expect(deduplicateSuggestions(suggestions, ["name", "icon"])).toStrictEqual(expected);
   });
 
   it("should remove duplicate suggestions by nested fields", () => {
-    const args: Suggestion["args"] = [
-      { generators: [{ custom: async () => [] }] },
-    ];
+    const args: Suggestion["args"] = [{ generators: [{ custom: async () => [] }] }];
     const suggestions: Suggestion[] = [
       { name: "a", displayName: "a.", icon: "icon1", args },
       { name: "a", displayName: "a.", icon: "icon2", args },
@@ -304,8 +288,8 @@ describe("deduplicateSuggestions", () => {
       { name: "a", displayName: "b.", args },
       { name: "c", args: [{ name: "foo", generators: [] }] },
     ];
-    expect(
-      deduplicateSuggestions(suggestions, ["name", "displayName", "args"]),
-    ).toStrictEqual(expected);
+    expect(deduplicateSuggestions(suggestions, ["name", "displayName", "args"])).toStrictEqual(
+      expected,
+    );
   });
 });

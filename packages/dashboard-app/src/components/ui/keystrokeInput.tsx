@@ -1,22 +1,12 @@
 import { Check, Plus, X } from "lucide-react";
 import { useCallback, useContext, useEffect, useState } from "react";
-import {
-  VALID_CONTROL_KEYS,
-  getKeyName,
-  getKeySymbol,
-} from "@/lib/keybindings";
+import { VALID_CONTROL_KEYS, getKeyName, getKeySymbol } from "@/lib/keybindings";
 import ListenerContext from "@/context/input";
 import { useKeybindings } from "@/hooks/store/useKeybindings";
 import { useSetting } from "@/hooks/store";
 import { cn } from "@/lib/utils";
 
-export function Kbd({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+export function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <kbd
       className={cn(
@@ -114,13 +104,7 @@ export function Input({
   );
 }
 
-export default function KeystrokeGroup({
-  id,
-  defaults,
-}: {
-  id: string;
-  defaults: string[];
-}) {
+export default function KeystrokeGroup({ id, defaults }: { id: string; defaults: string[] }) {
   // `id` has the `autocomplete.${command}` format. We just want the command.
   const command = id.split(".")[1];
 
@@ -152,9 +136,7 @@ export default function KeystrokeGroup({
 
     const isInvalidCombination =
       keys.has("command") ||
-      (keys.has("control") &&
-        key !== "control" &&
-        !VALID_CONTROL_KEYS.includes(key));
+      (keys.has("control") && key !== "control" && !VALID_CONTROL_KEYS.includes(key));
     setIsInvalid(isInvalidCombination);
 
     if (key) keys.add(key);
@@ -204,10 +186,7 @@ export default function KeystrokeGroup({
             cancel={cancelKeystroke}
           />
         ) : (
-          <button
-            onClick={openInput}
-            className="p-1 px-[6px] hover:bg-black/5 rounded-lg"
-          >
+          <button onClick={openInput} className="p-1 px-[6px] hover:bg-black/5 rounded-lg">
             <Plus className="h-3 w-3" />
           </button>
         )}

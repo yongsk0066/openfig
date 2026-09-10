@@ -1,10 +1,7 @@
 import { useCallback } from "react";
 import logger from "loglevel";
 import { Keybindings, Shell } from "@aws/amazon-q-developer-cli-api-bindings";
-import {
-  SETTINGS,
-  getSetting,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { ACTIONS, AutocompleteAction } from "../actions";
 import { useAutocompleteStore } from "../state";
 import { Visibility } from "../state/types";
@@ -14,12 +11,7 @@ export const setInterceptKeystrokes = (
   globalIntercept?: boolean,
   currentTerminalSessionId?: string,
 ) =>
-  Keybindings.setInterceptKeystrokes(
-    ACTIONS,
-    intercept,
-    globalIntercept,
-    currentTerminalSessionId,
-  );
+  Keybindings.setInterceptKeystrokes(ACTIONS, intercept, globalIntercept, currentTerminalSessionId);
 
 enum KeyCode {
   TAB = 48,
@@ -71,13 +63,7 @@ export const useAutocompleteKeypressCallback = (
       }
       scrollToIndex(newIndex, newVisibleState);
     },
-    [
-      selectedIndex,
-      visibleState,
-      suggestions.length,
-      scrollWrapAround,
-      setHistoryModeEnabled,
-    ],
+    [selectedIndex, visibleState, suggestions.length, scrollWrapAround, setHistoryModeEnabled],
   );
 
   return useCallback(

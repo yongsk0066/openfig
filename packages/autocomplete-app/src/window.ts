@@ -1,7 +1,4 @@
-import {
-  getSetting,
-  SETTINGS,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { getSetting, SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 
 // Default settings values.
 export const MAX_WIDTH = 320;
@@ -15,14 +12,10 @@ export const getMaxWidth = (): number => {
   )
     ? 50
     : 0;
-  return typeof maxWidthSetting !== "number"
-    ? MAX_WIDTH + historyIncrease
-    : maxWidthSetting;
+  return typeof maxWidthSetting !== "number" ? MAX_WIDTH + historyIncrease : maxWidthSetting;
 };
 
 export const getMaxHeight = (): number => {
   const maxHeightSetting = getSetting(SETTINGS.HEIGHT);
-  return typeof maxHeightSetting !== "number"
-    ? AUTOCOMPLETE_HEIGHT
-    : maxHeightSetting;
+  return typeof maxHeightSetting !== "number" ? AUTOCOMPLETE_HEIGHT : maxHeightSetting;
 };

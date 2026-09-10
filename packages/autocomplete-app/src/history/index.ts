@@ -41,10 +41,7 @@ type HistoryArgValues = {
   values: { historyEntryIndex: number; value: string }[];
 };
 
-type HistoryValueIndex = Record<
-  string,
-  Internal.Subcommand<HistoryArgValues, unknown, unknown>
->;
+type HistoryValueIndex = Record<string, Internal.Subcommand<HistoryArgValues, unknown, unknown>>;
 
 type HistorySource = {
   entries: HistoryEntry[];
@@ -126,9 +123,7 @@ const awaitBatched = async <T>(
 ): Promise<T[]> => {
   const results: T[] = [];
   for (let i = 0; i < getPromiseArray.length; i += batchSize) {
-    const promises = getPromiseArray
-      .slice(i, i + batchSize)
-      .map((getPromise) => getPromise());
+    const promises = getPromiseArray.slice(i, i + batchSize).map((getPromise) => getPromise());
     const batchResults = await Promise.all(promises);
     results.push(...batchResults);
   }
@@ -143,10 +138,7 @@ export const loadHistorySource = async (
   const allLocations: string[] = [];
 
   const fakeCWD = "_fig/fake_cwd";
-  const getCommandLocation = async (
-    command: AnnotatedCommand,
-    context?: Partial<HistoryContext>,
-  ) =>
+  const getCommandLocation = async (command: AnnotatedCommand, context?: Partial<HistoryContext>) =>
     getSpecPath(command.command.tokens[0]?.text ?? "", context?.cwd ?? fakeCWD);
 
   for (let i = 0; i < items.length; i += 1) {
@@ -191,10 +183,7 @@ export const loadHistorySource = async (
     for (let j = 0; j < entry.commands.length; j += 1) {
       const command = entry.commands[j];
       const location = await getCommandLocation(command, context);
-      if (
-        !command.parserResult &&
-        location.type === SpecLocationSource.GLOBAL
-      ) {
+      if (!command.parserResult && location.type === SpecLocationSource.GLOBAL) {
         try {
           const parseContext: Fig.ShellContext = {
             currentWorkingDirectory: context?.cwd ?? fakeCWD,
@@ -250,10 +239,7 @@ const loadFigHistory = async (): Promise<HistoryEntry[]> =>
   );
 
 export const loadHistory = async (aliases: AliasMap) => {
-  const loadHistoryCommand = async (
-    command: string,
-    shell?: string,
-  ): Promise<HistorySource> => {
+  const loadHistoryCommand = async (command: string, shell?: string): Promise<HistorySource> => {
     let items: HistoryEntry[] = [];
     try {
       let history: string;
@@ -267,9 +253,7 @@ export const loadHistory = async (aliases: AliasMap) => {
           })
         ).stdout;
       }
-      items = history
-        .split("\n")
-        .map((text) => ({ text, context: {}, commands: [] }));
+      items = history.split("\n").map((text) => ({ text, context: {}, commands: [] }));
     } catch (err) {
       historyLogger.error(err as Error);
     }
@@ -322,10 +306,7 @@ export const getHistoryArgSuggestions = (
 ): Fig.TemplateSuggestion[] => {
   const shell = currentProcess.slice(currentProcess.lastIndexOf("/") + 1);
   const basicAnnotations = flattenAnnotations(annotations);
-  const index = findLastIndex(
-    basicAnnotations,
-    (annotation) => "spec" in annotation,
-  );
+  const index = findLastIndex(basicAnnotations, (annotation) => "spec" in annotation);
 
   const root = basicAnnotations[index];
   const specAnnotations = basicAnnotations.slice(index + 1);
@@ -381,10 +362,7 @@ export const getHistoryArgSuggestions = (
 
   if (getSetting(SETTINGS.HISTORY_COMMAND)) {
     allValues.push(...getValuesFromSource(historySources.customCommand));
-  } else if (
-    getSetting(SETTINGS.HISTORY_MERGE_SHELLS) &&
-    ["bash", "zsh"].includes(shell)
-  ) {
+  } else if (getSetting(SETTINGS.HISTORY_MERGE_SHELLS) && ["bash", "zsh"].includes(shell)) {
     allValues.push(
       ...getValuesFromSource(historySources.zsh),
       ...getValuesFromSource(historySources.bash),
@@ -420,14 +398,8 @@ export const getFullHistorySuggestions = (
 
   if (getSetting(SETTINGS.HISTORY_COMMAND)) {
     historyEntries.push(...historySources.customCommand.entries);
-  } else if (
-    getSetting(SETTINGS.HISTORY_MERGE_SHELLS) &&
-    ["bash", "zsh"].includes(shell)
-  ) {
-    historyEntries.push(
-      ...historySources.zsh.entries,
-      ...historySources.bash.entries,
-    );
+  } else if (getSetting(SETTINGS.HISTORY_MERGE_SHELLS) && ["bash", "zsh"].includes(shell)) {
+    historyEntries.push(...historySources.zsh.entries, ...historySources.bash.entries);
   } else if (shell in historySources) {
     historyEntries.push(...historySources[shell].entries);
   }

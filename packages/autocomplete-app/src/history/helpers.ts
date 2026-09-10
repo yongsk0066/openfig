@@ -40,9 +40,7 @@ export const addEntry = (
   entry: HistoryEntry,
   previousEntry?: HistoryEntry,
 ): Graph => {
-  const previousKey = previousEntry?.commands[0]
-    ? getKey(previousEntry.commands[0])
-    : "";
+  const previousKey = previousEntry?.commands[0] ? getKey(previousEntry.commands[0]) : "";
   const entryKeys = [previousKey, ...entry.commands.map(getKey)];
 
   const nodes = { ...graph.nodes };
@@ -68,10 +66,7 @@ export const addEntry = (
   return { nodes, edges };
 };
 
-const sumRecords = (
-  a: Record<string, number>,
-  b: Record<string, number>,
-): Record<string, number> =>
+const sumRecords = (a: Record<string, number>, b: Record<string, number>): Record<string, number> =>
   Object.keys(b).reduce(
     (acc, key) => {
       acc[key] = key in acc ? acc[key] + b[key] : b[key];
@@ -115,8 +110,7 @@ export function mirrorSubcommand<
   mapOptionMeta: (optionMeta: OptionT) => OptionS,
   mapSubcommandMeta: (subcommandMeta: SubcommandT) => SubcommandS,
 ): Internal.Subcommand<ArgS, OptionS, SubcommandS> {
-  const { subcommands, options, persistentOptions, args, name, ...meta } =
-    subcommand;
+  const { subcommands, options, persistentOptions, args, name, ...meta } = subcommand;
   const mapOptions = (
     optionRecord: Record<string, Internal.Option<ArgT, OptionT>>,
   ): Record<string, Internal.Option<ArgS, OptionS>> =>
@@ -142,13 +136,12 @@ export function mirrorSubcommand<
     name,
     subcommands: Object.values(subcommands).reduce(
       (acc, currentSubcommand) => {
-        const value: Internal.Subcommand<ArgS, OptionS, SubcommandS> =
-          mirrorSubcommand(
-            currentSubcommand,
-            mapArg,
-            mapOptionMeta,
-            mapSubcommandMeta,
-          );
+        const value: Internal.Subcommand<ArgS, OptionS, SubcommandS> = mirrorSubcommand(
+          currentSubcommand,
+          mapArg,
+          mapOptionMeta,
+          mapSubcommandMeta,
+        );
         currentSubcommand.name.forEach((n) => {
           if (acc[n] === undefined) {
             acc[n] = value;
@@ -187,18 +180,14 @@ export const walkSubcommand = <
     const finalState = annotations.reduce(
       (state, annotation) => {
         const { text, type } = annotation;
-        const name =
-          "tokenName" in annotation ? (annotation.tokenName ?? text) : text;
+        const name = "tokenName" in annotation ? (annotation.tokenName ?? text) : text;
 
         if (type === TokenType.Subcommand) {
           if (!state.subcommand.subcommands[name]) {
             throw new SuggestionNotFoundError(`Subcommand not found: ${name}`);
           }
           if (callbacks?.subcommand && subcommand) {
-            callbacks.subcommand(
-              state.subcommand.subcommands[name],
-              annotation,
-            );
+            callbacks.subcommand(state.subcommand.subcommands[name], annotation);
           }
           return {
             ...initialState,
@@ -206,9 +195,7 @@ export const walkSubcommand = <
           };
         }
         if (type === TokenType.Option) {
-          const option =
-            state.subcommand.options[name] ??
-            state.subcommand.persistentOptions[name];
+          const option = state.subcommand.options[name] ?? state.subcommand.persistentOptions[name];
           if (!option && name !== "--") {
             throw new SuggestionNotFoundError(`Option not found: ${name}`);
           }

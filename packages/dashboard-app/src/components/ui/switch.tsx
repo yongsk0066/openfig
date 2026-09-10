@@ -11,8 +11,7 @@ const variants = cva(
       variant: {
         default:
           "data-[state=checked]:bg-dusk-500 data-[state=unchecked]:bg-dusk-200 dark:data-[state=checked]:bg-dusk-500 dark:data-[state=unchecked]:bg-zinc-950",
-        monotone:
-          "data-[state=checked]:bg-black data-[state=unchecked]:bg-input",
+        monotone: "data-[state=checked]:bg-black data-[state=unchecked]:bg-input",
         inverted:
           "data-[state=checked]:bg-transparent data-[state=unchecked]:bg-white/30 border-white h-[28px] w-[48px]",
       },
@@ -41,23 +40,17 @@ const thumbVariants = cva(
 );
 
 interface SwitchProps
-  extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>,
+  extends
+    React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>,
     VariantProps<typeof variants> {}
 
-const Switch = React.forwardRef<
-  React.ElementRef<typeof SwitchPrimitives.Root>,
-  SwitchProps
->(({ className, variant, ...props }, ref) => (
-  <SwitchPrimitives.Root
-    className={cn(variants({ variant, className }))}
-    {...props}
-    ref={ref}
-  >
-    <SwitchPrimitives.Thumb
-      className={cn(thumbVariants({ variant, className }))}
-    />
-  </SwitchPrimitives.Root>
-));
+const Switch = React.forwardRef<React.ElementRef<typeof SwitchPrimitives.Root>, SwitchProps>(
+  ({ className, variant, ...props }, ref) => (
+    <SwitchPrimitives.Root className={cn(variants({ variant, className }))} {...props} ref={ref}>
+      <SwitchPrimitives.Thumb className={cn(thumbVariants({ variant, className }))} />
+    </SwitchPrimitives.Root>
+  ),
+);
 Switch.displayName = SwitchPrimitives.Root.displayName;
 
 export { Switch };

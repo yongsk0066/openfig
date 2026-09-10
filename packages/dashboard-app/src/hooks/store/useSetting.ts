@@ -12,9 +12,6 @@ export function useSetting(key: string) {
 
   return [
     useStore(store, (state) => state.settings![key]),
-    useStore(
-      store,
-      (state) => (value: unknown) => state.setSetting(key, value),
-    ),
+    useStore(store, (state) => (value: unknown) => state.setSetting(key, value)),
   ] as const;
 }

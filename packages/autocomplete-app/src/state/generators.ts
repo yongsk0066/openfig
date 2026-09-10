@@ -2,10 +2,7 @@ import logger from "loglevel";
 import { StoreApi } from "zustand";
 import { sleep } from "@aws/amazon-q-developer-cli-shared/utils";
 import { ArgumentParserResult } from "@aws/amazon-q-developer-cli-autocomplete-parser";
-import {
-  SETTINGS,
-  getSetting,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
 import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
@@ -14,9 +11,7 @@ import { NamedSetState, AutocompleteState } from "./types";
 import { GeneratorState, GeneratorContext } from "../generators/helpers";
 import { isTemplateSuggestion } from "../suggestions";
 
-export const shellContextSelector = ({
-  figState,
-}: AutocompleteState): Fig.ShellContext => ({
+export const shellContextSelector = ({ figState }: AutocompleteState): Fig.ShellContext => ({
   currentWorkingDirectory: figState.cwd || "",
   currentProcess: figState.processUserIsIn || "",
   environmentVariables: figState.environmentVariables,
@@ -104,9 +99,7 @@ export const createGeneratorState = (
           // suggestions are too
           const suggestions = await request;
           if (suggestions[0] && isTemplateSuggestion(suggestions[0])) {
-            return generator.filterTemplateSuggestions!(
-              suggestions as Fig.TemplateSuggestion[],
-            );
+            return generator.filterTemplateSuggestions!(suggestions as Fig.TemplateSuggestion[]);
           }
           return suggestions;
         })();
@@ -115,9 +108,7 @@ export const createGeneratorState = (
     return updateGeneratorOnResult({ ...currentState, loading: true, request });
   };
 
-  const triggerGenerators = (
-    parserResult: ArgumentParserResult,
-  ): GeneratorState[] => {
+  const triggerGenerators = (parserResult: ArgumentParserResult): GeneratorState[] => {
     const state = get();
     const {
       parserResult: { currentArg: previousArg, searchTerm: previousSearchTerm },
@@ -140,25 +131,20 @@ export const createGeneratorState = (
       } else {
         let triggerFn: (a: string, b: string) => boolean;
         if (typeof trigger === "string") {
-          triggerFn = (a, b) =>
-            a.lastIndexOf(trigger) !== b.lastIndexOf(trigger);
+          triggerFn = (a, b) => a.lastIndexOf(trigger) !== b.lastIndexOf(trigger);
         } else if (typeof trigger === "function") {
           triggerFn = trigger;
         } else {
           switch (trigger.on) {
             case "threshold": {
-              triggerFn = (a, b) =>
-                a.length > trigger.length && !(b.length > trigger.length);
+              triggerFn = (a, b) => a.length > trigger.length && !(b.length > trigger.length);
               break;
             }
             case "match": {
               const strings =
-                typeof trigger.string === "string"
-                  ? [trigger.string]
-                  : trigger.string;
+                typeof trigger.string === "string" ? [trigger.string] : trigger.string;
               triggerFn = (a, b) =>
-                strings.findIndex((x) => x === a) !==
-                strings.findIndex((x) => x === b);
+                strings.findIndex((x) => x === a) !== strings.findIndex((x) => x === b);
               break;
             }
             case "change":

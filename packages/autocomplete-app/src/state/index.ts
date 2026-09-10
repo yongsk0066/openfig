@@ -4,11 +4,7 @@ import { Mutate, StateCreator, StoreApi } from "zustand";
 import { createWithEqualityFn } from "zustand/traditional";
 
 import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import {
-  fieldsAreEqual,
-  makeArray,
-  memoizeOne,
-} from "@aws/amazon-q-developer-cli-shared/utils";
+import { fieldsAreEqual, makeArray, memoizeOne } from "@aws/amazon-q-developer-cli-shared/utils";
 import { AliasMap, getCommand } from "@aws/amazon-q-developer-cli-shell-parser";
 import {
   ArgumentParserResult,
@@ -25,11 +21,7 @@ import { FigState, initialFigState } from "../fig/hooks";
 import { AutocompleteState, NamedSetState, Visibility } from "./types";
 
 import { updatePriorities } from "../suggestions/sorting";
-import {
-  deduplicateSuggestions,
-  filterSuggestions,
-  getAllSuggestions,
-} from "../suggestions";
+import { deduplicateSuggestions, filterSuggestions, getAllSuggestions } from "../suggestions";
 
 import { GeneratorState } from "../generators/helpers";
 
@@ -62,16 +54,11 @@ const getCommandMemoized = memoizeOne(getCommand);
 const getEnvVarsMemoized = memoizeOne(
   (arr: Types.EnvironmentVariable[]) =>
     Object.fromEntries(
-      arr
-        .map((pair) => [pair.key, pair.value])
-        .filter((pair) => pair[0] && pair[1]),
+      arr.map((pair) => [pair.key, pair.value]).filter((pair) => pair[0] && pair[1]),
     ),
   ([a], [b]) =>
     a.length === b.length &&
-    a.every(
-      (elem, index) =>
-        elem.key === b[index].key && elem.value === b[index].value,
-    ),
+    a.every((elem, index) => elem.key === b[index].key && elem.value === b[index].value),
 );
 
 const getAliasMemoized = memoizeOne(
@@ -90,14 +77,10 @@ const getAliasMemoized = memoizeOne(
         return acc;
       }, {} as AliasMap);
   },
-  ([aliasA, shellPathA], [aliasB, shellPathB]) =>
-    aliasA === aliasB && shellPathA === shellPathB,
+  ([aliasA, shellPathA], [aliasB, shellPathB]) => aliasA === aliasB && shellPathA === shellPathB,
 );
 
-const computeSuggestions = (
-  state: AutocompleteState,
-  settings: SettingsMap,
-) => {
+const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => {
   const {
     parserResult,
     command,
@@ -105,11 +88,7 @@ const computeSuggestions = (
   } = state;
   const { annotations } = parserResult;
 
-  const historySuggestions = getFullHistorySuggestions(
-    buffer,
-    command,
-    processUserIsIn || "",
-  );
+  const historySuggestions = getFullHistorySuggestions(buffer, command, processUserIsIn || "");
 
   const specSuggestions = getAllSuggestions(
     parserResult.currentArg,
@@ -125,20 +104,15 @@ const computeSuggestions = (
   if (historyMode === "show") {
     const existingNames = new Set();
     suggestions.forEach((suggestion) => {
-      makeArray(suggestion.name || []).forEach((name) =>
-        existingNames.add(name || ""),
-      );
+      makeArray(suggestion.name || []).forEach((name) => existingNames.add(name || ""));
     });
     // Remove suggestions whose names are already in fig's suggestions
-    suggestions.push(
-      ...historySuggestions.filter((x) => !existingNames.has(x.name)),
-    );
+    suggestions.push(...historySuggestions.filter((x) => !existingNames.has(x.name)));
 
     const historyPriorities: Record<string, number> = {};
     for (let i = 0; i < historySuggestions.length; i += 1) {
       const name = makeArray(historySuggestions[i].name)[0] || "";
-      historyPriorities[name.split(" ", 1)[0]] =
-        historySuggestions[i].priority || 50;
+      historyPriorities[name.split(" ", 1)[0]] = historySuggestions[i].priority || 50;
     }
     suggestions = updatePriorities(suggestions, command?.tokens[0]?.text ?? "");
 
@@ -147,9 +121,7 @@ const computeSuggestions = (
       ...suggestion,
       priority: Math.max(
         suggestion.priority || 0,
-        ...makeArray(suggestion.name).map(
-          (name) => historyPriorities[name || ""] || 0,
-        ),
+        ...makeArray(suggestion.name).map((name) => historyPriorities[name || ""] || 0),
       ),
     }));
   } else if (historyMode === "history_only") {
@@ -158,10 +130,9 @@ const computeSuggestions = (
     suggestions = historySuggestions;
   }
 
-  suggestions = updatePriorities(
-    suggestions,
-    command?.tokens[0]?.text ?? "",
-  ).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  suggestions = updatePriorities(suggestions, command?.tokens[0]?.text ?? "").sort(
+    (a, b) => (b.priority || 0) - (a.priority || 0),
+  );
 
   const filtered = filterSuggestions(
     suggestions,
@@ -175,12 +146,7 @@ const computeSuggestions = (
   // Deduplication is relatively slow, so we only do it if there aren't
   // enough suggestions to cause any noticeable performance issues.
   if (filtered.length > 0 && filtered.length <= 50) {
-    return deduplicateSuggestions(filtered, [
-      "name",
-      "insertValue",
-      "displayName",
-      "args",
-    ]);
+    return deduplicateSuggestions(filtered, ["name", "insertValue", "displayName", "args"]);
   }
   return filtered;
 };
@@ -208,11 +174,7 @@ const updateSuggestions =
             "parserResult",
             "generatorStates",
             "historyModeEnabled",
-          ]) ||
-          !fieldsAreEqual(updatedState.figState, state.figState, [
-            "cwd",
-            "buffer",
-          ]);
+          ]) || !fieldsAreEqual(updatedState.figState, state.figState, ["cwd", "buffer"]);
         const wasVisible = state.visibleState === Visibility.VISIBLE;
         const willBeVisible = updatedState.visibleState === Visibility.VISIBLE;
 
@@ -251,10 +213,7 @@ const updateSuggestions =
           }
         }
 
-        set(
-          { ...state, ...update, suggestions, selectedIndex, hasChangedIndex },
-          replace,
-        );
+        set({ ...state, ...update, suggestions, selectedIndex, hasChangedIndex }, replace);
       },
       get,
       api,
@@ -298,16 +257,14 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
             let { visibleState, generatorStates } = state;
 
             // Trigger all generators on currentArg change.
-            const hasNewArg = !fieldsAreEqual(
-              parserResult,
-              state.parserResult,
-              ["currentArg", "completionObj"],
-            );
+            const hasNewArg = !fieldsAreEqual(parserResult, state.parserResult, [
+              "currentArg",
+              "completionObj",
+            ]);
 
             console.log(parserResult);
 
-            const newGeneratorStates =
-              generatorState.triggerGenerators(parserResult);
+            const newGeneratorStates = generatorState.triggerGenerators(parserResult);
             if (
               newGeneratorStates.length !== generatorStates.length ||
               generatorStates.some((s, idx) => s !== newGeneratorStates[idx])
@@ -325,8 +282,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
               case Visibility.HIDDEN_BY_INSERTION: {
                 const insertionTriggeredGenerator = state.generatorStates.some(
                   (oldState, idx) =>
-                    oldState.generator ===
-                      state.lastInsertedSuggestion?.generator &&
+                    oldState.generator === state.lastInsertedSuggestion?.generator &&
                     generatorStates[idx] !== oldState,
                 );
 
@@ -388,10 +344,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
 
         scroll: (index: number, visibleState: Visibility) =>
           setNamed("scroll", (state) => {
-            const selectedIndex = Math.max(
-              Math.min(index, state.suggestions.length - 1),
-              0,
-            );
+            const selectedIndex = Math.max(Math.min(index, state.suggestions.length - 1), 0);
             return {
               selectedIndex,
               visibleState,
@@ -402,9 +355,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
         setVisibleState: (visibleState: Visibility) =>
           setNamed("setVisibleState", { visibleState }),
 
-        setHistoryModeEnabled: (
-          historyModeEnabled: React.SetStateAction<boolean>,
-        ) =>
+        setHistoryModeEnabled: (historyModeEnabled: React.SetStateAction<boolean>) =>
           setNamed("setHistoryModeEnabled", (state) => ({
             historyModeEnabled:
               typeof historyModeEnabled === "function"
@@ -412,9 +363,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
                 : historyModeEnabled,
           })),
 
-        setUserFuzzySearchEnabled: (
-          userFuzzySearchEnabled: React.SetStateAction<boolean>,
-        ) =>
+        setUserFuzzySearchEnabled: (userFuzzySearchEnabled: React.SetStateAction<boolean>) =>
           setNamed("setUserFuzzySearchEnabled", (state) => ({
             userFuzzySearchEnabled:
               typeof userFuzzySearchEnabled === "function"
@@ -429,18 +378,10 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
            */
           setNamed("setFigState", (state) => {
             const figState =
-              typeof newFigState === "function"
-                ? newFigState(state.figState)
-                : newFigState;
+              typeof newFigState === "function" ? newFigState(state.figState) : newFigState;
 
-            const {
-              sshContextString,
-              cwd,
-              buffer,
-              cursorLocation,
-              aliases,
-              shellContext,
-            } = figState;
+            const { sshContextString, cwd, buffer, cursorLocation, aliases, shellContext } =
+              figState;
 
             // Set globalCWD and SSH string for completion specs that use executeShellCommand
             if (sshContextString) {
@@ -457,10 +398,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
               }
 
               if (shellContext.alias) {
-                figState.aliases = getAliasMemoized(
-                  shellContext.alias,
-                  shellContext.shellPath,
-                );
+                figState.aliases = getAliasMemoized(shellContext.alias, shellContext.shellPath);
               }
             }
 
@@ -486,11 +424,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
             const bufferSliced = buffer.slice(0, cursorLocation);
 
             try {
-              const command = getCommandMemoized(
-                bufferSliced,
-                aliases,
-                cursorLocation,
-              );
+              const command = getCommandMemoized(bufferSliced, aliases, cursorLocation);
               return { figState, command };
             } catch (err) {
               return error(`Failed to get token array: ${err}`);
@@ -509,10 +443,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
 
         setSettings: (settings: React.SetStateAction<SettingsMap>) =>
           setNamed("setSettings", (state) => ({
-            settings:
-              typeof settings === "function"
-                ? settings(state.settings)
-                : settings,
+            settings: typeof settings === "function" ? settings(state.settings) : settings,
           })),
       };
     }),

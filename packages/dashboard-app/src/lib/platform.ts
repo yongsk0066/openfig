@@ -12,10 +12,6 @@ export function matchesPlatformRestrictions(
   }
 
   return Object.entries(restrictions)
-    .map(
-      ([key, value]) =>
-        key in platformInfo &&
-        value === platformInfo[key as keyof PlatformInfo],
-    )
+    .map(([key, value]) => key in platformInfo && value === platformInfo[key as keyof PlatformInfo])
     .reduce((prev, curr) => prev && curr, true);
 }

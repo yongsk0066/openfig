@@ -71,9 +71,7 @@ export default function Page() {
         >
           Licenses
         </h2>
-        <div className={`flex p-4 pl-0 gap-4 whitespace-pre-wrap`}>
-          {license}
-        </div>
+        <div className={`flex p-4 pl-0 gap-4 whitespace-pre-wrap`}>{license}</div>
       </section>
     </>
   );

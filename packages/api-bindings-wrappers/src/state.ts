@@ -47,9 +47,7 @@ export class State {
     }
     DefaultState.didChange.subscribe((notification) => {
       const oldState = this.state;
-      const newState = JSON.parse(
-        notification.jsonBlob ?? "{}",
-      ) as LocalStateMap;
+      const newState = JSON.parse(notification.jsonBlob ?? "{}") as LocalStateMap;
       for (const subscriber of this.subscribers) {
         subscriber.changes(oldState, newState);
       }

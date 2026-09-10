@@ -76,15 +76,10 @@ export async function isInstalled(component: Component) {
   });
   switch (response.response?.case) {
     case "installationStatus":
-      if (
-        response.response.value === InstallResponse_InstallationStatus.INSTALLED
-      ) {
+      if (response.response.value === InstallResponse_InstallationStatus.INSTALLED) {
         return true;
       }
-      if (
-        response.response.value ===
-        InstallResponse_InstallationStatus.NOT_INSTALLED
-      ) {
+      if (response.response.value === InstallResponse_InstallationStatus.NOT_INSTALLED) {
         return false;
       }
       throw Error(`Unexpected result: ${response.response.value}`);

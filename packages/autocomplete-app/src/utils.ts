@@ -13,10 +13,9 @@ const DEFAULT_CONSOLE = {
 export const LOG_DIR = window.fig?.constants?.logsDir;
 
 const NEW_LOG_FN = (...content: unknown[]) => {
-  fs.append(
-    `${LOG_DIR}/logs/specs.log`,
-    `\n${util.format(...content)}`,
-  ).finally(() => DEFAULT_CONSOLE.warn("SPEC LOG:", util.format(...content)));
+  fs.append(`${LOG_DIR}/logs/specs.log`, `\n${util.format(...content)}`).finally(() =>
+    DEFAULT_CONSOLE.warn("SPEC LOG:", util.format(...content)),
+  );
 };
 
 export function runPipingConsoleMethods<T>(fn: () => T) {

@@ -77,9 +77,7 @@ describe("getNameMatch", () => {
     it("should match", () => {
       expect(getNameMatch(foo, "foo", true, false)).toEqual("foo");
       expect(getNameMatch(fooOrFoobar, "foo", true, false)).toEqual("foo");
-      expect(getNameMatch(fooOrFoobar, "foobar", true, false)).toEqual(
-        "FooBar",
-      );
+      expect(getNameMatch(fooOrFoobar, "foobar", true, false)).toEqual("FooBar");
       expect(getNameMatch(foo, "", true, false)).toEqual("foo");
       expect(getNameMatch(fooOrFoobar, "", true, false)).toEqual("foo");
     });
@@ -203,9 +201,7 @@ describe("getQueryTermForSuggestion", () => {
   });
 
   it("works with query term fn", () => {
-    expect(getQueryTermForSuggestion(withGetQueryTerm, "~/foo")).toBe(
-      "foo~/foo",
-    );
+    expect(getQueryTermForSuggestion(withGetQueryTerm, "~/foo")).toBe("foo~/foo");
     expect(getQueryTermForSuggestion(withGetQueryTerm, "foo")).toBe("foofoo");
   });
 
@@ -223,14 +219,7 @@ describe("bestScoreMatch", () => {
 
   it("should return the best score found", () => {
     expect(
-      bestScoreMatch([
-        null,
-        { score: 10 },
-        null,
-        { score: 12 },
-        { score: 8 },
-        null,
-      ]),
+      bestScoreMatch([null, { score: 10 }, null, { score: 12 }, { score: 8 }, null]),
     ).toStrictEqual({ score: 12 });
   });
 });

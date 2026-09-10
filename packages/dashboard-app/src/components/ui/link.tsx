@@ -11,8 +11,7 @@ const variants = cva(
       variant: {
         default: "opacity-100 hover:opacity-70",
         primary: "text-primary-foreground hover:text-primary-foreground/70",
-        secondary:
-          "text-secondary-foreground hover:text-secondary-foreground/70",
+        secondary: "text-secondary-foreground hover:text-secondary-foreground/70",
         blue: "text-blue-500 hover:text-blue-800",
       },
     },
@@ -23,8 +22,7 @@ const variants = cva(
 );
 
 interface LinkPropsBase
-  extends VariantProps<typeof variants>,
-    React.HTMLAttributes<HTMLAnchorElement> {}
+  extends VariantProps<typeof variants>, React.HTMLAttributes<HTMLAnchorElement> {}
 
 interface LinkPropsExternal extends LinkPropsBase {
   href: string;

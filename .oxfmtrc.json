@@ -11,6 +11,7 @@
     "tests/figterm2/**",
     "packages/fuzzysort/**",
     "pnpm-lock.yaml",
-    "**/*.md"
+    "**/*.md",
+    "resources/**"
   ]
 }

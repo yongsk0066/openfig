@@ -2,11 +2,7 @@ import logger from "loglevel";
 
 import { executeCommand } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
-import {
-  runCachedGenerator,
-  GeneratorContext,
-  haveContextForGenerator,
-} from "./helpers";
+import { runCachedGenerator, GeneratorContext, haveContextForGenerator } from "./helpers";
 
 export async function getCustomSuggestions(
   generator: Fig.Generator,

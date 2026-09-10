@@ -1,10 +1,6 @@
 import { Code } from "@/components/text/code";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useStatusCheck } from "@/hooks/store/useStatusCheck";
 import { InstallCheck } from "@/types/preferences";
 import { Install } from "@aws/amazon-q-developer-cli-api-bindings";
@@ -96,9 +92,7 @@ export default function InstallModal({
         )}
       </div>
       <div className="flex flex-col gap-2">
-        {error && (
-          <p className="text-xs text-red-500 dark:text-red-400">{error}</p>
-        )}
+        {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <Button
           disabled={checking}
           onClick={() => handleInstall(check.installKey)}
@@ -107,10 +101,7 @@ export default function InstallModal({
           {checking ? check.actionWaitingText || "Waiting..." : check.action}
         </Button>
         {(timeElapsed || check.skippable) && (
-          <button
-            className={"text-xs text-zinc-400 dark:text-zinc-400 self-center"}
-            onClick={skip}
-          >
+          <button className={"text-xs text-zinc-400 dark:text-zinc-400 self-center"} onClick={skip}>
             skip
           </button>
         )}

@@ -9,23 +9,18 @@ import { _subscribe, NotificationResponse } from "./notifications.js";
 import { create } from "@bufbuild/protobuf";
 
 export function pressed(
-  handler: (
-    notification: KeybindingPressedNotification,
-  ) => NotificationResponse | undefined,
+  handler: (notification: KeybindingPressedNotification) => NotificationResponse | undefined,
 ) {
-  return _subscribe(
-    { type: NotificationType.NOTIFY_ON_KEYBINDING_PRESSED },
-    (notification) => {
-      switch (notification?.type?.case) {
-        case "keybindingPressedNotification":
-          return handler(notification.type.value);
-        default:
-          break;
-      }
+  return _subscribe({ type: NotificationType.NOTIFY_ON_KEYBINDING_PRESSED }, (notification) => {
+    switch (notification?.type?.case) {
+      case "keybindingPressedNotification":
+        return handler(notification.type.value);
+      default:
+        break;
+    }
 
-      return { unsubscribe: false };
-    },
-  );
+    return { unsubscribe: false };
+  });
 }
 
 export function setInterceptKeystrokes(

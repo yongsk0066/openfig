@@ -25,11 +25,7 @@ export const tryResolveSpecToSubcommand = async (
       });
 
       if ("versions" in specFile) {
-        const result = getVersionFromVersionedSpec(
-          specFile.default,
-          specFile.versions,
-          version,
-        );
+        const result = getVersionFromVersionedSpec(specFile.default, specFile.versions, version);
         return result.spec;
       }
 

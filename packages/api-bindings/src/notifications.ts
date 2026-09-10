@@ -13,19 +13,14 @@ export type NotificationResponse = {
   unsubscribe: boolean;
 };
 
-export type NotificationHandler = (
-  notification: Notification,
-) => NotificationResponse | undefined;
+export type NotificationHandler = (notification: Notification) => NotificationResponse | undefined;
 export interface Subscription {
   unsubscribe(): void;
 }
 
 const handlers: Partial<Record<NotificationType, NotificationHandler[]>> = {};
 
-export function _unsubscribe(
-  type: NotificationType,
-  handler?: NotificationHandler,
-) {
+export function _unsubscribe(type: NotificationType, handler?: NotificationHandler) {
   if (handler && handlers[type] !== undefined) {
     handlers[type] = (handlers[type] ?? []).filter((x) => x !== handler);
   }
@@ -70,8 +65,7 @@ export function _subscribe(
                 });
 
                 handlers[type] = handlers[type]?.filter(
-                  (existingHandler) =>
-                    !handlersToRemove?.includes(existingHandler),
+                  (existingHandler) => !handlersToRemove?.includes(existingHandler),
                 );
 
                 return true;

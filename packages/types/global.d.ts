@@ -30,10 +30,7 @@ declare global {
       | undefined;
     let settings: Record<string, unknown>;
     const positioning: {
-      isValidFrame: (
-        frame: Frame,
-        callback?: (isValid: string) => void,
-      ) => void;
+      isValidFrame: (frame: Frame, callback?: (isValid: string) => void) => void;
       setFrame: (frame: Frame, callback?: () => void) => void;
     };
     let __inited__: boolean;

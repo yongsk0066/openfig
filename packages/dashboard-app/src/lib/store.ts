@@ -48,8 +48,7 @@ export const createStore = () => {
       await ApiState.set(key, value);
     },
     refreshAccessibilityIsInstalled: async () => {
-      const accessibilityIsInstalled =
-        await Install.isInstalled("accessibility");
+      const accessibilityIsInstalled = await Install.isInstalled("accessibility");
       set(() => ({ accessibilityIsInstalled }));
     },
     refreshDotfilesIsInstalled: async () => {
@@ -63,9 +62,7 @@ export const createStore = () => {
     isLoading: () => {
       const { state, settings, platformInfo } = get();
       // return true if any of the values are undefined
-      return (
-        state === undefined || settings === undefined || platformInfo === undefined
-      );
+      return state === undefined || settings === undefined || platformInfo === undefined;
     },
   }));
 

@@ -23,8 +23,6 @@ window.ipc = {
       `cargo run -p fig-api-mock -q -- request --cwd ${tempDir} ${message}`,
       { stdio: "pipe" },
     );
-    document.dispatchEvent(
-      new CustomEvent("FigProtoMessageReceived", { detail }),
-    );
+    document.dispatchEvent(new CustomEvent("FigProtoMessageReceived", { detail }));
   },
 };

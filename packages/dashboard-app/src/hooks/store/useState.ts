@@ -3,9 +3,7 @@ import { useContext } from "react";
 import { useStore } from "zustand";
 import z from "zod";
 
-export function useLocalState(
-  key: string,
-): readonly [unknown, (value: unknown) => void] {
+export function useLocalState(key: string): readonly [unknown, (value: unknown) => void] {
   const store = useContext(StoreContext);
   if (!store) throw new Error("Missing StoreContext.Provider in the tree");
   return [
@@ -31,10 +29,7 @@ export function useLocalStateZod<T>(
   schema: z.Schema<T>,
 ): readonly [T | undefined, (value: T) => void] {
   const [state, setState] = useLocalState(key);
-  return [
-    state === undefined ? undefined : schema.parse(state),
-    (value: T) => setState(value),
-  ];
+  return [state === undefined ? undefined : schema.parse(state), (value: T) => setState(value)];
 }
 
 export function useLocalStateZodDefault<T>(
@@ -49,10 +44,7 @@ export function useLocalStateZodDefault<T>(
   }
 
   const parsed = schema.safeParse(state);
-  return [
-    parsed.success ? parsed.data : defaultValue,
-    (value: T) => setState(value),
-  ];
+  return [parsed.success ? parsed.data : defaultValue, (value: T) => setState(value)];
 }
 
 export function useRefreshLocalState() {

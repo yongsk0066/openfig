@@ -1,20 +1,20 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/*",
-    "crates/macos-utils/accessibility-master/accessibility",
-    "crates/macos-utils/accessibility-master/accessibility-sys",
-    "crates/macos-utils/appkit-nsworkspace-bindings",
-    "tests/fig-api/fig-api-mock",
-    "tests/figterm2",
+  "crates/*",
+  "crates/macos-utils/accessibility-master/accessibility",
+  "crates/macos-utils/accessibility-master/accessibility-sys",
+  "crates/macos-utils/appkit-nsworkspace-bindings",
+  "tests/fig-api/fig-api-mock",
+  "tests/figterm2",
 ]
 default-members = ["crates/fig_desktop", "crates/figterm", "crates/q_cli"]
 
 [workspace.package]
 authors = [
-    "Amazon Q CLI Team (q-cli@amazon.com)",
-    "Chay Nabors (nabochay@amazon.com)",
-    "Brandon Kiser (bskiser@amazon.com)",
+  "Amazon Q CLI Team (q-cli@amazon.com)",
+  "Chay Nabors (nabochay@amazon.com)",
+  "Brandon Kiser (bskiser@amazon.com)",
 ]
 edition = "2024"
 homepage = "https://aws.amazon.com/q/"
@@ -34,13 +34,7 @@ bytes = "1.10.1"
 bitflags = { version = "2.9.0", features = ["serde"] }
 bstr = "1.12.0"
 camino = { version = "1.1.3", features = ["serde1"] }
-clap = { version = "4.5.32", features = [
-    "deprecated",
-    "derive",
-    "string",
-    "unicode",
-    "wrap_help",
-] }
+clap = { version = "4.5.32", features = ["deprecated", "derive", "string", "unicode", "wrap_help"] }
 chrono = { version = "0.4", features = ["serde"] }
 cocoa = "0.26.0"
 color-print = "0.3.5"
@@ -75,13 +69,13 @@ insta = "1.43.1"
 libc = "0.2.172"
 mimalloc = "0.1.46"
 nix = { version = "0.29.0", features = [
-    "feature",
-    "fs",
-    "ioctl",
-    "process",
-    "signal",
-    "term",
-    "user",
+  "feature",
+  "fs",
+  "ioctl",
+  "process",
+  "signal",
+  "term",
+  "user",
 ] }
 objc = "0.2.7"
 objc2 = "0.5.2"
@@ -111,22 +105,17 @@ sysinfo = "0.33.1"
 thiserror = "2.0.12"
 tempfile = "3.18.0"
 time = { version = "0.3.39", features = [
-    "parsing",
-    "formatting",
-    "local-offset",
-    "macros",
-    "serde",
+  "parsing",
+  "formatting",
+  "local-offset",
+  "macros",
+  "serde",
 ] }
 tokio = { version = "1.47.1", features = ["full"] }
 tokio-util = { version = "0.7.16", features = ["codec", "compat"] }
 toml = "0.8.12"
 tracing = { version = "0.1.40", features = ["log"] }
-tracing-subscriber = { version = "0.3.19", features = [
-    "env-filter",
-    "fmt",
-    "parking_lot",
-    "time",
-] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "parking_lot", "time"] }
 unicode-width = "0.2.0"
 url = "2.5.4"
 uuid = { version = "1.15.1", features = ["v4", "serde"] }

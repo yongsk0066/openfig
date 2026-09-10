@@ -1,11 +1,7 @@
 import logger from "loglevel";
 import { executeCommandTimeout } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
-import {
-  GeneratorContext,
-  haveContextForGenerator,
-  runCachedGenerator,
-} from "./helpers";
+import { GeneratorContext, haveContextForGenerator, runCachedGenerator } from "./helpers";
 
 export async function getScriptSuggestions(
   generator: Fig.Generator,
@@ -74,9 +70,7 @@ export async function getScriptSuggestions(
       runPipingConsoleMethods(() => {
         result = postProcess(stdout, tokenArray);
       });
-      result = result.filter(
-        (item) => item && (typeof item === "string" || !!item.name),
-      );
+      result = result.filter((item) => item && (typeof item === "string" || !!item.name));
     }
 
     // Generator can either output an array of strings or an array of suggestion objects.

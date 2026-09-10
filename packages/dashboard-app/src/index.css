@@ -150,27 +150,11 @@
   }
 
   .gradient-q-secondary-dark {
-    background: radial-gradient(
-        122.5% 122.5% at 0% 0%,
-        #000000 0%,
-        rgba(0, 0, 0, 0) 100%
-      ),
-      radial-gradient(
-        100% 100% at 0% 100%,
-        rgba(0, 0, 0, 0.7) 0%,
-        rgba(0, 0, 0, 0) 100%
-      ),
-      radial-gradient(
-        100% 100% at 100% 0%,
-        #6e3bf1 7.53%,
-        rgba(110, 59, 241, 0) 100%
-      ),
-      radial-gradient(
-        100% 86.61% at 100% 100%,
-        #538bf7 0%,
-        rgba(83, 139, 247, 0) 100%
-      ),
-      #301673;
+    background:
+      radial-gradient(122.5% 122.5% at 0% 0%, #000000 0%, rgba(0, 0, 0, 0) 100%),
+      radial-gradient(100% 100% at 0% 100%, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%),
+      radial-gradient(100% 100% at 100% 0%, #6e3bf1 7.53%, rgba(110, 59, 241, 0) 100%),
+      radial-gradient(100% 86.61% at 100% 100%, #538bf7 0%, rgba(83, 139, 247, 0) 100%), #301673;
   }
 
   .q-banner {

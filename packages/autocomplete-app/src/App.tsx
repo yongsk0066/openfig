@@ -1,16 +1,6 @@
-import {
-  WindowPosition,
-  Settings,
-} from "@aws/amazon-q-developer-cli-api-bindings";
+import { WindowPosition, Settings } from "@aws/amazon-q-developer-cli-api-bindings";
 import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  MutableRefObject,
-} from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, MutableRefObject } from "react";
 
 import logger from "loglevel";
 import { getCWDForFilesAndFolders } from "@aws/amazon-q-developer-cli-shared/utils";
@@ -22,12 +12,7 @@ import { loadHistory } from "./history";
 import "./index.css";
 import AutoSizedList, { AutoSizedHandleRef } from "./components/AutoSizedList";
 
-import {
-  useFigKeypress,
-  useFigAutocomplete,
-  useFigSettings,
-  useFigClearCache,
-} from "./fig/hooks";
+import { useFigKeypress, useFigAutocomplete, useFigSettings, useFigClearCache } from "./fig/hooks";
 
 import { getCommonSuggestionPrefix } from "./suggestions/helpers";
 
@@ -38,11 +23,7 @@ import {
   setInterceptKeystrokes,
   Direction,
 } from "./hooks/keypress";
-import {
-  useShake,
-  useDynamicResizeObserver,
-  useSystemTheme,
-} from "./hooks/helpers";
+import { useShake, useDynamicResizeObserver, useSystemTheme } from "./hooks/helpers";
 
 import Suggestion from "./components/Suggestion";
 import Description, { DescriptionPosition } from "./components/Description";
@@ -128,9 +109,7 @@ function App() {
     console.log("settingsFontSize", settingsFontSize);
 
     const fontSize =
-      typeof settingsFontSize === "number" && settingsFontSize > 0
-        ? settingsFontSize
-        : 12.8;
+      typeof settingsFontSize === "number" && settingsFontSize > 0 ? settingsFontSize : 12.8;
 
     setSize((oldSize) => ({
       ...oldSize,
@@ -176,8 +155,7 @@ function App() {
       .slice(0, -2)
       .trim();
     // Increase or decrease current size by 10%
-    const change = (val: number) =>
-      direction === Direction.INCREASE ? val * 1.1 : val / 1.1;
+    const change = (val: number) => (direction === Direction.INCREASE ? val * 1.1 : val / 1.1);
 
     setSize((oldSize) => ({
       fontSize: change(oldSize.fontSize ?? Number(currentFontSize)),
@@ -240,11 +218,7 @@ function App() {
       suggestions,
       interceptKeystrokes,
     });
-    setInterceptKeystrokes(
-      interceptKeystrokes,
-      suggestions.length > 0,
-      shellContext?.sessionId,
-    );
+    setInterceptKeystrokes(interceptKeystrokes, suggestions.length > 0, shellContext?.sessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interceptKeystrokes, suggestions.length]);
   useEffect(() => {
@@ -260,8 +234,7 @@ function App() {
     setFontFamily(fontFamily as string);
   }, [fontFamily]);
   // Scroll when selectedIndex changes.
-  const listRef =
-    useRef<AutoSizedHandleRef>() as MutableRefObject<AutoSizedHandleRef>;
+  const listRef = useRef<AutoSizedHandleRef>() as MutableRefObject<AutoSizedHandleRef>;
 
   const scrollToItemCallback = useCallback(() => {
     logger.info("Scrolling to", { selectedIndex });
@@ -284,8 +257,7 @@ function App() {
         .then(({ isAbove, isClipped }) => {
           if (isMostRecentEffect) {
             setWindowState((state) =>
-              state.isDescriptionSeparate ||
-              Boolean(suggestions[selectedIndex]?.previewComponent)
+              state.isDescriptionSeparate || Boolean(suggestions[selectedIndex]?.previewComponent)
                 ? {
                     ...state,
                     descriptionPosition: isClipped ? "left" : "right",
@@ -315,51 +287,47 @@ function App() {
   ]);
 
   const hasSpecialArgDescription =
-    suggestions.length === 0 &&
-    Boolean(currentArg?.name || currentArg?.description);
+    suggestions.length === 0 && Boolean(currentArg?.name || currentArg?.description);
 
-  const onResize: (size: { height?: number; width?: number }) => void =
-    useCallback(
-      ({ height, width }) => {
-        const onLeft =
-          !hasSpecialArgDescription &&
-          windowState.descriptionPosition === "left";
+  const onResize: (size: { height?: number; width?: number }) => void = useCallback(
+    ({ height, width }) => {
+      const onLeft = !hasSpecialArgDescription && windowState.descriptionPosition === "left";
 
-        const frame = {
-          height: height || 1,
-          width: width || 1,
-          anchorX: onLeft ? -POPOUT_WIDTH : 0,
-          offsetFromBaseline: -3,
-        };
-        logger.debug("Setting window position", { frame });
-        WindowPosition.setFrame(frame)
-          .then(({ isClipped, isAbove }) => {
-            setWindowState((state) =>
-              state.isDescriptionSeparate ||
-              devMode ||
-              Boolean(suggestions[selectedIndex]?.previewComponent)
-                ? {
-                    ...state,
-                    descriptionPosition: isClipped ? "left" : "right",
-                    isAboveCursor: isAbove ?? false,
-                    previewPosition: isClipped ? "left" : "right",
-                  }
-                : state,
-            );
-          })
-          .catch((err) => {
-            logger.debug("Unable to set window position", { err });
-          });
-      },
+      const frame = {
+        height: height || 1,
+        width: width || 1,
+        anchorX: onLeft ? -POPOUT_WIDTH : 0,
+        offsetFromBaseline: -3,
+      };
+      logger.debug("Setting window position", { frame });
+      WindowPosition.setFrame(frame)
+        .then(({ isClipped, isAbove }) => {
+          setWindowState((state) =>
+            state.isDescriptionSeparate ||
+            devMode ||
+            Boolean(suggestions[selectedIndex]?.previewComponent)
+              ? {
+                  ...state,
+                  descriptionPosition: isClipped ? "left" : "right",
+                  isAboveCursor: isAbove ?? false,
+                  previewPosition: isClipped ? "left" : "right",
+                }
+              : state,
+          );
+        })
+        .catch((err) => {
+          logger.debug("Unable to set window position", { err });
+        });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      windowState.descriptionPosition,
+      hasSpecialArgDescription,
+      isHidden,
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [
-        windowState.descriptionPosition,
-        hasSpecialArgDescription,
-        isHidden,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        suggestions[selectedIndex]?.previewComponent,
-      ],
-    );
+      suggestions[selectedIndex]?.previewComponent,
+    ],
+  );
 
   useEffect(() => {
     onResize({});
@@ -389,13 +357,8 @@ function App() {
     />
   );
 
-  const hasBottomDescription =
-    descriptionPosition === "unknown" && description !== null;
-  const listClasses = [
-    "rounded",
-    isShaking && "shake",
-    hasBottomDescription && "rounded-b-none",
-  ];
+  const hasBottomDescription = descriptionPosition === "unknown" && description !== null;
+  const listClasses = ["rounded", isShaking && "shake", hasBottomDescription && "rounded-b-none"];
 
   const devModeWarning: React.ReactNode = devMode ? (
     <div
@@ -405,16 +368,11 @@ function App() {
       className="m-1 space-y-1.5 rounded bg-amber-500 px-2.5 py-2 text-black"
     >
       <div className="text-base font-bold">Developer mode enabled!</div>
-      <div className="text-sm">
-        Loading specs from disk. Disable with either
-      </div>
+      <div className="text-sm">Loading specs from disk. Disable with either</div>
       <div className="ml-2 flex flex-col gap-1 text-xs">
         <div>
-          •{" "}
-          <code className="rounded-sm bg-zinc-700 p-0.5 text-zinc-200">
-            Ctrl + C
-          </code>{" "}
-          in the dev mode process
+          • <code className="rounded-sm bg-zinc-700 p-0.5 text-zinc-200">Ctrl + C</code> in the dev
+          mode process
         </div>
         <div>
           {"• "}
@@ -449,9 +407,7 @@ function App() {
                 ? {
                     width: size.suggestionWidth,
                     height: "100%",
-                    alignSelf: windowState.isAboveCursor
-                      ? "flex-end"
-                      : "flex-start",
+                    alignSelf: windowState.isAboveCursor ? "flex-end" : "flex-start",
                     maxHeight: size.maxHeight,
                   }
                 : {}

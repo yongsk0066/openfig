@@ -21,16 +21,11 @@ export default {
         // colors from v1 (8 colors, component focused)
         "main-bg": "rgb(var(--main-bg-color, 48 48 48) / <alpha-value>)",
         "main-text": "rgb(var(--main-text-color, 180 180 180) / <alpha-value>)",
-        "description-text":
-          "rgb(var(--description-text-color, 180 180 180) / <alpha-value>)",
-        "description-border":
-          "rgb(var(--description-border-color, 65 65 65) / <alpha-value>)",
-        "selected-bg":
-          "rgb(var(--selected-bg-color, 30 90 199) / <alpha-value>)",
-        "selected-text":
-          "rgb(var(--selected-text-color, 253 253 253) / <alpha-value>)",
-        "matching-bg":
-          "rgb(var(--matching-bg-color, 95 89 56) / <alpha-value>)",
+        "description-text": "rgb(var(--description-text-color, 180 180 180) / <alpha-value>)",
+        "description-border": "rgb(var(--description-border-color, 65 65 65) / <alpha-value>)",
+        "selected-bg": "rgb(var(--selected-bg-color, 30 90 199) / <alpha-value>)",
+        "selected-text": "rgb(var(--selected-text-color, 253 253 253) / <alpha-value>)",
+        "matching-bg": "rgb(var(--matching-bg-color, 95 89 56) / <alpha-value>)",
         "selected-matching-bg":
           "rgb(var(--selected-matching-bg-color, 106 142 218) / <alpha-value>)",
 

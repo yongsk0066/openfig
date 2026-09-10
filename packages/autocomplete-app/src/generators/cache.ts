@@ -59,11 +59,7 @@ class CacheEntry<T> {
 export class Cache {
   private cache = new Map<string, CacheEntry<unknown>>();
 
-  async entry<T>(
-    key: string,
-    run: () => Promise<T>,
-    cache: Fig.Cache,
-  ): Promise<T> {
+  async entry<T>(key: string, run: () => Promise<T>, cache: Fig.Cache): Promise<T> {
     if (!this.cache.has(key)) {
       this.cache.set(key, new CacheEntry());
     }

@@ -6,9 +6,7 @@ export default function Page() {
   return (
     <div className="flex flex-col items-start gap-4">
       <div className="flex flex-col">
-        <h1 className="text-2xl font-bold dark:text-zinc-400">
-          Getting started
-        </h1>
+        <h1 className="text-2xl font-bold dark:text-zinc-400">Getting started</h1>
       </div>
       <div className="flex flex-col gap-2 w-full border bg-zinc-50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-600 rounded-lg p-4 mb-4 overflow-x-auto">
         <h2 className="font-bold font-ember tracking-tight text-lg dark:text-zinc-300">
@@ -26,8 +24,8 @@ export default function Page() {
           </li>
           <li>
             <span className="text-sm">
-              <span className="font-semibold">Want to customize settings?</span>{" "}
-              Use the tabs in the sidebar.
+              <span className="font-semibold">Want to customize settings?</span> Use the tabs in the
+              sidebar.
             </span>
           </li>
         </ol>

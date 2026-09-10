@@ -51,13 +51,10 @@ export function sendMessage(
   submessage: ClientOriginatedMessage["submessage"],
   handler?: APIResponseHandler,
 ) {
-  const request: ClientOriginatedMessage = create(
-    ClientOriginatedMessageSchema,
-    {
-      id: BigInt((messageId += 1)),
-      submessage,
-    },
-  );
+  const request: ClientOriginatedMessage = create(ClientOriginatedMessageSchema, {
+    id: BigInt((messageId += 1)),
+    submessage,
+  });
 
   if (handler && request.id) {
     handlers[request.id.toString()] = handler;
@@ -65,10 +62,7 @@ export function sendMessage(
 
   const buffer = toBinary(ClientOriginatedMessageSchema, request);
 
-  if (
-    window?.fig?.constants?.supportApiProto &&
-    window?.fig?.constants?.apiProtoUrl
-  ) {
+  if (window?.fig?.constants?.supportApiProto && window?.fig?.constants?.apiProtoUrl) {
     const url = new URL(window.fig.constants.apiProtoUrl);
 
     if (typeof request.submessage?.case === "string") {
@@ -98,9 +92,7 @@ export function sendMessage(
     return;
   }
 
-  console.error(
-    "Cannot send request. Fig.js is not supported in this browser.",
-  );
+  console.error("Cannot send request. Fig.js is not supported in this browser.");
 }
 
 const setupEventListeners = (): void => {

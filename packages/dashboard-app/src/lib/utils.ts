@@ -5,10 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function interpolateSettingBoolean(
-  value: boolean | string,
-  inverted?: boolean,
-) {
+export function interpolateSettingBoolean(value: boolean | string, inverted?: boolean) {
   if (inverted) {
     return !value;
   } else {

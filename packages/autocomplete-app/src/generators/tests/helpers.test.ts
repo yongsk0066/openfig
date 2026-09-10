@@ -64,9 +64,7 @@ describe("runCachedGenerator", () => {
     it("should return the right result", async () => {
       initialRun.mockResolvedValue("result");
 
-      expect(
-        await runCachedGenerator({}, context, initialRun, "command"),
-      ).toEqual("result");
+      expect(await runCachedGenerator({}, context, initialRun, "command")).toEqual("result");
       expect(initialRun).toHaveBeenCalled();
     });
 
@@ -107,10 +105,7 @@ describe("runCachedGenerator", () => {
     });
 
     it("should call initialRun twice with directory change", async () => {
-      const contexts = [
-        context,
-        { ...context, currentWorkingDirectory: "/test" },
-      ];
+      const contexts = [context, { ...context, currentWorkingDirectory: "/test" }];
       const generator: Fig.Generator = {
         cache: {
           ttl: 1000,
@@ -127,10 +122,7 @@ describe("runCachedGenerator", () => {
     });
 
     it("should call initialRun once with directory change and not caching by directory", async () => {
-      const contexts = [
-        context,
-        { ...context, currentWorkingDirectory: "/test" },
-      ];
+      const contexts = [context, { ...context, currentWorkingDirectory: "/test" }];
       const generator: Fig.Generator = {
         cache: {
           ttl: 1000,

@@ -1,7 +1,4 @@
-import {
-  Annotation,
-  TokenType,
-} from "@aws/amazon-q-developer-cli-autocomplete-parser";
+import { Annotation, TokenType } from "@aws/amazon-q-developer-cli-autocomplete-parser";
 import { Subcommand } from "@aws/amazon-q-developer-cli-shared/internal";
 import { describe, expect, it } from "vitest";
 import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
@@ -133,9 +130,7 @@ describe.todo("getTemplateSuggestions", () => {
         tokenArray: ["foo", "help", ""],
       };
       expect(
-        (await getTemplateSuggestions({ template: "help" }, context)).map(
-          (v) => v.name,
-        ),
+        (await getTemplateSuggestions({ template: "help" }, context)).map((v) => v.name),
       ).toEqual(["bar", "cat", "zar", "zarzar"]);
     });
 
@@ -161,9 +156,7 @@ describe.todo("getTemplateSuggestions", () => {
         tokenArray: ["foo", "cat", "help"],
       };
       expect(
-        (await getTemplateSuggestions({ template: "help" }, context)).map(
-          (v) => v.name,
-        ),
+        (await getTemplateSuggestions({ template: "help" }, context)).map((v) => v.name),
       ).toEqual([]);
     });
 
@@ -192,9 +185,7 @@ describe.todo("getTemplateSuggestions", () => {
         tokenArray: ["foo", "bar", "--help", ""],
       };
       expect(
-        (await getTemplateSuggestions({ template: "help" }, context)).map(
-          (v) => v.name,
-        ),
+        (await getTemplateSuggestions({ template: "help" }, context)).map((v) => v.name),
       ).toEqual(["zoo"]);
     });
   });

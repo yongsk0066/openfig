@@ -90,8 +90,7 @@ const Description = ({
 
   const itemType = selectedItem?.type || "";
   const itemDescription =
-    selectedItem?.description ||
-    (["file", "folder"].includes(itemType) ? itemType : "");
+    selectedItem?.description || (["file", "folder"].includes(itemType) ? itemType : "");
 
   let description = itemDescription.trim();
   let name = "";
@@ -101,9 +100,7 @@ const Description = ({
     name = currentArg?.name?.trim() || "";
   }
 
-  const emptyDescription = (
-    <span className="text-[#8c8c8c]">No description</span>
-  );
+  const emptyDescription = <span className="text-[#8c8c8c]">No description</span>;
 
   if (!hasSuggestions || position === "unknown") {
     const stackNameAndDescription = !hasSuggestions && name && description;
@@ -118,15 +115,10 @@ const Description = ({
           {name && <strong>{name}</strong>}
           {name && description && ": "}
           {stackNameAndDescription && <br />}
-          {!hasSuggestions || name
-            ? description
-            : description || emptyDescription}
+          {!hasSuggestions || name ? description : description || emptyDescription}
         </span>
         {hasSuggestions && shouldShowHint && hint && (
-          <div
-            className="descriptionHint rounded"
-            style={{ fontSize: height * 0.5 }}
-          >
+          <div className="descriptionHint rounded" style={{ fontSize: height * 0.5 }}>
             <span>{hint}</span>
           </div>
         )}

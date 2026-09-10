@@ -30,13 +30,8 @@ export default function IntegrationCard({
         className="absolute left-0 right-0 bottom-1/2 w-full h-full bg-no-repeat bg-cover"
       />
       <div className="flex flex-col relative z-10 items-center text-center">
-        <h3 className="text-white font-ember text-xl font-bold">
-          {integration.title}
-        </h3>
-        <img
-          className="h-40 w-40"
-          src={`/images/integrations/icons/${integrationId}.png`}
-        />
+        <h3 className="text-white font-ember text-xl font-bold">{integration.title}</h3>
+        <img className="h-40 w-40" src={`/images/integrations/icons/${integrationId}.png`} />
       </div>
       <p className="text-black/50 dark:text-white/50 self-center text-center flex-auto">
         {integration.description}

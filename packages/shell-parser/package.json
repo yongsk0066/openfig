@@ -4,13 +4,13 @@
   "license": "MIT OR Apache-2.0",
   "author": "Amazon Web Services",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
-  "type": "module",
-  "exports": "./dist/index.js",
   "files": [
     "dist"
   ],
-  "engines": {
-    "node": ">=18"
+  "type": "module",
+  "exports": "./dist/index.js",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "tsc --watch",
@@ -28,7 +28,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.0.8"
   },
-  "publishConfig": {
-    "access": "public"
+  "engines": {
+    "node": ">=18"
   }
 }

@@ -132,8 +132,7 @@ const keybindings = [
       {
         id: "autocomplete.insertSelectedAndExecute",
         title: "Insert selected and execute",
-        description:
-          "Insert selected suggestion and then execute the current command.",
+        description: "Insert selected suggestion and then execute the current command.",
         availability: "WHEN_FOCUSED",
         type: "keystrokes",
         default: [],

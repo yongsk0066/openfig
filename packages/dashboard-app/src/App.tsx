@@ -15,10 +15,7 @@ import { getIconFromName } from "./lib/icons";
 import { StoreContext } from "./context/zustand";
 import { createStore } from "./lib/store";
 import ListenerContext from "./context/input";
-import {
-  useAccessibilityCheck,
-  useDotfilesCheck,
-} from "./hooks/store";
+import { useAccessibilityCheck, useDotfilesCheck } from "./hooks/store";
 import { useLocalStateZodDefault } from "./hooks/store/useState";
 import { z } from "zod";
 import { useState } from "react";
@@ -167,9 +164,7 @@ const useNavData = () => {
       name: "Preferences",
       link: "/preferences",
     },
-  ].filter((data) =>
-    matchesPlatformRestrictions(platformInfo, data.platformRestrictions),
-  );
+  ].filter((data) => matchesPlatformRestrictions(platformInfo, data.platformRestrictions));
 };
 
 function Layout() {
@@ -181,9 +176,7 @@ function Layout() {
   const [accessibilityCheck] = useAccessibilityCheck();
   const [dotfilesCheck] = useDotfilesCheck();
   const navData = useNavData();
-  const error =
-    onboardingComplete &&
-    (accessibilityCheck === false || dotfilesCheck === false);
+  const error = onboardingComplete && (accessibilityCheck === false || dotfilesCheck === false);
 
   return (
     <div className="flex flex-row h-screen w-full overflow-hidden bg-white dark:bg-zinc-800 text-black dark:text-zinc-200">

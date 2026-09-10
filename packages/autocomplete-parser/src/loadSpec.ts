@@ -7,10 +7,7 @@ import {
   splitPath,
   ensureTrailingSlash,
 } from "@aws/amazon-q-developer-cli-shared/utils";
-import {
-  Subcommand,
-  SpecLocation,
-} from "@aws/amazon-q-developer-cli-shared/internal";
+import { Subcommand, SpecLocation } from "@aws/amazon-q-developer-cli-shared/internal";
 import {
   SETTINGS,
   getSetting,
@@ -69,8 +66,7 @@ export const getSpecPath = async (
     return { name: "_shortcuts", type: SpecLocationSource.LOCAL, path };
   }
 
-  const personalShortcutsToken =
-    getSetting(SETTINGS.PERSONAL_SHORTCUTS_TOKEN) || "+";
+  const personalShortcutsToken = getSetting(SETTINGS.PERSONAL_SHORTCUTS_TOKEN) || "+";
   if (name === personalShortcutsToken) {
     return { name: "+", type: SpecLocationSource.LOCAL, path: "~/" };
   }
@@ -121,9 +117,7 @@ export const importSpecFromLocation = async (
     ? (getSetting(SETTINGS.DEV_COMPLETIONS_FOLDER) as string)
     : undefined;
 
-  const devPort = isInDevMode()
-    ? getSetting(SETTINGS.DEV_COMPLETIONS_SERVER_PORT)
-    : undefined;
+  const devPort = isInDevMode() ? getSetting(SETTINGS.DEV_COMPLETIONS_SERVER_PORT) : undefined;
 
   let specFile: SpecFileImport | undefined;
   let resolvedLocation: ResolvedSpecLocation | undefined;
@@ -178,11 +172,7 @@ export const importSpecFromLocation = async (
       }
     } else {
       try {
-        specFile = await importSpecFromFile(
-          name,
-          `~/.fig/autocomplete/build/`,
-          localLogger,
-        );
+        specFile = await importSpecFromFile(name, `~/.fig/autocomplete/build/`, localLogger);
       } catch (_err) {
         /* empty */
       }
@@ -216,12 +206,10 @@ export const loadSubcommandCached = async (
   localLogger: Logger = logger,
 ): Promise<Subcommand> => {
   const { name, type: source } = specLocation;
-  const path =
-    specLocation.type === SpecLocationSource.LOCAL ? specLocation.path : "";
+  const path = specLocation.type === SpecLocationSource.LOCAL ? specLocation.path : "";
 
   // Do not load completion spec for commands that are 'disabled' by user
-  const disabledSpecs =
-    <string[]>getSetting(SETTINGS.DISABLE_FOR_COMMANDS) || [];
+  const disabledSpecs = <string[]>getSetting(SETTINGS.DISABLE_FOR_COMMANDS) || [];
   if (disabledSpecs.includes(name)) {
     localLogger.info(`Not getting path for disabled spec ${name}`);
     throw new DisabledSpecError("Command requested disabled completion spec");
@@ -235,10 +223,7 @@ export const loadSubcommandCached = async (
     return specCache.get(key) as Subcommand;
   }
 
-  const subcommand = await withTimeout(
-    5000,
-    loadFigSubcommand(specLocation, context, localLogger),
-  );
+  const subcommand = await withTimeout(5000, loadFigSubcommand(specLocation, context, localLogger));
   const converted = convertSubcommand(subcommand, initializeDefault);
   specCache.set(key, converted);
   return converted;

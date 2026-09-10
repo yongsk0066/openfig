@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  Suggestion,
-  SuggestionType,
-} from "@aws/amazon-q-developer-cli-shared/internal";
+import { Suggestion, SuggestionType } from "@aws/amazon-q-developer-cli-shared/internal";
 import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
 
 type SuggestionIconProps = {
@@ -47,11 +44,7 @@ function renderIcon(icon: URL, height: string | number) {
     <div
       role="img"
       aria-label={
-        type
-          ? `Icon for ${type}`
-          : isTemplate
-            ? "Template icon"
-            : `Icon for ${icon.pathname}`
+        type ? `Icon for ${type}` : isTemplate ? "Template icon" : `Icon for ${icon.pathname}`
       }
       className="grid overflow-hidden bg-contain bg-no-repeat"
       style={{
@@ -79,9 +72,7 @@ function renderIcon(icon: URL, height: string | number) {
           <span
             className="flex h-2.5 w-2.5 place-content-center place-self-end bg-contain bg-no-repeat text-[80%] text-white"
             style={{
-              backgroundImage: `url(${transformIconUri(
-                new URL(`fig://template?color=${color}`),
-              )})`,
+              backgroundImage: `url(${transformIconUri(new URL(`fig://template?color=${color}`))})`,
             }}
           >
             {badge}
@@ -91,11 +82,7 @@ function renderIcon(icon: URL, height: string | number) {
   );
 }
 
-const SuggestionIcon = ({
-  suggestion,
-  iconPath,
-  style,
-}: SuggestionIconProps) => {
+const SuggestionIcon = ({ suggestion, iconPath, style }: SuggestionIconProps) => {
   const { icon, name, type } = suggestion;
   let img;
   let { height } = style;

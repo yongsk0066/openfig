@@ -1,8 +1,5 @@
 import logger from "loglevel";
-import {
-  Annotation,
-  TokenType,
-} from "@aws/amazon-q-developer-cli-autocomplete-parser";
+import { Annotation, TokenType } from "@aws/amazon-q-developer-cli-autocomplete-parser";
 import { makeArray, findLast } from "@aws/amazon-q-developer-cli-shared/utils";
 import { GeneratorContext } from "./helpers";
 import { getHistoryArgSuggestions } from "../history";
@@ -23,14 +20,11 @@ const getHelpSuggestions = (annotations: Annotation[]) => {
       if (annotations[i].type === TokenType.Subcommand) {
         if (annotations[i] === triggeringAnnotation) {
           // add triggering aliases
-          triggeringAliases = new Set(
-            lastSubcommandSpec.subcommands[annotations[i].text].name,
-          );
+          triggeringAliases = new Set(lastSubcommandSpec.subcommands[annotations[i].text].name);
         } else {
           // we resolve to the spec for the last subcommand available that satisfies the condition
           // of not being the same subcommand that triggered the generator
-          lastSubcommandSpec =
-            lastSubcommandSpec.subcommands[annotations[i].text];
+          lastSubcommandSpec = lastSubcommandSpec.subcommands[annotations[i].text];
         }
       }
     }
@@ -67,10 +61,7 @@ export async function getTemplateSuggestions(
 
   if (typesToInclude.has("history")) {
     try {
-      const historySuggestions = getHistoryArgSuggestions(
-        annotations,
-        currentProcess,
-      );
+      const historySuggestions = getHistoryArgSuggestions(annotations, currentProcess);
       suggestions.push(...historySuggestions);
     } catch (_err) {
       logger.error("template suggestion did not work for template: history");
@@ -81,7 +72,5 @@ export async function getTemplateSuggestions(
     suggestions.push(...getHelpSuggestions(annotations));
   }
 
-  return filterTemplateSuggestions
-    ? filterTemplateSuggestions(suggestions)
-    : suggestions;
+  return filterTemplateSuggestions ? filterTemplateSuggestions(suggestions) : suggestions;
 }

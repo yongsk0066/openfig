@@ -15,20 +15,16 @@ export default function OnboardingModal() {
   const [step, setStep] = useState(0);
   const check = onboarding[step] as InstallCheck;
   const [migrationStarted] = useLocalState("desktop.migratedFromFig");
-  const [migrationEnded, setMigrationEnded] = useLocalState(
-    "desktop.migratedFromFig.UiComplete",
-  );
+  const [migrationEnded, setMigrationEnded] = useLocalState("desktop.migratedFromFig.UiComplete");
   const [dotfilesCheck, refreshDotfiles] = useStatusCheck("dotfiles");
-  const [accessibilityCheck, refreshAccessibility] =
-    useStatusCheck("accessibility");
+  const [accessibilityCheck, refreshAccessibility] = useStatusCheck("accessibility");
   const refreshLocalState = useRefreshLocalState();
   const platformInfo = usePlatformInfo();
 
   const [_dotfiles, setDotfiles] = useState(dotfilesCheck);
   const [_accessibility, setAccessibility] = useState(accessibilityCheck);
 
-  const isMigrating =
-    Boolean(migrationStarted) === true && Boolean(migrationEnded) === false;
+  const isMigrating = Boolean(migrationStarted) === true && Boolean(migrationEnded) === false;
 
   useEffect(() => {
     refreshAccessibility();
@@ -69,10 +65,7 @@ export default function OnboardingModal() {
     }
   }
 
-  if (
-    platformInfo &&
-    !matchesPlatformRestrictions(platformInfo, check.platformRestrictions)
-  ) {
+  if (platformInfo && !matchesPlatformRestrictions(platformInfo, check.platformRestrictions)) {
     setStep(step + 1);
   }
 
@@ -84,9 +77,7 @@ export default function OnboardingModal() {
     return <WelcomeModal next={nextStep} />;
   }
 
-  if (
-    ["dotfiles", "accessibility"].includes(check.id)
-  ) {
+  if (["dotfiles", "accessibility"].includes(check.id)) {
     return (
       <InstallModal
         check={check}
@@ -99,21 +90,11 @@ export default function OnboardingModal() {
   return null;
 }
 
-export function WelcomeModal({
-  next,
-  figMigration,
-}: {
-  next: () => void;
-  figMigration?: boolean;
-}) {
+export function WelcomeModal({ next, figMigration }: { next: () => void; figMigration?: boolean }) {
   return (
     <div className="flex flex-col items-center gap-8 gradient-q-secondary-light -m-10 p-4 pt-10 rounded-lg text-white">
       <div className="flex flex-col items-center gap-8">
-        {figMigration ? (
-          <img src={migrate_dark} className="w-40" />
-        ) : (
-          <Lockup />
-        )}
+        {figMigration ? <img src={migrate_dark} className="w-40" /> : <Lockup />}
         <div className="flex flex-col gap-2 items-center text-center">
           <h2 className="text-2xl text-white font-semibold select-none leading-none font-ember tracking-tight">
             {figMigration ? "Almost done upgrading!" : "Welcome!"}

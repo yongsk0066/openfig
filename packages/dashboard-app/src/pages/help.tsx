@@ -16,10 +16,7 @@ export default function Page() {
           {platformInfo &&
             installChecks
               .filter((check) =>
-                matchesPlatformRestrictions(
-                  platformInfo,
-                  check.platformRestrictions,
-                ),
+                matchesPlatformRestrictions(platformInfo, check.platformRestrictions),
               )
               .map((check) => {
                 return <StatusCheck check={check} key={check.id} />;
@@ -27,9 +24,7 @@ export default function Page() {
         </div>
       </div>
       <div className="flex flex-col justify-between gap-4 self-stretch">
-        <h1 className="text-xl font-bold select-none mb-2">
-          Still having issues?
-        </h1>
+        <h1 className="text-xl font-bold select-none mb-2">Still having issues?</h1>
         <div className="flex flex-col gap-4">
           <ol className="flex flex-col gap-2">
             {support.steps.map((step, i) => {
@@ -55,12 +50,7 @@ export default function Page() {
             <div className="flex gap-4">
               {support.links.map((link, i) => {
                 return (
-                  <Link
-                    key={i}
-                    href={link.url}
-                    variant="blue"
-                    className="font-medium"
-                  >
+                  <Link key={i} href={link.url} variant="blue" className="font-medium">
                     {link.text} →
                   </Link>
                 );

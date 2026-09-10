@@ -3,23 +3,19 @@ import React, { forwardRef, useState } from "react";
 
 type TerminalTabProps = React.HTMLAttributes<HTMLDivElement>;
 
-const TerminalTab = forwardRef<HTMLDivElement, TerminalTabProps>(
-  ({ children, ...props }, ref) => {
-    return (
-      <div ref={ref} {...props}>
-        {children}
-      </div>
-    );
-  },
-);
+const TerminalTab = forwardRef<HTMLDivElement, TerminalTabProps>(({ children, ...props }, ref) => {
+  return (
+    <div ref={ref} {...props}>
+      {children}
+    </div>
+  );
+});
 
 interface TerminalProps {
   title?: string;
   tabNames?: string[];
   className?: string;
-  children:
-    | React.ReactElement<TerminalTabProps>
-    | React.ReactElement<TerminalTabProps>[];
+  children: React.ReactElement<TerminalTabProps> | React.ReactElement<TerminalTabProps>[];
 }
 
 function Terminal({ title, tabNames, className, children }: TerminalProps) {
@@ -44,9 +40,7 @@ function Terminal({ title, tabNames, className, children }: TerminalProps) {
           <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
           {title && (
             <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
-              <span className="text-xs text-zinc-200 font-mono cursor-default">
-                {title}
-              </span>
+              <span className="text-xs text-zinc-200 font-mono cursor-default">{title}</span>
             </div>
           )}
         </div>
@@ -75,9 +69,7 @@ function Terminal({ title, tabNames, className, children }: TerminalProps) {
           </div>
         )}
 
-        <div className="p-2">
-          {Array.isArray(children) ? children[activeTab] : children}
-        </div>
+        <div className="p-2">{Array.isArray(children) ? children[activeTab] : children}</div>
       </div>
     </div>
   );

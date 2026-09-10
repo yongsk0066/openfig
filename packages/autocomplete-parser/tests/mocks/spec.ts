@@ -1,8 +1,6 @@
 import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
 
-const generateSpec = async (
-  tokenArray: string[] | undefined,
-): Promise<Fig.Subcommand> => {
+const generateSpec = async (tokenArray: string[] | undefined): Promise<Fig.Subcommand> => {
   // Throw an error if we find an option in the tokenArray (allows us to
   // test error handling.
   if (tokenArray && tokenArray.find((x) => x.startsWith("-"))) {
@@ -26,8 +24,7 @@ const generateSpec = async (
 
 const partialCmd: Fig.Subcommand = {
   name: "",
-  description:
-    "Partial test subcommand with fixed set of options for use in unit tests",
+  description: "Partial test subcommand with fixed set of options for use in unit tests",
   // Covers (generateSpec/loadSpec/takesSpecialArg/normal) subcommand next tokens.
   subcommands: [
     {
@@ -126,15 +123,11 @@ const recursiveLoadSpecCmd: Fig.Subcommand = {
     },
     {
       name: "recursiveLoadSpecNested",
-      subcommands: [
-        { name: "nestedSubcommand", loadSpec: "recursiveLoadSpecNestedNested" },
-      ],
+      subcommands: [{ name: "nestedSubcommand", loadSpec: "recursiveLoadSpecNestedNested" }],
     },
     {
       name: "recursiveLoadSpecNestedNested",
-      subcommands: [
-        { name: "doubleNestedSubcommand", args: [{ name: "arg1" }] },
-      ],
+      subcommands: [{ name: "doubleNestedSubcommand", args: [{ name: "arg1" }] }],
     },
   ],
 };

@@ -22,9 +22,7 @@ export function useKeybindings(command: string, defaults: string[]) {
   // If it's been reassigned, remove it from the array
   const unchangedDefaults = defaults.filter((d) => {
     // Has the key been assigned to anything?
-    const index = Object.keys(settings).indexOf(
-      `autocomplete.keybindings.${d}`,
-    );
+    const index = Object.keys(settings).indexOf(`autocomplete.keybindings.${d}`);
     const value = Object.values(settings)[index];
     const keyIsSafe = index === -1 && value !== "ignore";
     // const keyCommandMatch = value === command

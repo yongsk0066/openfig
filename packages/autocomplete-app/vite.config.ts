@@ -1,9 +1,4 @@
-import {
-  defineConfig,
-  loadEnv,
-  type Plugin,
-  type HtmlTagDescriptor,
-} from "vite";
+import { defineConfig, loadEnv, type Plugin, type HtmlTagDescriptor } from "vite";
 import react from "@vitejs/plugin-react";
 // import legacy from "@vitejs/plugin-legacy";
 
@@ -75,12 +70,7 @@ export default defineConfig(({ mode, command }) => {
       // TODO: re-enable prod source maps to upload them to sentry (see build CIs)
       sourcemap: command !== "build",
       rollupOptions: {
-        external: [
-          "?type=option",
-          "?type=carrot",
-          "?type=command",
-          "?type=box",
-        ],
+        external: ["?type=option", "?type=carrot", "?type=command", "?type=box"],
       },
     },
     define: {

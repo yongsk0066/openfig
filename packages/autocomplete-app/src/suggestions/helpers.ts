@@ -76,8 +76,7 @@ export const getNameMatch = (
     .filter((x): x is string => x !== null && x !== undefined);
 
   const bestNameMatch = (names: string[]) =>
-    (suggestion.type === "option" || suggestion.type === "subcommand") &&
-    preferVerboseSuggestions
+    (suggestion.type === "option" || suggestion.type === "subcommand") && preferVerboseSuggestions
       ? getMostVerboseName(names)
       : names[0];
 
@@ -91,20 +90,13 @@ export const getNameMatch = (
 };
 
 // Returns first exact matching string (case sensitive or not) in name array.
-export const getExactNameMatch = (
-  suggestion: Suggestion,
-  query: string,
-): string | undefined => {
+export const getExactNameMatch = (suggestion: Suggestion, query: string): string | undefined => {
   const names = makeArray(suggestion.name || []) as string[];
   return names.find((name) => name.toLowerCase() === query.toLowerCase());
 };
 
-export const getQueryTermForSuggestion = (
-  suggestion: Suggestion,
-  searchTerm: string,
-): string => {
-  const getQueryTerm =
-    suggestion?.getQueryTerm || suggestion?.generator?.getQueryTerm;
+export const getQueryTermForSuggestion = (suggestion: Suggestion, searchTerm: string): string => {
+  const getQueryTerm = suggestion?.getQueryTerm || suggestion?.generator?.getQueryTerm;
   if (getQueryTerm) {
     if (typeof getQueryTerm === "string") {
       // If getQueryTerm is a string, get everything after the last occurrence of the string
@@ -117,10 +109,7 @@ export const getQueryTermForSuggestion = (
     }
   }
 
-  if (
-    suggestion?.type === "shortcut" &&
-    searchTerm.startsWith(SHORTCUT_PREFIX)
-  ) {
+  if (suggestion?.type === "shortcut" && searchTerm.startsWith(SHORTCUT_PREFIX)) {
     return searchTerm.slice(SHORTCUT_PREFIX.length);
   }
 
@@ -149,17 +138,14 @@ export const getCommonSuggestionPrefix = (
     ...selectedItem,
     type: itemType,
     name:
-      selectedItem.type === "auto-execute" &&
-      selectedItem.originalType === "folder"
+      selectedItem.type === "auto-execute" && selectedItem.originalType === "folder"
         ? makeArray(selectedItem.name ?? []).map(ensureTrailingSlash)
         : selectedItem.name,
   };
 
   const sameTypeSuggestionNames = suggestions
     .filter((suggestion) => isMatchingType(suggestion, typeFilterItem))
-    .map((suggestion) =>
-      (makeArray(suggestion.name || [])[0] ?? "").toLowerCase(),
-    );
+    .map((suggestion) => (makeArray(suggestion.name || [])[0] ?? "").toLowerCase());
 
   if (sameTypeSuggestionNames.length < 2) {
     return null;

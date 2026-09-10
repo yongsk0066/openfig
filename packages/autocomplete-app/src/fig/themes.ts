@@ -158,10 +158,7 @@ export const mapColor = (color: string) => {
   return color;
 };
 
-function setCSSProperties(
-  { version, theme, ...rest }: ThemeDefinition,
-  systemTheme: SystemTheme,
-) {
+function setCSSProperties({ version, theme, ...rest }: ThemeDefinition, systemTheme: SystemTheme) {
   const root = document.documentElement;
 
   let mainBgColor;
@@ -255,10 +252,7 @@ function setCSSProperties(
   root.style.setProperty("--description-border-color", descriptionBorderColor);
   root.style.setProperty("--selected-bg-color", selectedBgColor);
   root.style.setProperty("--selected-text-color", selectedTextColor);
-  root.style.setProperty(
-    "--selected-matching-bg-color",
-    selectedMatchingBgColor,
-  );
+  root.style.setProperty("--selected-matching-bg-color", selectedMatchingBgColor);
 
   // Set the rest of the colors
   root.style.setProperty("--shade0-color", shade0);
@@ -279,10 +273,7 @@ function setCSSProperties(
   root.style.setProperty("--accent7-color", accent7);
 }
 
-export async function setTheme(
-  currentSystemTheme: SystemTheme,
-  newTheme?: string,
-) {
+export async function setTheme(currentSystemTheme: SystemTheme, newTheme?: string) {
   try {
     if (!newTheme) throw new MissingThemeError();
     if (newTheme === "system") {
@@ -298,9 +289,7 @@ export async function setTheme(
       : undefined;
 
     if (!theme) {
-      throw new MissingThemeError(
-        "Cannot find a local theme with the specified name",
-      );
+      throw new MissingThemeError("Cannot find a local theme with the specified name");
     }
 
     const parsedTheme = JSON.parse(theme) as ThemeDefinition;
@@ -308,10 +297,7 @@ export async function setTheme(
     // All themes fallback to the dark theme if values are missing
     setCSSProperties({ ...builtInThemes.dark, ...parsedTheme }, "dark");
   } catch (err) {
-    logger.info(
-      "There was an error parsing the theme. Using default dark theme",
-      err,
-    );
+    logger.info("There was an error parsing the theme. Using default dark theme", err);
     setCSSProperties(builtInThemes.dark, "dark");
   }
 }
@@ -324,8 +310,5 @@ export function setFontFamily(fontFamily: string) {
 
 export function setFontSize(fontSize: number | undefined) {
   const root = document.documentElement;
-  root.style.setProperty(
-    "--font-size",
-    !fontSize || fontSize <= 0 ? "12.8px" : `${fontSize}px`,
-  );
+  root.style.setProperty("--font-size", !fontSize || fontSize <= 0 ? "12.8px" : `${fontSize}px`);
 }

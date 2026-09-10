@@ -1,16 +1,9 @@
 import { PointSchema, SizeSchema } from "@aws/amazon-q-developer-cli-proto/fig";
-import {
-  sendPositionWindowRequest,
-  sendDragWindowRequest,
-} from "./requests.js";
+import { sendPositionWindowRequest, sendDragWindowRequest } from "./requests.js";
 import { create } from "@bufbuild/protobuf";
 
 // Developer Facing API
-export async function isValidFrame(frame: {
-  width: number;
-  height: number;
-  anchorX: number;
-}) {
+export async function isValidFrame(frame: { width: number; height: number; anchorX: number }) {
   return sendPositionWindowRequest({
     size: create(SizeSchema, { width: frame.width, height: frame.height }),
     anchor: create(PointSchema, { x: frame.anchorX, y: 0 }),

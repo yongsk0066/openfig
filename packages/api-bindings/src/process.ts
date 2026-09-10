@@ -24,9 +24,7 @@ export async function run({
   return sendRunProcessRequest({
     executable,
     arguments: args,
-    env: Object.keys(env).map((key) =>
-      create(EnvironmentVariableSchema, { key, value: env[key] }),
-    ),
+    env: Object.keys(env).map((key) => create(EnvironmentVariableSchema, { key, value: env[key] })),
     workingDirectory,
     terminalSessionId,
     timeout: timeout

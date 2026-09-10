@@ -23,17 +23,9 @@ import { useSetting } from "@/hooks/store";
 import { parseBackticksToCode } from "@/lib/strings";
 import IntegrationCard from "../installs/integrations";
 
-export function Setting({
-  data,
-  disabled,
-}: {
-  data: Pref;
-  disabled?: boolean;
-}) {
+export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) {
   const [setting, setSetting] = useSetting(data.id);
-  const [inputValue, setInputValue] = useState<PrefDefault>(
-    setting ?? data.default,
-  );
+  const [inputValue, setInputValue] = useState<PrefDefault>(setting ?? data.default);
 
   // see if this specific setting is set in config file, then synchronize the initial state
   useEffect(() => {
@@ -87,11 +79,7 @@ export function Setting({
       {data.type !== "keystrokes" && (
         <div className="flex-none w-12">
           {data.type === "boolean" && (
-            <Switch
-              onClick={toggleSwitch}
-              checked={localValue as boolean}
-              disabled={disabled}
-            />
+            <Switch onClick={toggleSwitch} checked={localValue as boolean} disabled={disabled} />
           )}
         </div>
       )}
@@ -114,11 +102,7 @@ export function Setting({
           <div className="pt-1">
             {/* single value <select> menu */}
             {data.type === "select" && (
-              <Select
-                disabled={disabled}
-                onValueChange={setSelection}
-                value={localValue as string}
-              >
+              <Select disabled={disabled} onValueChange={setSelection} value={localValue as string}>
                 <SelectTrigger className="w-60">
                   <SelectValue />
                 </SelectTrigger>
@@ -168,9 +152,7 @@ export function Setting({
                 min={0}
                 step={1}
                 placeholder={
-                  typeof data.default === "string"
-                    ? data.default
-                    : data.default?.toString()
+                  typeof data.default === "string" ? data.default : data.default?.toString()
                 }
                 value={typeof localValue === "number" ? localValue : ""}
                 onChange={(e) => {
@@ -184,19 +166,13 @@ export function Setting({
                 disabled={disabled}
                 type="text"
                 placeholder={
-                  typeof data.default === "string"
-                    ? data.default
-                    : data.default?.toString()
+                  typeof data.default === "string" ? data.default : data.default?.toString()
                 }
                 value={Array.isArray(setting) ? setting.join(",") : ""}
                 onChange={(e) => {
                   // replace all whitespace
                   const value = e.target.value;
-                  setSetting(
-                    value === ""
-                      ? undefined
-                      : value.split(",").map((v) => v.trim()),
-                  );
+                  setSetting(value === "" ? undefined : value.split(",").map((v) => v.trim()));
                 }}
               />
             )}
@@ -206,9 +182,7 @@ export function Setting({
                 disabled={disabled}
                 type="text"
                 placeholder={
-                  typeof data.default === "string"
-                    ? data.default
-                    : data.default?.toString()
+                  typeof data.default === "string" ? data.default : data.default?.toString()
                 }
                 value={typeof setting === "string" ? setting : ""}
                 onChange={(e) => {

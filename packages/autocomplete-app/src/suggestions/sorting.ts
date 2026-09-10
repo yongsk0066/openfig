@@ -1,9 +1,6 @@
 import { makeArray } from "@aws/amazon-q-developer-cli-shared/utils";
 import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import {
-  SETTINGS,
-  getSetting,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 
 // { command: { commandParam: count/lastUsedDate } }
 // e.g. git: { add: 2, push: 4 }
@@ -17,10 +14,7 @@ const recencyIndex: Index = JSON.parse(
 );
 
 // This function is called every time a user does an autocomplete command
-export const updateAutocompleteIndexFromUserInsert = (
-  cmd: string,
-  param: string,
-) => {
+export const updateAutocompleteIndexFromUserInsert = (cmd: string, param: string) => {
   if (param.includes("↪")) return;
 
   const frequencyIndexCmd = frequencyIndex[cmd] || {};
@@ -37,16 +31,10 @@ export const updateAutocompleteIndexFromUserInsert = (
   };
 
   // Update frequency index
-  localStorage.setItem(
-    "term_frequency_index_fig_only",
-    JSON.stringify(frequencyIndex),
-  );
+  localStorage.setItem("term_frequency_index_fig_only", JSON.stringify(frequencyIndex));
 
   // Update recency index
-  localStorage.setItem(
-    "term_frequency_index_fig_only_recency",
-    JSON.stringify(recencyIndex),
-  );
+  localStorage.setItem("term_frequency_index_fig_only_recency", JSON.stringify(recencyIndex));
 };
 
 export const updatePriorities = (suggestions: Suggestion[], cmd: string) => {

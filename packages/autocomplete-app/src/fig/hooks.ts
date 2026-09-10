@@ -8,19 +8,14 @@ import {
   Types,
 } from "@aws/amazon-q-developer-cli-api-bindings";
 import { AliasMap } from "@aws/amazon-q-developer-cli-shell-parser";
-import {
-  SettingsMap,
-  updateSettings,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { SettingsMap, updateSettings } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { clearSpecIndex } from "@aws/amazon-q-developer-cli-autocomplete-parser";
 import { updateSelectSuggestionKeybindings } from "../actions";
 import { generatorCache } from "../generators/helpers";
 
 // TODO: expose Subscription type from API binding library
 type Unwrap<T> = T extends Promise<infer U> ? U : T;
-type Subscription = Unwrap<
-  NonNullable<ReturnType<(typeof EditBufferNotifications)["subscribe"]>>
->;
+type Subscription = Unwrap<NonNullable<ReturnType<(typeof EditBufferNotifications)["subscribe"]>>>;
 
 export type FigState = {
   buffer: string;
@@ -88,18 +83,11 @@ export const useFigSettings = (
   );
 };
 
-export const useFigKeypress = (
-  keypressCallback: Parameters<typeof Keybindings.pressed>[0],
-) => {
-  useFigSubscriptionEffect(
-    () => Keybindings.pressed(keypressCallback),
-    [keypressCallback],
-  );
+export const useFigKeypress = (keypressCallback: Parameters<typeof Keybindings.pressed>[0]) => {
+  useFigSubscriptionEffect(() => Keybindings.pressed(keypressCallback), [keypressCallback]);
 };
 
-export const useFigAutocomplete = (
-  setFigState: React.Dispatch<React.SetStateAction<FigState>>,
-) => {
+export const useFigAutocomplete = (setFigState: React.Dispatch<React.SetStateAction<FigState>>) => {
   useFigSubscriptionEffect(
     () =>
       EditBufferNotifications.subscribe((notification) => {

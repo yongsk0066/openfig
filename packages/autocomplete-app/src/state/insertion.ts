@@ -9,11 +9,7 @@ import {
 } from "@aws/amazon-q-developer-cli-shared/utils";
 import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import { NamedSetState, AutocompleteState, Visibility } from "./types";
-import {
-  isMatchingType,
-  getNameMatch,
-  getQueryTermForSuggestion,
-} from "../suggestions/helpers";
+import { isMatchingType, getNameMatch, getQueryTermForSuggestion } from "../suggestions/helpers";
 import { updateAutocompleteIndexFromUserInsert } from "../suggestions/sorting";
 import { InsertPrefixError } from "./errors";
 
@@ -41,10 +37,7 @@ const sendTextToTerminal = (
   // Get the number of characters the user has already input so we can delete them
   let numCharsToDelete = 0;
 
-  if (
-    (item.type !== "auto-execute" && item.type !== "special") ||
-    !isFullCompletion
-  ) {
+  if ((item.type !== "auto-execute" && item.type !== "special") || !isFullCompletion) {
     // This assumes any search term that uses a space was done so by escaping
     // the space with a backslash.
     // A better solution is to map the search term to the actual user input string...
@@ -60,16 +53,12 @@ const sendTextToTerminal = (
   }
 
   // Don't delete characters if we don't have to
-  if (
-    valToInsert.startsWith(queryTerm) &&
-    numCharsToDelete >= queryTerm.length
-  ) {
+  if (valToInsert.startsWith(queryTerm) && numCharsToDelete >= queryTerm.length) {
     numCharsToDelete -= queryTerm.length;
     valToInsert = valToInsert.slice(queryTerm.length);
   }
 
-  const finalStringToInsert =
-    "\b".repeat(numCharsToDelete) + valToInsert + moveCursor;
+  const finalStringToInsert = "\b".repeat(numCharsToDelete) + valToInsert + moveCursor;
 
   logger.info(`inserting: ${finalStringToInsert}`);
 
@@ -94,13 +83,7 @@ const insertString = (
   const { commandIndex } = parserResult;
   const rootCommand = command?.tokens[commandIndex]?.text || "";
 
-  sendTextToTerminal(
-    state,
-    item,
-    text,
-    isFullCompletion,
-    rootCommand,
-  );
+  sendTextToTerminal(state, item, text, isFullCompletion, rootCommand);
 
   if (isFullCompletion) {
     const suggestionName = makeArray(item.name)[0] || "";
@@ -140,12 +123,7 @@ const getFullInsertion = (
     return item.insertValue;
   }
 
-  const match = getNameMatch(
-    item,
-    queryTerm,
-    fuzzySearch,
-    preferVerboseSuggestions,
-  );
+  const match = getNameMatch(item, queryTerm, fuzzySearch, preferVerboseSuggestions);
   if (!match) return escapeInsertion("", isFolder);
   return escapeInsertion(
     item.separatorToAdd ? `${match}${item.separatorToAdd}{cursor}` : match,
@@ -186,85 +164,76 @@ const makeInsertTextForItem =
     return insertString(state, item, text, true);
   };
 
-const makeInsertCommonPrefix =
-  (get: StoreApi<AutocompleteState>["getState"]) => () => {
-    const state = get();
-    const {
-      suggestions,
-      selectedIndex,
-      parserResult: { searchTerm },
-      fuzzySearchEnabled,
-      settings,
-      insertTextForItem,
-    } = state;
-    const selectedItem = suggestions[selectedIndex];
+const makeInsertCommonPrefix = (get: StoreApi<AutocompleteState>["getState"]) => () => {
+  const state = get();
+  const {
+    suggestions,
+    selectedIndex,
+    parserResult: { searchTerm },
+    fuzzySearchEnabled,
+    settings,
+    insertTextForItem,
+  } = state;
+  const selectedItem = suggestions[selectedIndex];
 
-    const queryTerm = getQueryTermForSuggestion(selectedItem, searchTerm);
-    if (suggestions.length === 1) {
-      return insertTextForItem(selectedItem);
-    }
+  const queryTerm = getQueryTermForSuggestion(selectedItem, searchTerm);
+  if (suggestions.length === 1) {
+    return insertTextForItem(selectedItem);
+  }
 
-    let { type: itemType } = selectedItem;
+  let { type: itemType } = selectedItem;
 
-    if (itemType === "auto-execute") {
-      itemType = selectedItem.originalType;
-    }
+  if (itemType === "auto-execute") {
+    itemType = selectedItem.originalType;
+  }
 
-    if (itemType && ["special", "auto-execute"].includes(itemType)) {
-      throw new InsertPrefixError(
-        `Cannot insert common prefix for type ${itemType}`,
-      );
-    }
+  if (itemType && ["special", "auto-execute"].includes(itemType)) {
+    throw new InsertPrefixError(`Cannot insert common prefix for type ${itemType}`);
+  }
 
-    const typeFilterItem = {
-      ...selectedItem,
-      type: itemType,
-      name:
-        selectedItem.type === "auto-execute" &&
-        selectedItem.originalType === "folder"
-          ? makeArray(selectedItem.name ?? []).map(ensureTrailingSlash)
-          : selectedItem.name,
-    };
-
-    const sameTypeSuggestionNames = suggestions
-      .filter((suggestion) => isMatchingType(suggestion, typeFilterItem))
-      .map((suggestion) =>
-        (makeArray(suggestion.name || [])[0] ?? "").toLowerCase(),
-      )
-      .filter((name) => name.startsWith(queryTerm.toLowerCase()));
-
-    if (sameTypeSuggestionNames.length === 1) {
-      if (selectedItem.type === "auto-execute") {
-        throw new InsertPrefixError(`Cannot auto-execute using common prefix`);
-      }
-      return insertTextForItem(selectedItem);
-    }
-
-    const uncasedSharedPrefix = longestCommonPrefix(sameTypeSuggestionNames);
-    const sharedPrefix = makeArray(selectedItem.name || [])[0].slice(
-      0,
-      uncasedSharedPrefix.length,
-    );
-    if (!sharedPrefix || sharedPrefix === queryTerm) {
-      throw new InsertPrefixError("No remaining prefix to insert");
-    }
-    const text = sharedPrefix.replace(/\s/g, "\\ ");
-    if (
-      text ===
-      getFullInsertion(
-        selectedItem,
-        searchTerm,
-        fuzzySearchEnabled,
-        settings[SETTINGS.PREFER_VERBOSE_SUGGESTIONS] as boolean,
-      )
-    ) {
-      if (selectedItem.type === "auto-execute") {
-        throw new InsertPrefixError(`Cannot auto-execute using common prefix`);
-      }
-      return insertTextForItem(selectedItem);
-    }
-    return insertString(state, selectedItem, text, false);
+  const typeFilterItem = {
+    ...selectedItem,
+    type: itemType,
+    name:
+      selectedItem.type === "auto-execute" && selectedItem.originalType === "folder"
+        ? makeArray(selectedItem.name ?? []).map(ensureTrailingSlash)
+        : selectedItem.name,
   };
+
+  const sameTypeSuggestionNames = suggestions
+    .filter((suggestion) => isMatchingType(suggestion, typeFilterItem))
+    .map((suggestion) => (makeArray(suggestion.name || [])[0] ?? "").toLowerCase())
+    .filter((name) => name.startsWith(queryTerm.toLowerCase()));
+
+  if (sameTypeSuggestionNames.length === 1) {
+    if (selectedItem.type === "auto-execute") {
+      throw new InsertPrefixError(`Cannot auto-execute using common prefix`);
+    }
+    return insertTextForItem(selectedItem);
+  }
+
+  const uncasedSharedPrefix = longestCommonPrefix(sameTypeSuggestionNames);
+  const sharedPrefix = makeArray(selectedItem.name || [])[0].slice(0, uncasedSharedPrefix.length);
+  if (!sharedPrefix || sharedPrefix === queryTerm) {
+    throw new InsertPrefixError("No remaining prefix to insert");
+  }
+  const text = sharedPrefix.replace(/\s/g, "\\ ");
+  if (
+    text ===
+    getFullInsertion(
+      selectedItem,
+      searchTerm,
+      fuzzySearchEnabled,
+      settings[SETTINGS.PREFER_VERBOSE_SUGGESTIONS] as boolean,
+    )
+  ) {
+    if (selectedItem.type === "auto-execute") {
+      throw new InsertPrefixError(`Cannot auto-execute using common prefix`);
+    }
+    return insertTextForItem(selectedItem);
+  }
+  return insertString(state, selectedItem, text, false);
+};
 
 export const createInsertionState = (
   setNamed: NamedSetState<AutocompleteState>,
@@ -272,10 +241,7 @@ export const createInsertionState = (
 ) => ({
   insertCommonPrefix: makeInsertCommonPrefix(get),
   insertTextForItem: makeInsertTextForItem(get),
-  updateVisibilityPostInsert: (
-    suggestion: Suggestion,
-    isFullCompletion: boolean,
-  ) => {
+  updateVisibilityPostInsert: (suggestion: Suggestion, isFullCompletion: boolean) => {
     if (isFullCompletion) {
       setNamed("updateVisibilityPostInsert", {
         visibleState: Visibility.HIDDEN_BY_INSERTION,

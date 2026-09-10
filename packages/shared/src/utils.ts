@@ -29,35 +29,24 @@ export function makeArray<T>(object: T | T[]): T[] {
   return Array.isArray(object) ? object : [object];
 }
 
-export function firstMatchingToken(
-  str: string,
-  chars: Set<string>,
-): string | undefined {
+export function firstMatchingToken(str: string, chars: Set<string>): string | undefined {
   for (const char of str) {
     if (chars.has(char)) return char;
   }
   return undefined;
 }
 
-export function makeArrayIfExists<T>(
-  obj: T | T[] | null | undefined,
-): T[] | null {
+export function makeArrayIfExists<T>(obj: T | T[] | null | undefined): T[] | null {
   return !obj ? null : makeArray(obj);
 }
 
-export function isOrHasValue(
-  obj: string | Array<string>,
-  valueToMatch: string,
-) {
+export function isOrHasValue(obj: string | Array<string>, valueToMatch: string) {
   return Array.isArray(obj) ? obj.includes(valueToMatch) : obj === valueToMatch;
 }
 
 export const TimeoutError = createErrorInstance("TimeoutError");
 
-export async function withTimeout<T>(
-  time: number,
-  promise: Promise<T>,
-): Promise<T> {
+export async function withTimeout<T>(time: number, promise: Promise<T>): Promise<T> {
   return Promise.race<Promise<T>>([
     promise,
     new Promise<T>((_, reject) => {
@@ -83,10 +72,7 @@ export const longestCommonPrefix = (strings: string[]): string => {
   return firstItem.slice(0, i);
 };
 
-export function findLast<T>(
-  values: T[],
-  predicate: (v: T) => boolean,
-): T | undefined {
+export function findLast<T>(values: T[], predicate: (v: T) => boolean): T | undefined {
   for (let i = values.length - 1; i >= 0; i -= 1) {
     if (predicate(values[i])) return values[i];
   }
@@ -99,10 +85,10 @@ type NamedObject =
     }
   | string;
 
-export function compareNamedObjectsAlphabetically<
-  A extends NamedObject,
-  B extends NamedObject,
->(a: A, b: B): number {
+export function compareNamedObjectsAlphabetically<A extends NamedObject, B extends NamedObject>(
+  a: A,
+  b: B,
+): number {
   const getName = (object: NamedObject): string =>
     typeof object === "string" ? object : makeArray(object.name)[0] || "";
   return getName(a).localeCompare(getName(b));
@@ -180,14 +166,10 @@ export const splitPath = (path: string): [string, string] => {
   return [path.slice(0, idx), path.slice(idx)];
 };
 
-export const ensureTrailingSlash = (str: string) =>
-  str.endsWith("/") ? str : `${str}/`;
+export const ensureTrailingSlash = (str: string) => (str.endsWith("/") ? str : `${str}/`);
 
 // Outputs CWD with trailing `/`
-export const getCWDForFilesAndFolders = (
-  cwd: string | null,
-  searchTerm: string,
-): string => {
+export const getCWDForFilesAndFolders = (cwd: string | null, searchTerm: string): string => {
   if (cwd === null) return "/";
   const [dirname] = splitPath(searchTerm);
 
@@ -195,9 +177,7 @@ export const getCWDForFilesAndFolders = (
     return ensureTrailingSlash(cwd);
   }
 
-  return dirname.startsWith("~/") || dirname.startsWith("/")
-    ? dirname
-    : `${cwd}/${dirname}`;
+  return dirname.startsWith("~/") || dirname.startsWith("/") ? dirname : `${cwd}/${dirname}`;
 };
 
 export function localProtocol(domain: string, path: string) {
@@ -210,4 +190,3 @@ export function localProtocol(domain: string, path: string) {
 
   return `fig://${modifiedDomain}/${path}`;
 }
-

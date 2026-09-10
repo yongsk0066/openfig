@@ -52,19 +52,12 @@ const shouldAddSpaceToItem = (item: Subcommand | Option): boolean => {
   }
   // 2. If the spec explicitly says whether subcommands are required via
   //    `requiresSubcommand`, that takes precedence over heuristics.
-  if (
-    "requiresSubcommand" in item &&
-    typeof item.requiresSubcommand === "boolean"
-  ) {
+  if ("requiresSubcommand" in item && typeof item.requiresSubcommand === "boolean") {
     return item.requiresSubcommand;
   }
   // 3. Guess whether a space should be inserted. If there are no subcommands,
   //    don't insert a space, otherwise do.
-  return (
-    "subcommands" in item &&
-    item.subcommands &&
-    Object.keys(item.subcommands).length > 0
-  );
+  return "subcommands" in item && item.subcommands && Object.keys(item.subcommands).length > 0;
 };
 
 const convertStringsToSuggestions = (
@@ -84,31 +77,26 @@ const convertStringsToSuggestions = (
   }
 };
 
-export const getStaticArgSuggestions = memoizeOne(
-  (currentArg: Arg | null): Suggestion[] => {
-    if (!currentArg) return [];
-    const { suggestions, isDangerous } = currentArg;
-    return convertStringsToSuggestions(isDangerous, suggestions, "arg");
-  },
-);
+export const getStaticArgSuggestions = memoizeOne((currentArg: Arg | null): Suggestion[] => {
+  if (!currentArg) return [];
+  const { suggestions, isDangerous } = currentArg;
+  return convertStringsToSuggestions(isDangerous, suggestions, "arg");
+});
 
 // Get all subcommand, options, and other suggestion
 export const getStaticSuggestions = memoizeOne(
-  (
-    completionObj: Subcommand | null,
-    passedOptions: Option[],
-  ): StaticSuggestions => {
+  (completionObj: Subcommand | null, passedOptions: Option[]): StaticSuggestions => {
     if (!completionObj) {
       return { subcommands: [], additionalSuggestions: [], options: [] };
     }
 
-    const subcommands = [
-      ...new Set(Object.values(completionObj.subcommands)),
-    ].map((subcommand) => ({
-      ...subcommand,
-      shouldAddSpace: shouldAddSpaceToItem(subcommand),
-      type: "subcommand" as SuggestionType,
-    }));
+    const subcommands = [...new Set(Object.values(completionObj.subcommands))].map(
+      (subcommand) => ({
+        ...subcommand,
+        shouldAddSpace: shouldAddSpaceToItem(subcommand),
+        type: "subcommand" as SuggestionType,
+      }),
+    );
 
     const additionalSuggestions = convertStringsToSuggestions(
       completionObj.isDangerous,
@@ -138,24 +126,17 @@ export const getStaticSuggestions = memoizeOne(
       Object.values(completionObj.persistentOptions),
     );
     const options = [...new Set(optionValues)]
-      .filter((option) =>
-        option.name.every((name) => !excludeOptions.has(name)),
-      )
+      .filter((option) => option.name.every((name) => !excludeOptions.has(name)))
       .filter((option) => {
         let { isRepeatable } = option;
         if (!isRepeatable) {
           isRepeatable = 1;
         }
-        return (
-          isRepeatable === true ||
-          countEqualOptions(option, passedOptions) < isRepeatable
-        );
+        return isRepeatable === true || countEqualOptions(option, passedOptions) < isRepeatable;
       })
       .map((option) => ({
         ...option,
-        priority: option.name.some((name) => unmetDepends.has(name))
-          ? 75
-          : option.priority,
+        priority: option.name.some((name) => unmetDepends.has(name)) ? 75 : option.priority,
         shouldAddSpace: shouldAddSpaceToItem(option),
         separatorToAdd: (() => {
           // if the first argument isn't required, the separator should
@@ -182,9 +163,7 @@ export const getStaticSuggestions = memoizeOne(
 
     return {
       subcommands: subcommands.sort(compareNamedObjectsAlphabetically),
-      additionalSuggestions: additionalSuggestions.sort(
-        compareNamedObjectsAlphabetically,
-      ),
+      additionalSuggestions: additionalSuggestions.sort(compareNamedObjectsAlphabetically),
       options: options.sort(compareNamedObjectsAlphabetically),
     };
   },
@@ -233,8 +212,7 @@ export const getAllSuggestions = (
   const lastAnnotation = annotations[annotations.length - 1];
   const isInOptionChain =
     lastAnnotation.type === TokenType.Composite &&
-    lastAnnotation.subtokens[lastAnnotation.subtokens.length - 1]?.type ===
-      TokenType.Option;
+    lastAnnotation.subtokens[lastAnnotation.subtokens.length - 1]?.type === TokenType.Option;
 
   if (isInOptionChain) {
     const optionPrefix = lastAnnotation.text;
@@ -245,16 +223,13 @@ export const getAllSuggestions = (
 
     const getShortName = (suggestion: Suggestion) =>
       makeArray(suggestion.name || "").find(
-        (name) =>
-          name.startsWith("-") && !name.startsWith("--") && name.length === 2,
+        (name) => name.startsWith("-") && !name.startsWith("--") && name.length === 2,
       );
 
     // Make sure we still show the option itself if we have a mandatory arg
     // (only suggesting args) in an option chain.
     if (!(suggestionFlags & SuggestionFlag.Options)) {
-      const exactMatch = options.find(
-        (option) => getShortName(option) === lastOptionName,
-      );
+      const exactMatch = options.find((option) => getShortName(option) === lastOptionName);
       if (exactMatch) {
         suggestions.push(exactMatch);
       }
@@ -289,9 +264,7 @@ export const getAllSuggestions = (
   return suggestions;
 };
 
-export const isTemplateSuggestion = (
-  suggestion: unknown,
-): suggestion is Fig.TemplateSuggestion =>
+export const isTemplateSuggestion = (suggestion: unknown): suggestion is Fig.TemplateSuggestion =>
   Object.prototype.hasOwnProperty.call(suggestion, "context");
 
 const addAutoExecuteSuggestion = (
@@ -330,10 +303,7 @@ const addAutoExecuteSuggestion = (
     ];
   }
   if (suggestCurrentToken) {
-    return [
-      autoExecuteSuggestion(searchTerm, "Enter the current argument"),
-      ...suggestions,
-    ];
+    return [autoExecuteSuggestion(searchTerm, "Enter the current argument"), ...suggestions];
   }
   return suggestions;
 };
@@ -345,8 +315,7 @@ export const deduplicateSuggestions = (
   const deduplicated: Suggestion[] = [];
   for (const suggestion of suggestions) {
     const isDuplicated =
-      deduplicated.filter((dd) => fieldsAreEqual(suggestion, dd, fields))
-        .length > 0;
+      deduplicated.filter((dd) => fieldsAreEqual(suggestion, dd, fields)).length > 0;
     if (!isDuplicated) {
       deduplicated.push(suggestion);
     }
@@ -354,11 +323,7 @@ export const deduplicateSuggestions = (
   return deduplicated;
 };
 
-const getPartialMatch = (
-  searchTerms: string[],
-  queryTerm: string,
-  fuzzySearchEnabled: boolean,
-) => {
+const getPartialMatch = (searchTerms: string[], queryTerm: string, fuzzySearchEnabled: boolean) => {
   const prefixMatches = getPrefixNameMatches(searchTerms, queryTerm);
   const prefixMatch = bestScoreMatch(prefixMatches);
 
@@ -400,22 +365,12 @@ export const filterSuggestions = (
   const shouldHideAutoExecute =
     getSetting<boolean>(SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION, false) ||
     getSetting<boolean>(SETTINGS.ONLY_SHOW_ON_TAB, false);
-  const execDangerous = settings?.[
-    SETTINGS.IMMEDIATELY_RUN_DANGEROUS_COMMANDS
-  ] as boolean;
+  const execDangerous = settings?.[SETTINGS.IMMEDIATELY_RUN_DANGEROUS_COMMANDS] as boolean;
 
   if (!searchTerm) {
-    const filteredSuggestions = suggestions.filter(
-      (suggestion) => !suggestion.hidden,
-    );
-    const execAfterSpace = settings?.[
-      SETTINGS.IMMEDIATELY_EXEC_AFTER_SPACE
-    ] as boolean;
-    if (
-      execAfterSpace &&
-      filteredSuggestions.length > 0 &&
-      !shouldHideAutoExecute
-    ) {
+    const filteredSuggestions = suggestions.filter((suggestion) => !suggestion.hidden);
+    const execAfterSpace = settings?.[SETTINGS.IMMEDIATELY_EXEC_AFTER_SPACE] as boolean;
+    if (execAfterSpace && filteredSuggestions.length > 0 && !shouldHideAutoExecute) {
       filteredSuggestions.unshift({
         name: "↪",
         type: "auto-execute" as SuggestionType,
@@ -440,11 +395,7 @@ export const filterSuggestions = (
     const names = makeArray(name ?? []);
 
     const pushNonExactMatch = (searchTerms: string[]) => {
-      const displayNameMatch = getPartialMatch(
-        searchTerms,
-        queryTerm,
-        fuzzySearchEnabled,
-      );
+      const displayNameMatch = getPartialMatch(searchTerms, queryTerm, fuzzySearchEnabled);
       if (displayNameMatch) {
         const { fuzzyMatchData, score } = displayNameMatch;
         nonExactMatches.push({
@@ -502,11 +453,7 @@ export const filterSuggestions = (
     ...nonExactMatches.map(({ suggestion }) => suggestion),
   ];
 
-  if (
-    filteredSuggestions.length > 0 &&
-    !autoExecuteAdded &&
-    !shouldHideAutoExecute
-  ) {
+  if (filteredSuggestions.length > 0 && !autoExecuteAdded && !shouldHideAutoExecute) {
     // Eventually add suggest current token suggestion
     filteredSuggestions = addAutoExecuteSuggestion(
       filteredSuggestions,

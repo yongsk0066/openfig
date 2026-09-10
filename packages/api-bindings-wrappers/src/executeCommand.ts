@@ -45,9 +45,7 @@ export const executeCommandTimeout = async (
     const cleanStderr = cleanOutput(result.stderr);
 
     if (result.exitCode !== 0) {
-      logger.warn(
-        `Command ${command} exited with exit code ${result.exitCode}: ${cleanStderr}`,
-      );
+      logger.warn(`Command ${command} exited with exit code ${result.exitCode}: ${cleanStderr}`);
     }
     return {
       status: result.exitCode,

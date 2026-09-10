@@ -14,10 +14,7 @@ function usePrevious<T>(value: T) {
   return ref.current;
 }
 
-const isBufferDifferenceFromTyping = (
-  oldBuffer: string,
-  newBuffer: string,
-): boolean => {
+const isBufferDifferenceFromTyping = (oldBuffer: string, newBuffer: string): boolean => {
   // Determine whether the difference between two better states is likely from typing,
   // as opposed to pasting text or scrolling through history.
   if (!oldBuffer.startsWith(newBuffer) && !newBuffer.startsWith(oldBuffer)) {
@@ -31,14 +28,10 @@ const isBufferDifferenceFromTyping = (
 export const useParseArgumentsEffect = (
   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
 ) => {
-  const setParserResult = useAutocompleteStore(
-    (state) => state.setParserResult,
-  );
+  const setParserResult = useAutocompleteStore((state) => state.setParserResult);
   const command = useAutocompleteStore((state) => state.command);
   const onError = useAutocompleteStore((state) => state.error);
-  const setVisibleState = useAutocompleteStore(
-    (state) => state.setVisibleState,
-  );
+  const setVisibleState = useAutocompleteStore((state) => state.setVisibleState);
   const context = useAutocompleteStore(shellContextSelector, shallow);
 
   const oldCommand = usePrevious(command);

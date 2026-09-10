@@ -2514,13 +2514,11 @@ dependencies = [
  "fig_os_shim",
  "fig_proto",
  "fig_remote_ipc",
- "fig_request",
  "fig_settings",
  "fig_telemetry",
  "fig_util",
  "flume",
  "fnv",
- "futures",
  "http 1.3.1",
  "image",
  "infer",
@@ -2704,7 +2702,6 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.17",
 ]
 

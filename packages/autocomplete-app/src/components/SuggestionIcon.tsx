@@ -4,7 +4,6 @@ import {
   SuggestionType,
 } from "@aws/amazon-q-developer-cli-shared/internal";
 import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
-import { icons } from "../fig/icons";
 
 type SuggestionIconProps = {
   suggestion: Suggestion;
@@ -12,26 +11,24 @@ type SuggestionIconProps = {
   style: React.CSSProperties;
 };
 
+// Served by crates/fig_desktop/src/protocol/icons.rs; also the fallback for unknown suggestion
+// types below.
+const GENERIC_ICON = "fig://icon?type=box";
+
 const transformIconUri = (icon: URL): URL => {
   let { host } = icon;
 
   if (icon.protocol !== "fig:") {
-    return icon;
+    // Compiled specs embed remote icon URLs that the CSP no longer allows, which would render
+    // as an empty box. Fall back to a bundled icon instead.
+    if (icon.protocol === "icon:" || icon.protocol === "data:") {
+      return icon;
+    }
+    return new URL(GENERIC_ICON);
   }
 
   if (host === "" && fig.constants?.newUriFormat) {
     host = "path";
-  }
-
-  if (icon.hostname === "icon") {
-    const type = icon.searchParams.get("type");
-    if (type) {
-      if (icons.includes(type)) {
-        return new URL(
-          `https://specs.q.us-east-1.amazonaws.com/icons/${type}.png`,
-        );
-      }
-    }
   }
 
   if (window.fig.constants?.os === "windows") {

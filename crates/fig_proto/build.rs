@@ -1,8 +1,8 @@
 use std::io::Result;
 use std::path::PathBuf;
-use std::process::Command;
 
-#[allow(dead_code)]
+const PROTOC_REQUIRED: &str = "protoc >= 3.12 required: brew install protobuf";
+
 enum Version {
     V1([u32; 3]),
     V2([u32; 2]),
@@ -29,70 +29,6 @@ fn protoc_version() -> Option<Version> {
     }
 }
 
-fn download_protoc() {
-    let protoc_version = "26.1";
-    let tmp_folder = tempfile::tempdir().unwrap();
-
-    download_protoc_unix(protoc_version, &tmp_folder);
-}
-
-fn download_protoc_unix(protoc_version: &str, tmp_folder: &tempfile::TempDir) {
-    let os = match std::env::consts::OS {
-        "linux" => "linux",
-        "macos" => "osx",
-        os => panic!("Unsupported os: {os}"),
-    };
-
-    let arch = match std::env::consts::ARCH {
-        "x86_64" => "x86_64",
-        "aarch64" => "aarch_64",
-        arch => panic!("Unsupported arch: {arch}"),
-    };
-
-    let checksum = match (os, arch) {
-        ("linux", "x86_64") => "a7be2928c0454f132c599e25b79b7ad1b57663f2337d7f7e468a1d59b98ec1b0",
-        ("linux", "aarch_64") => "64a3b3b5f7dac0c8f9cf1cb85b2b1a237eb628644f6bcb0fb8f23db6e0d66181",
-        ("osx", "x86_64") => "febd8821c3a2a23f72f4641471e0ab6486f4fb07b68111490a27a31681465b3c",
-        ("osx", "aarch_64") => "26a29befa8891ecc48809958c909d284f2b9539a2eb47f22cadc631fe6abe8fd",
-        _ => unreachable!(),
-    };
-
-    let mut download_command = Command::new("curl");
-    download_command
-        .arg("-Lf")
-        .arg(format!(
-            "https://github.com/protocolbuffers/protobuf/releases/download/v{protoc_version}/protoc-{protoc_version}-{os}-{arch}.zip"
-        ))
-        .arg("-o")
-        .arg(tmp_folder.path().join("protoc.zip"));
-    assert!(download_command.spawn().unwrap().wait().unwrap().success());
-
-    let mut checksum_command = Command::new("sha256sum");
-    checksum_command.arg(tmp_folder.path().join("protoc.zip"));
-    let checksum_output = checksum_command.output().unwrap();
-    let checksum_output = String::from_utf8(checksum_output.stdout).unwrap();
-
-    eprintln!("checksum: {checksum_output:?}");
-    assert!(checksum_output.starts_with(checksum));
-
-    let mut unzip_command = Command::new("unzip");
-    unzip_command
-        .arg("-o")
-        .arg(tmp_folder.path().join("protoc.zip"))
-        .current_dir(tmp_folder.path());
-    assert!(unzip_command.spawn().unwrap().wait().unwrap().success());
-
-    let out_bin = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("protoc");
-
-    let mut mv = Command::new("mv");
-    mv.arg(tmp_folder.path().join("bin/protoc")).arg(&out_bin);
-    assert!(mv.spawn().unwrap().wait().unwrap().success());
-
-    unsafe {
-        std::env::set_var("PROTOC", out_bin);
-    }
-}
-
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -108,12 +44,13 @@ fn main() -> Result<()> {
     }
 
     // --experimental_allow_proto3_optional is supported only on version of protoc >= 3.12
-    // if the version of the system protoc is too old, we must panic
-    match protoc_version() {
-        Some(Version::V1([0..=2, _, _] | [3, 0..=11, _])) => download_protoc(),
-        Some(Version::V1(_) | Version::V2(_)) => {},
-        None => download_protoc(),
+    // if the system protoc is missing or too old, we must panic
+    let version = match protoc_version() {
+        Some(Version::V1([major, minor, _]) | Version::V2([major, minor])) => (major, minor),
+        None => panic!("{PROTOC_REQUIRED}"),
     };
+
+    assert!(version >= (3, 12), "{PROTOC_REQUIRED}");
 
     let mut config = prost_build::Config::new();
 

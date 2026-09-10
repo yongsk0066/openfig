@@ -12,7 +12,6 @@ use std::sync::{
     LazyLock,
     OnceLock,
 };
-use std::time::Duration;
 
 use fig_desktop_api::init_script::javascript_init;
 use fig_desktop_api::kv::DashKVStore;
@@ -44,7 +43,6 @@ use tao::window::{
     WindowBuilder,
     WindowId as WryWindowId,
 };
-use tokio::time::MissedTickBehavior;
 use tracing::{
     debug,
     error,
@@ -77,7 +75,6 @@ use crate::platform::{
     PlatformBoundEvent,
     PlatformState,
 };
-use crate::protocol::spec::clear_index_cache;
 use crate::protocol::{
     api,
     icons,
@@ -868,56 +865,4 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         }
     );
 
-    // Midway watcher
-    tokio::spawn(async move {
-        let mut res = NOTIFICATION_BUS.subscribe_midway();
-
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-
-        // debounce thread
-        tokio::spawn(async move {
-            let mut should_send = false;
-            let mut interval = tokio::time::interval(Duration::from_millis(500));
-            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = rx.recv() => {
-                        should_send = true;
-                        interval.reset();
-                    }
-                    _ = interval.tick() => {
-                        if should_send {
-                            info!("clearing autocomplete cache");
-                            let _ = proxy.send_event(
-                                Event::WindowEvent {
-                                    window_id: AUTOCOMPLETE_ID,
-                                    window_event: WindowEvent::Event {
-                                        event_name: "clear-cache".into(),
-                                        payload: None
-                                    }
-                                }
-                            );
-                            clear_index_cache().await;
-                            should_send = false;
-                        }
-                    }
-                }
-            }
-        });
-
-        loop {
-            match res.recv().await {
-                Ok(()) => {
-                    if let Err(err) = tx.send(()).await {
-                        error!("Error sending notification: {err}");
-                    }
-                },
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    warn!("Notification bus 'midway' lagged by {n} messages");
-                },
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    });
 }

@@ -1,26 +1,18 @@
 use std::borrow::Cow;
-use std::sync::{
-    Arc,
-    LazyLock,
+use std::collections::BTreeSet;
+use std::io::ErrorKind;
+use std::path::{
+    Path,
+    PathBuf,
 };
+use std::sync::Arc;
 
-use anyhow::Result;
-use fig_auth::builder_id_token;
 use fig_os_shim::Context;
-use fig_request::reqwest::Client;
-use fnv::FnvHashSet;
-use futures::prelude::*;
 use serde::{
     Deserialize,
     Serialize,
 };
-use tokio::sync::{
-    MappedMutexGuard,
-    Mutex,
-    MutexGuard,
-};
 use tracing::error;
-use url::Url;
 use wry::http::header::CONTENT_TYPE;
 use wry::http::{
     HeaderValue,
@@ -31,46 +23,8 @@ use wry::http::{
 
 use crate::webview::WindowId;
 
-const APPLICATION_JAVASCRIPT: HeaderValue = HeaderValue::from_static("application/javascript");
-
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AuthType {
-    None,
-    Midway,
-}
-
-impl AuthType {
-    pub async fn get(&self, default_client: &Client, url: Url) -> Result<fig_request::reqwest::Response> {
-        match self {
-            AuthType::Midway => Ok(fig_request::midway::midway_request(url).await?.error_for_status()?),
-            _ => Ok(default_client.get(url).send().await?.error_for_status()?),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CdnSource {
-    url: Url,
-    auth_type: AuthType,
-}
-
-static CDNS: LazyLock<Vec<CdnSource>> = LazyLock::new(|| {
-    vec![
-        // Public cdn
-        CdnSource {
-            url: "https://specs.q.us-east-1.amazonaws.com".try_into().unwrap(),
-            auth_type: AuthType::None,
-        },
-        // Internal Amazon spec cdn
-        CdnSource {
-            url: "https://prod.us-east-1.shellspecs.jupiter.ai.aws.dev"
-                .try_into()
-                .unwrap(),
-            auth_type: AuthType::Midway,
-        },
-    ]
-});
+const TEXT_JAVASCRIPT: HeaderValue = HeaderValue::from_static("text/javascript");
+const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
 
 fn res_404() -> Response<Cow<'static, [u8]>> {
     Response::builder()
@@ -88,178 +42,325 @@ fn res_ok(bytes: Vec<u8>, content_type: HeaderValue) -> Response<Cow<'static, [u
         .unwrap()
 }
 
-#[derive(Debug, Clone)]
-struct SpecIndexMeta {
-    cdn_source: CdnSource,
-    spec_index: SpecIndex,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SpecIndex {
+    /// Defaulted so that a root listing only one of the two keys still contributes the other,
+    /// instead of being discarded whole.
+    #[serde(default)]
     completions: Vec<String>,
+    #[serde(default)]
     diff_versioned_completions: Vec<String>,
 }
 
-static INDEX_CACHE: Mutex<Option<Vec<Result<SpecIndexMeta>>>> = Mutex::const_new(None);
+/// The spec directories to search, in priority order: the user override first, then the
+/// directory bundled into the app resources.
+async fn spec_roots(ctx: &Context) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
 
-pub async fn clear_index_cache() {
-    *INDEX_CACHE.lock().await = None;
-}
-
-async fn remote_index_json(client: &Client) -> MappedMutexGuard<'_, Vec<Result<SpecIndexMeta>>> {
-    let mut cache = INDEX_CACHE.lock().await;
-
-    if cache.is_none() {
-        *cache = Some(
-            future::join_all(CDNS.iter().map(|cdn_source| async move {
-                if AuthType::Midway == cdn_source.auth_type {
-                    let auth_token = match builder_id_token().await {
-                        Ok(auth_token) => match auth_token {
-                            Some(auth_token) => auth_token,
-                            None => return None,
-                        },
-                        Err(err) => {
-                            error!(%err, "Failed to load auth");
-                            return None;
-                        },
-                    };
-
-                    if !auth_token.is_amzn_user() {
-                        return None;
-                    }
-                }
-
-                let mut url = cdn_source.url.clone();
-                url.set_path("index.json");
-
-                let response = match cdn_source.auth_type.get(client, url).await {
-                    Ok(response) => response,
-                    Err(err) => {
-                        error!(%err, "Failed to fetch spec index");
-                        return Some(Err(err));
-                    },
-                };
-
-                let spec_index = match response.json().await {
-                    Ok(s) => s,
-                    Err(s) => {
-                        error!(%s, "Failed to parse spec index");
-                        return Some(Err(s.into()));
-                    },
-                };
-
-                Some(Ok(SpecIndexMeta {
-                    cdn_source: cdn_source.clone(),
-                    spec_index,
-                }))
-            }))
-            .await
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>(),
-        );
+    match fig_util::directories::autocomplete_specs_dir() {
+        Ok(dir) => {
+            if tokio::fs::metadata(&dir).await.is_ok_and(|meta| meta.is_dir()) {
+                roots.push(dir);
+            }
+        },
+        Err(err) => error!(%err, "failed to resolve the user spec dir"),
     }
 
-    MutexGuard::map(cache, |cache| cache.as_mut().unwrap())
+    match fig_util::directories::resources_path_ctx(ctx) {
+        Ok(resources) => roots.push(resources.join("specs")),
+        Err(err) => error!(%err, "failed to resolve the bundled spec dir"),
+    }
+
+    roots
 }
 
-async fn merged_index_json(client: &Client) -> Result<SpecIndex> {
-    let mut completions = FnvHashSet::default();
-    let mut diff_versioned_completions = FnvHashSet::default();
+/// The union of every root's `index.json`, sorted and deduplicated.
+///
+/// The index is authoritative for the JS loader: for any name it lists, `publicSpecExists`
+/// returns true and the loader imports `spec://localhost/<name>.js` *instead of* falling back to
+/// `~/.fig/autocomplete/build` (`packages/autocomplete-parser/src/loadSpec.ts`). A name in the
+/// union that no root can actually serve therefore fails to load outright rather than degrading
+/// — every root must list only the specs it ships.
+///
+/// `None` means no root had a parseable `index.json`; the caller answers 404 so the loader's
+/// index cache resets and retries, instead of caching "no specs exist" for the session.
+async fn index_json(roots: &[PathBuf]) -> Option<SpecIndex> {
+    let mut completions = BTreeSet::new();
+    let mut diff_versioned_completions = BTreeSet::new();
+    let mut any = false;
 
-    for res in remote_index_json(client).await.iter() {
-        match res {
-            Ok(meta) => {
-                completions.extend(meta.spec_index.completions.clone());
-                diff_versioned_completions.extend(meta.spec_index.diff_versioned_completions.clone());
-            },
+    for root in roots {
+        let path = root.join("index.json");
+
+        let bytes = match tokio::fs::read(&path).await {
+            Ok(bytes) => bytes,
             Err(err) => {
-                tracing::error!(%err, "failed to fetch spec index");
+                if err.kind() != ErrorKind::NotFound {
+                    error!(%err, path = %path.display(), "failed to read spec index");
+                }
+                continue;
             },
+        };
+
+        match serde_json::from_slice::<SpecIndex>(&bytes) {
+            Ok(index) => {
+                any = true;
+                completions.extend(index.completions);
+                diff_versioned_completions.extend(index.diff_versioned_completions);
+            },
+            Err(err) => error!(%err, path = %path.display(), "failed to parse spec index"),
         }
     }
 
-    let mut completions: Vec<_> = completions.into_iter().collect();
-    completions.sort();
-
-    let mut diff_versioned_completions: Vec<_> = diff_versioned_completions.into_iter().collect();
-    diff_versioned_completions.sort();
-
-    Ok(SpecIndex {
-        completions,
-        diff_versioned_completions,
+    any.then(|| SpecIndex {
+        completions: completions.into_iter().collect(),
+        diff_versioned_completions: diff_versioned_completions.into_iter().collect(),
     })
+}
+
+fn relativize(path: &Path) -> &Path {
+    path.strip_prefix("/").unwrap_or(path)
+}
+
+/// Resolves a request path inside `root`, rejecting anything that escapes it.
+///
+/// Both sides are canonicalized before the prefix check, so a symlink inside `root` that points
+/// outside of it is rejected too.
+async fn resolve_in_root(root: &Path, uri_path: &Path) -> Option<PathBuf> {
+    let root = tokio::fs::canonicalize(root).await.ok()?;
+    let path = tokio::fs::canonicalize(root.join(relativize(uri_path))).await.ok()?;
+
+    // dont allow escaping the spec dir
+    if !path.starts_with(&root) || !tokio::fs::metadata(&path).await.is_ok_and(|meta| meta.is_file()) {
+        return None;
+    }
+
+    Some(path)
+}
+
+async fn handle_roots(roots: &[PathBuf], uri_path: &str) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
+    if uri_path == "/index.json" {
+        return match index_json(roots).await {
+            Some(index) => Ok(res_ok(serde_json::to_vec(&index)?, APPLICATION_JSON)),
+            None => Ok(res_404()),
+        };
+    }
+
+    if !uri_path.ends_with(".js") {
+        return Ok(res_404());
+    }
+
+    let uri_path = Path::new(uri_path);
+    for root in roots {
+        let Some(path) = resolve_in_root(root, uri_path).await else {
+            continue;
+        };
+
+        match tokio::fs::read(&path).await {
+            Ok(content) => return Ok(res_ok(content, TEXT_JAVASCRIPT)),
+            Err(err) => error!(%err, path = %path.display(), "failed to read spec"),
+        }
+    }
+
+    Ok(res_404())
 }
 
 // handle `spec://localhost/spec.js`
 pub async fn handle(
-    _ctx: Arc<Context>,
+    ctx: Arc<Context>,
     request: Request<Vec<u8>>,
     _: WindowId,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
-    let Some(client) = fig_request::client() else {
-        return Ok(res_404());
-    };
-
-    let path = request.uri().path();
-
-    if path == "/index.json" {
-        let index = merged_index_json(client).await?;
-        Ok(res_ok(
-            serde_json::to_vec(&index)?,
-            "application/json".try_into().unwrap(),
-        ))
-    } else {
-        // default to trying the first cdn
-        let mut cdn_source = CDNS[0].clone();
-
-        let spec_name = path.strip_prefix('/').unwrap_or(path);
-        let spec_name = spec_name.strip_suffix(".js").unwrap_or(spec_name);
-
-        for meta in remote_index_json(client).await.iter().skip(1).flatten() {
-            if meta
-                .spec_index
-                .completions
-                .binary_search_by(|name| name.as_str().cmp(spec_name))
-                .is_ok()
-            {
-                cdn_source = meta.cdn_source.clone();
-                break;
-            }
-        }
-
-        let mut url = cdn_source.url.clone();
-        url.set_path(path);
-
-        let response = cdn_source.auth_type.get(client, url).await?;
-
-        let content_type = response
-            .headers()
-            .get(http::header::CONTENT_TYPE)
-            .cloned()
-            .unwrap_or(APPLICATION_JAVASCRIPT);
-
-        Ok(res_ok(
-            response.bytes().await?.to_vec(),
-            content_type.as_bytes().try_into()?,
-        ))
-    }
+    handle_roots(&spec_roots(&ctx).await, request.uri().path()).await
 }
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
+
     use super::*;
 
-    #[test]
-    fn cdns() {
-        println!("{:?}", *CDNS);
+    fn write(root: &TempDir, name: &str, contents: &str) {
+        let path = root.path().join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn roots(user: &TempDir, bundled: &TempDir) -> Vec<PathBuf> {
+        vec![user.path().to_owned(), bundled.path().to_owned()]
+    }
+
+    fn body<'a>(response: &'a Response<Cow<'static, [u8]>>) -> &'a [u8] {
+        response.body().as_ref()
     }
 
     #[tokio::test]
-    async fn test_index_json() {
-        let client = Client::new();
-        let index = remote_index_json(&client).await;
-        println!("{index:?}");
+    async fn index_json_is_the_union_of_every_root() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        write(
+            &user,
+            "index.json",
+            r#"{"completions":["git","mine"],"diffVersionedCompletions":["az"]}"#,
+        );
+        write(
+            &bundled,
+            "index.json",
+            r#"{"completions":["cd","git"],"diffVersionedCompletions":["az","fig"]}"#,
+        );
+
+        let response = handle_roots(&roots(&user, &bundled), "/index.json").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let index: SpecIndex = serde_json::from_slice(body(&response)).unwrap();
+        assert_eq!(index.completions, ["cd", "git", "mine"]);
+        assert_eq!(index.diff_versioned_completions, ["az", "fig"]);
+    }
+
+    /// A root that omits `diffVersionedCompletions` still contributes its completions.
+    #[tokio::test]
+    async fn a_root_missing_a_key_is_not_discarded() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        write(&user, "index.json", r#"{"completions":["mine"]}"#);
+        write(
+            &bundled,
+            "index.json",
+            r#"{"completions":["cd"],"diffVersionedCompletions":["az"]}"#,
+        );
+
+        let response = handle_roots(&roots(&user, &bundled), "/index.json").await.unwrap();
+        let index: SpecIndex = serde_json::from_slice(body(&response)).unwrap();
+        assert_eq!(index.completions, ["cd", "mine"]);
+        assert_eq!(index.diff_versioned_completions, ["az"]);
+    }
+
+    #[tokio::test]
+    async fn the_first_root_holding_a_spec_wins() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        write(&user, "git.js", "user git");
+        write(&bundled, "git.js", "bundled git");
+        write(&bundled, "cd.js", "bundled cd");
+        write(&bundled, "az/index.js", "bundled az");
+
+        let roots = roots(&user, &bundled);
+
+        let response = handle_roots(&roots, "/git.js").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], TEXT_JAVASCRIPT);
+        assert_eq!(body(&response), b"user git");
+
+        let response = handle_roots(&roots, "/cd.js").await.unwrap();
+        assert_eq!(body(&response), b"bundled cd");
+
+        let response = handle_roots(&roots, "/az/index.js").await.unwrap();
+        assert_eq!(body(&response), b"bundled az");
+    }
+
+    #[tokio::test]
+    async fn an_unknown_spec_is_not_found() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        write(&bundled, "cd.js", "bundled cd");
+        write(
+            &bundled,
+            "index.json",
+            r#"{"completions":["cd"],"diffVersionedCompletions":[]}"#,
+        );
+
+        let roots = roots(&user, &bundled);
+
+        assert_eq!(
+            handle_roots(&roots, "/nope.js").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            handle_roots(&roots, "/cd").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+
+        let response = handle_roots(&roots, "/index.json").await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let index: SpecIndex = serde_json::from_slice(body(&response)).unwrap();
+        assert_eq!(index.completions, ["cd"]);
+    }
+
+    /// With no readable index anywhere, 404 rather than an empty index: the JS loader caches a
+    /// successful index response for the life of the webview, so an empty 200 would disable
+    /// every global spec until the next restart.
+    #[tokio::test]
+    async fn an_unreadable_index_is_not_found() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        assert_eq!(
+            handle_roots(&roots(&user, &bundled), "/index.json")
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            handle_roots(&[], "/index.json").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+
+        // a root whose index.json is unparseable counts as unreadable too
+        write(&bundled, "index.json", "{not json");
+        assert_eq!(
+            handle_roots(&roots(&user, &bundled), "/index.json")
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn escaping_the_spec_root_is_rejected() {
+        let user = TempDir::new().unwrap();
+        let bundled = TempDir::new().unwrap();
+
+        write(&bundled, "specs/cd.js", "bundled cd");
+        write(&bundled, "secret.js", "not a spec");
+
+        let roots = vec![user.path().to_owned(), bundled.path().join("specs")];
+
+        assert_eq!(handle_roots(&roots, "/cd.js").await.unwrap().status(), StatusCode::OK);
+        assert_eq!(
+            handle_roots(&roots, "/../secret.js").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            handle_roots(&roots, "/../../etc/passwd.js").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    /// A symlink inside a root that resolves outside of it is rejected by the prefix check,
+    /// not merely by the target being absent.
+    #[tokio::test]
+    async fn a_symlink_out_of_the_spec_root_is_rejected() {
+        let bundled = TempDir::new().unwrap();
+
+        write(&bundled, "specs/cd.js", "bundled cd");
+        write(&bundled, "secret.js", "not a spec");
+        std::os::unix::fs::symlink(bundled.path().join("secret.js"), bundled.path().join("specs/leak.js")).unwrap();
+
+        let roots = vec![bundled.path().join("specs")];
+
+        assert_eq!(handle_roots(&roots, "/cd.js").await.unwrap().status(), StatusCode::OK);
+        assert_eq!(
+            handle_roots(&roots, "/leak.js").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
     }
 }

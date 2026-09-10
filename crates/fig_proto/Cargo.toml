@@ -26,4 +26,3 @@ thiserror.workspace = true
 [build-dependencies]
 prost-build = "0.13.5"
 prost-reflect-build = "0.15.1"
-tempfile.workspace = true

@@ -1,4 +1,3 @@
-const AWS_SPECS = ["aws", "q"];
 const UNIX_SPECS = [
   "cd",
   "git",
@@ -24,7 +23,6 @@ const MACOS_SPECS = ["brew", "open"];
 const OTHER_SPECS = ["docker", "python"];
 
 export const MOST_USED_SPECS = [
-  ...AWS_SPECS,
   ...UNIX_SPECS,
   ...EDITOR_SPECS,
   ...JS_SPECS,

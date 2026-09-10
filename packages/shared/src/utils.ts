@@ -214,33 +214,3 @@ export function localProtocol(domain: string, path: string) {
   return `fig://${modifiedDomain}/${path}`;
 }
 
-type ExponentialBackoffOptions = {
-  attemptTimeout: number; // The maximum time in milliseconds to wait for a function to execute.
-  baseDelay: number; // The initial delay in milliseconds.
-  maxRetries: number; // The maximum number of retries.
-  jitter: number; // A random factor to add to the delay on each retry.
-};
-
-export async function exponentialBackoff<T>(
-  options: ExponentialBackoffOptions,
-  fn: () => Promise<T>,
-): Promise<T> {
-  let retries = 0;
-  let delay = options.baseDelay;
-
-  while (retries < options.maxRetries) {
-    try {
-      return await withTimeout(options.attemptTimeout, fn());
-    } catch (_error) {
-      retries += 1;
-      delay *= 2;
-      delay += Math.floor(Math.random() * options.jitter);
-
-      await new Promise((resolve) => {
-        setTimeout(resolve, delay);
-      });
-    }
-  }
-
-  throw new Error("Failed to execute function after all retries.");
-}

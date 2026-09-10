@@ -437,7 +437,7 @@ impl DotfileShellIntegration {
         // snapshot rather than against what was on disk. Strip in memory instead: one comparison
         // against the real original, and at most one write.
         let original_contents = if dotfile.exists() {
-            backup_file(&dotfile, fig_util::directories::utc_backup_dir().ok())?;
+            backup_file(&dotfile, None::<PathBuf>)?;
             std::fs::read_to_string(&dotfile)?
         } else {
             String::new()

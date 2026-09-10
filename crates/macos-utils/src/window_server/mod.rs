@@ -117,8 +117,8 @@ pub enum WindowServerEvent {
 }
 
 pub struct AccessibilityCallbackData {
-    pub app: ApplicationSpecifier,
-    pub sender: Sender<WindowServerEvent>,
+    app: ApplicationSpecifier,
+    sender: Sender<WindowServerEvent>,
 }
 
 unsafe fn app_bundle_id(app: &NSRunningApplication) -> Option<String> {
@@ -267,13 +267,13 @@ define_class!(
 );
 
 impl ObserverClass {
-    pub fn new(handler: *mut c_void) -> Retained<Self> {
+    fn new(handler: *mut c_void) -> Retained<Self> {
         unsafe { msg_send![Self::alloc(), initWithHandler:handler] }
     }
 }
 
 impl WindowServerInner {
-    pub fn new_with_observer(
+    fn new_with_observer(
         sender: Sender<WindowServerEvent>,
         own_bundle_id: &'static str,
         xterm_bundle_ids: &'static [&'static str],
@@ -394,7 +394,7 @@ impl WindowServerInner {
         info!("Tracking {:?} applications", self.observers.len());
     }
 
-    pub fn init(&mut self) {
+    fn init(&mut self) {
         self.register_all();
     }
 

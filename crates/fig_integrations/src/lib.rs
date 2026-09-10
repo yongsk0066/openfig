@@ -1,11 +1,11 @@
-pub mod backup;
+pub(crate) mod backup;
 pub mod error;
 pub mod file;
 pub mod install;
 pub mod shell;
 
 use async_trait::async_trait;
-pub use backup::backup_file;
+pub(crate) use backup::backup_file;
 pub use error::{
     Error,
     Result,

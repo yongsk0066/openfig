@@ -94,7 +94,7 @@ fn macos_tempdir() -> Result<PathBuf> {
 /// files and logs
 ///
 /// On macOS this falls back to TMPDIR, which is secure on macOS
-pub fn runtime_dir() -> Result<PathBuf> {
+fn runtime_dir() -> Result<PathBuf> {
     let mut dir = dirs::runtime_dir();
     dir = dir.or_else(|| std::env::var_os("TMPDIR").map(PathBuf::from));
     dir = dir.or(Some(macos_tempdir()?));
@@ -104,14 +104,14 @@ pub fn runtime_dir() -> Result<PathBuf> {
 /// The sockets directory of the local installation
 ///
 /// - MacOS: `$TMPDIR/{runtime_dir}`
-pub fn sockets_dir() -> Result<PathBuf> {
+fn sockets_dir() -> Result<PathBuf> {
     Ok(runtime_dir()?.join(RUNTIME_DIR_NAME))
 }
 
 /// The directory on the host machine where socket files are stored
 ///
 /// - MacOS: `$TMPDIR/{runtime_dir}`
-pub fn host_sockets_dir() -> Result<PathBuf> {
+fn host_sockets_dir() -> Result<PathBuf> {
     sockets_dir()
 }
 
@@ -121,7 +121,7 @@ pub fn themes_dir(ctx: &Context) -> Result<PathBuf> {
 }
 
 /// The autocomplete directory
-pub fn autocomplete_dir() -> Result<PathBuf> {
+fn autocomplete_dir() -> Result<PathBuf> {
     Ok(fig_data_dir()?.join("autocomplete"))
 }
 
@@ -141,7 +141,7 @@ pub fn logs_dir() -> Result<PathBuf> {
 /// The directory where fig places all data-sensitive backups
 ///
 /// - MacOS: `$HOME/{backup_dir}`
-pub fn backups_dir() -> Result<PathBuf> {
+fn backups_dir() -> Result<PathBuf> {
     Ok(home_dir()?.join(BACKUP_DIR_NAME))
 }
 
@@ -180,7 +180,7 @@ pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
 /// The path to the resources directory
 ///
 /// - MacOS: "/Applications/{app_name}.app/Contents/Resources"
-pub fn resources_path() -> Result<PathBuf> {
+fn resources_path() -> Result<PathBuf> {
     Ok(crate::app_bundle_path().join(crate::macos::BUNDLE_CONTENTS_RESOURCE_PATH))
 }
 
@@ -191,7 +191,7 @@ pub fn resources_path_ctx<Ctx: EnvProvider>(_ctx: &Ctx) -> Result<PathBuf> {
 /// The path to the fig install manifest
 ///
 /// - MacOS: "/Applications/{app_name}.app/Contents/Resources/manifest.json"
-pub fn manifest_path() -> Result<PathBuf> {
+fn manifest_path() -> Result<PathBuf> {
     Ok(resources_path()?.join("manifest.json"))
 }
 

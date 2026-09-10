@@ -28,13 +28,13 @@ pub struct NotificationCenter {
 }
 
 impl NotificationCenter {
-    pub fn new(center: Retained<NSNotificationCenter>) -> Self {
+    fn new(center: Retained<NSNotificationCenter>) -> Self {
         Self {
             inner: Inner::NotificationCenter(center),
         }
     }
 
-    pub fn workspace_center() -> Self {
+    pub(crate) fn workspace_center() -> Self {
         let center = NSWorkspace::sharedWorkspace().notificationCenter();
         Self::new(center)
     }
@@ -47,7 +47,7 @@ impl NotificationCenter {
     }
 
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn remove_observer(&self, observer: &AnyObject) {
+    pub(crate) unsafe fn remove_observer(&self, observer: &AnyObject) {
         match &self.inner {
             Inner::NotificationCenter(i) => i.removeObserver(observer),
             Inner::DistributedNotificationCenter(i) => i.removeObserver(observer),
@@ -55,7 +55,7 @@ impl NotificationCenter {
     }
 
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn subscribe_with_observer(
+    pub(crate) unsafe fn subscribe_with_observer(
         &mut self,
         notification_name: &NSNotificationName,
         observer: &AnyObject,

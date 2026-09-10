@@ -93,7 +93,7 @@ impl From<RawPid> for nix::unistd::Pid {
 }
 
 impl Pid {
-    pub fn current(ctx: Weak<Context>) -> Self {
+    pub(crate) fn current(ctx: Weak<Context>) -> Self {
         current(ctx.clone())
     }
 

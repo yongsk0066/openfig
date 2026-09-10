@@ -38,7 +38,7 @@ impl LaunchdPlist {
     }
 
     /// Generate the plist as a string
-    pub fn plist(&self) -> String {
+    fn plist(&self) -> String {
         let mut plist = String::new();
 
         let indent = "    ";

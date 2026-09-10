@@ -11,7 +11,7 @@ use super::{
     RequestResultImpl,
 };
 
-pub async fn open_in_external_application(request: OpenInExternalApplicationRequest) -> RequestResult {
+pub(crate) async fn open_in_external_application(request: OpenInExternalApplicationRequest) -> RequestResult {
     match request.url {
         Some(url) => match open_url_async(&url).await {
             Ok(_) => RequestResult::success(),
@@ -21,6 +21,6 @@ pub async fn open_in_external_application(request: OpenInExternalApplicationRequ
     }
 }
 
-pub fn ping(_request: PingRequest) -> RequestResult {
+pub(crate) fn ping(_request: PingRequest) -> RequestResult {
     RequestResult::Ok(Box::new(ServerSubmessage::PingResponse(PingResponse {})))
 }

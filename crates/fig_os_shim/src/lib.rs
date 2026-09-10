@@ -61,7 +61,7 @@ impl Context {
         })
     }
 
-    pub fn fs(&self) -> &Fs {
+    fn fs(&self) -> &Fs {
         &self.fs
     }
 

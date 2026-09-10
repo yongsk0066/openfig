@@ -18,7 +18,7 @@ pub const RUNTIME_DIR_NAME: &str = env!("FIG_BRAND_RUNTIME_DIR_NAME");
 pub const DATA_DIR_NAME: &str = env!("FIG_BRAND_DATA_DIR_NAME");
 
 /// Backup directory name
-pub const BACKUP_DIR_NAME: &str = env!("FIG_BRAND_BACKUP_DIR_NAME");
+pub(crate) const BACKUP_DIR_NAME: &str = env!("FIG_BRAND_BACKUP_DIR_NAME");
 
 /// Label of the LaunchAgent that starts the desktop app at login.
 ///
@@ -32,7 +32,7 @@ pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
-    pub const TARGET_TRIPLE: Option<&str> = option_env!("FIG_BUILD_TARGET_TRIPLE");
+    pub(crate) const TARGET_TRIPLE: Option<&str> = option_env!("FIG_BUILD_TARGET_TRIPLE");
 
     /// A git full sha hash of the current build
     pub const HASH: Option<&str> = option_env!("FIG_BUILD_HASH");
@@ -44,7 +44,7 @@ pub mod build {
 /// macOS specific constants
 pub mod macos {
     pub const BUNDLE_CONTENTS_MACOS_PATH: &str = "Contents/MacOS";
-    pub const BUNDLE_CONTENTS_RESOURCE_PATH: &str = "Contents/Resources";
+    pub(crate) const BUNDLE_CONTENTS_RESOURCE_PATH: &str = "Contents/Resources";
     pub const BUNDLE_CONTENTS_INFO_PLIST_PATH: &str = "Contents/Info.plist";
 }
 

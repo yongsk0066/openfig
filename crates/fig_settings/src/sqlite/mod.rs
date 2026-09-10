@@ -23,13 +23,13 @@ use crate::error::DbOpenError;
 
 const STATE_TABLE_NAME: &str = "state";
 
-pub static DATABASE: LazyLock<Result<Db, DbOpenError>> = LazyLock::new(|| {
+static DATABASE: LazyLock<Result<Db, DbOpenError>> = LazyLock::new(|| {
     let db = Db::new().map_err(|e| DbOpenError(e.to_string()))?;
     db.migrate().map_err(|e| DbOpenError(e.to_string()))?;
     Ok(db)
 });
 
-pub fn database() -> Result<&'static Db, DbOpenError> {
+pub(crate) fn database() -> Result<&'static Db, DbOpenError> {
     match DATABASE.as_ref() {
         Ok(db) => Ok(db),
         Err(err) => Err(err.clone()),
@@ -74,7 +74,7 @@ impl Db {
         Ok(fig_data_dir()?.join("data.sqlite3"))
     }
 
-    pub fn new() -> Result<Self> {
+    fn new() -> Result<Self> {
         Self::open(&Self::path()?)
     }
 
@@ -109,7 +109,7 @@ impl Db {
         Self { pool }
     }
 
-    pub fn migrate(&self) -> Result<()> {
+    pub(crate) fn migrate(&self) -> Result<()> {
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
 
@@ -150,7 +150,7 @@ impl Db {
         }
     }
 
-    pub fn get_state_value(&self, key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
+    pub(crate) fn get_state_value(&self, key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
         self.get_value(STATE_TABLE_NAME, key)
     }
 
@@ -162,7 +162,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn set_state_value(&self, key: impl AsRef<str>, value: impl Into<serde_json::Value>) -> Result<()> {
+    pub(crate) fn set_state_value(&self, key: impl AsRef<str>, value: impl Into<serde_json::Value>) -> Result<()> {
         self.set_value(STATE_TABLE_NAME, key, value.into())
     }
 
@@ -173,7 +173,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn unset_state_value(&self, key: impl AsRef<str>) -> Result<()> {
+    pub(crate) fn unset_state_value(&self, key: impl AsRef<str>) -> Result<()> {
         self.unset_value(STATE_TABLE_NAME, key)
     }
 
@@ -208,7 +208,7 @@ impl Db {
         Ok(map)
     }
 
-    pub fn all_state_values(&self) -> Result<Map<String, serde_json::Value>> {
+    pub(crate) fn all_state_values(&self) -> Result<Map<String, serde_json::Value>> {
         self.all_values(STATE_TABLE_NAME)
     }
 

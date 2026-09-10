@@ -26,7 +26,7 @@ use crate::util::{
     resolve_filepath,
 };
 
-pub async fn read_file(request: ReadFileRequest, env: &Env, fs: &Fs) -> RequestResult {
+pub(crate) async fn read_file(request: ReadFileRequest, env: &Env, fs: &Fs) -> RequestResult {
     use fig_proto::fig::read_file_response::Type;
     let path = request.path.as_ref().ok_or("No path provided")?;
     let resolved_path = resolve_filepath(path, env);
@@ -48,7 +48,7 @@ pub async fn read_file(request: ReadFileRequest, env: &Env, fs: &Fs) -> RequestR
     Ok(response.into())
 }
 
-pub async fn write_file(request: WriteFileRequest, env: &Env, fs: &Fs) -> RequestResult {
+pub(crate) async fn write_file(request: WriteFileRequest, env: &Env, fs: &Fs) -> RequestResult {
     use fig_proto::fig::write_file_request::Data;
     let path = request.path.as_ref().ok_or_else(|| "No path provided".to_string())?;
     let resolved_path = resolve_filepath(path, env);
@@ -66,7 +66,7 @@ pub async fn write_file(request: WriteFileRequest, env: &Env, fs: &Fs) -> Reques
     RequestResult::success()
 }
 
-pub async fn append_to_file(request: AppendToFileRequest, env: &Env) -> RequestResult {
+pub(crate) async fn append_to_file(request: AppendToFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::append_to_file_request::Data;
     let path = request.path.as_ref().ok_or_else(|| "No path provided".to_string())?;
     let resolved_path = resolve_filepath(path, env);
@@ -90,7 +90,10 @@ pub async fn append_to_file(request: AppendToFileRequest, env: &Env) -> RequestR
     RequestResult::success()
 }
 
-pub async fn destination_of_symbolic_link(request: DestinationOfSymbolicLinkRequest, env: &Env) -> RequestResult {
+pub(crate) async fn destination_of_symbolic_link(
+    request: DestinationOfSymbolicLinkRequest,
+    env: &Env,
+) -> RequestResult {
     let path = request.path.as_ref().ok_or("No path provided")?;
     let resolved_path = resolve_filepath(path, env);
     let real_path: Utf8PathBuf = tokio::fs::canonicalize(&*resolved_path)
@@ -106,7 +109,7 @@ pub async fn destination_of_symbolic_link(request: DestinationOfSymbolicLinkRequ
     Ok(response.into())
 }
 
-pub async fn contents_of_directory(request: ContentsOfDirectoryRequest, env: &Env) -> RequestResult {
+pub(crate) async fn contents_of_directory(request: ContentsOfDirectoryRequest, env: &Env) -> RequestResult {
     let path = request.directory.as_ref().ok_or("No path provided")?;
     let resolved_path = resolve_filepath(path, env);
     let mut stream = tokio::fs::read_dir(&*resolved_path)
@@ -128,7 +131,7 @@ pub async fn contents_of_directory(request: ContentsOfDirectoryRequest, env: &En
     Ok(response.into())
 }
 
-pub async fn create_directory_request(
+pub(crate) async fn create_directory_request(
     request: fig_proto::fig::CreateDirectoryRequest,
     env: &Env,
     fs: &Fs,

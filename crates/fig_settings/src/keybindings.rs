@@ -21,12 +21,12 @@ pub enum Availability {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyBindingDescription {
-    pub identifier: String,
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub category: Option<String>,
-    pub availability: Option<Availability>,
-    pub default_bindings: Option<Vec<String>>,
+    identifier: String,
+    name: Option<String>,
+    description: Option<String>,
+    category: Option<String>,
+    availability: Option<Availability>,
+    default_bindings: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -160,7 +160,7 @@ pub async fn send_hook_to_socket(hook: local::Hook) -> Result<()> {
     conn.send_hook(hook).await
 }
 
-pub async fn send_command_to_socket(command: local::command::Command) -> Result<()> {
+async fn send_command_to_socket(command: local::command::Command) -> Result<()> {
     let path = directories::desktop_socket_path()?;
     let mut conn = BufferedUnixStream::connect_timeout(&path, Duration::from_secs(3)).await?;
     conn.send_command(command, false).await
@@ -170,7 +170,7 @@ pub async fn send_recv_command_to_socket(command: local::command::Command) -> Re
     send_recv_command_to_socket_with_timeout(command, Duration::from_secs(2)).await
 }
 
-pub async fn send_recv_command_to_socket_with_timeout(
+async fn send_recv_command_to_socket_with_timeout(
     command: local::command::Command,
     timeout: Duration,
 ) -> Result<Option<local::CommandResponse>> {

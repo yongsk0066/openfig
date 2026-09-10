@@ -98,12 +98,12 @@ pub struct Shell {
     // pub remote_socket: UnixListener,
     pub desktop_socket: UnixListener,
 
-    pub pty_pair: PtyPair,
-    pub writer: Box<dyn std::io::Write + Send>,
-    pub child: Box<dyn Child + Send + Sync>,
+    pty_pair: PtyPair,
+    writer: Box<dyn std::io::Write + Send>,
+    child: Box<dyn Child + Send + Sync>,
     pub tempdir: TempDir,
 
-    pub buffer: Arc<Mutex<Option<String>>>,
+    buffer: Arc<Mutex<Option<String>>>,
     pub shell_context: Arc<Mutex<Option<ShellContext>>>,
 }
 

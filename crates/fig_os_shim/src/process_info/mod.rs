@@ -18,7 +18,6 @@ use crate::{
 };
 
 mod macos;
-pub use macos::*;
 
 /// Represents the interface to accessing info about the currently running process tree.
 #[derive(Debug, Clone)]
@@ -38,7 +37,7 @@ impl ProcessInfo {
     /// Creates a new [ProcessInfo]. This takes a [Weak] pointer since accessing process info on
     /// platforms like Linux requires file system access, and allows this instance to be embedded
     /// within a single [Context] instance.
-    pub fn new(ctx: Weak<Context>) -> Self {
+    pub(crate) fn new(ctx: Weak<Context>) -> Self {
         Self(inner::Inner::Real(ctx.clone()))
     }
 

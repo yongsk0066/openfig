@@ -11,7 +11,7 @@ use super::{
     RequestResultImpl,
 };
 
-pub async fn get(request: GetLocalStateRequest) -> RequestResult {
+pub(crate) async fn get(request: GetLocalStateRequest) -> RequestResult {
     let res = match request.key {
         Some(key) => serde_json::to_string(
             &state::get_value(&key)
@@ -32,7 +32,7 @@ pub async fn get(request: GetLocalStateRequest) -> RequestResult {
     Ok(response.into())
 }
 
-pub async fn update(request: UpdateLocalStateRequest) -> RequestResult {
+pub(crate) async fn update(request: UpdateLocalStateRequest) -> RequestResult {
     match (&request.key, request.value) {
         (Some(key), Some(value)) => {
             let value = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));

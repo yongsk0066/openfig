@@ -40,25 +40,25 @@ impl State {
         }
     }
 
-    pub fn all(&self) -> Result<Map<String, Value>> {
+    fn all(&self) -> Result<Map<String, Value>> {
         self.database()?.all_state_values()
     }
 
-    pub fn set_value(&self, key: impl AsRef<str>, value: impl Into<Value>) -> Result<()> {
+    fn set_value(&self, key: impl AsRef<str>, value: impl Into<Value>) -> Result<()> {
         self.database()?.set_state_value(key, value)?;
         Ok(())
     }
 
-    pub fn remove_value(&self, key: impl AsRef<str>) -> Result<()> {
+    fn remove_value(&self, key: impl AsRef<str>) -> Result<()> {
         self.database()?.unset_state_value(key)?;
         Ok(())
     }
 
-    pub fn get_value(&self, key: impl AsRef<str>) -> Result<Option<Value>> {
+    fn get_value(&self, key: impl AsRef<str>) -> Result<Option<Value>> {
         self.database()?.get_state_value(key)
     }
 
-    pub fn get<T: DeserializeOwned>(&self, key: impl AsRef<str>) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, key: impl AsRef<str>) -> Result<Option<T>> {
         Ok(self
             .database()?
             .get_state_value(key)?
@@ -66,11 +66,11 @@ impl State {
             .transpose()?)
     }
 
-    pub fn get_bool(&self, key: impl AsRef<str>) -> Result<Option<bool>> {
+    fn get_bool(&self, key: impl AsRef<str>) -> Result<Option<bool>> {
         Ok(self.database()?.get_state_value(key)?.and_then(|value| value.as_bool()))
     }
 
-    pub fn get_bool_or(&self, key: impl AsRef<str>, default: bool) -> bool {
+    fn get_bool_or(&self, key: impl AsRef<str>, default: bool) -> bool {
         self.get_bool(key).ok().flatten().unwrap_or(default)
     }
 

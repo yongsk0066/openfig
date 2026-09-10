@@ -49,7 +49,7 @@ pub enum FigMessageType {
 }
 
 impl FigMessageType {
-    pub const fn header(&self) -> &'static [u8] {
+    const fn header(&self) -> &'static [u8] {
         match self {
             FigMessageType::Protobuf => b"fig-pbuf",
             FigMessageType::Json => b"fig-json",
@@ -71,8 +71,8 @@ impl FigMessageType {
 ///   - The message, encoded as protobuf, json-protobuf, or messagepack-protobuf
 #[derive(Debug, Clone)]
 pub struct FigMessage {
-    pub inner: Bytes,
-    pub message_type: FigMessageType,
+    inner: Bytes,
+    message_type: FigMessageType,
 }
 
 #[derive(Debug)]
@@ -126,7 +126,7 @@ impl FigMessage {
         FigMessage::encode(FigMessageType::Json, serde_json::to_vec(&json)?.into())
     }
 
-    pub fn encode_buf(&self, dst: &mut BytesMut) -> Result<(), FigMessageEncodeError> {
+    fn encode_buf(&self, dst: &mut BytesMut) -> Result<(), FigMessageEncodeError> {
         let body = &self.inner;
         let message_type = self.message_type;
 
@@ -148,7 +148,7 @@ impl FigMessage {
         Ok(inner.freeze())
     }
 
-    pub fn encode(message_type: FigMessageType, body: Bytes) -> Result<Bytes, FigMessageEncodeError> {
+    fn encode(message_type: FigMessageType, body: Bytes) -> Result<Bytes, FigMessageEncodeError> {
         let msg = Self {
             inner: Bytes::from(body.to_vec()),
             message_type,

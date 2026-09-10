@@ -7,7 +7,7 @@ use camino::{
 use fig_os_shim::Env;
 use fig_proto::fig::FilePath;
 
-pub fn resolve_filepath<'a>(file_path: &'a FilePath, env: &Env) -> Cow<'a, Utf8Path> {
+pub(crate) fn resolve_filepath<'a>(file_path: &'a FilePath, env: &Env) -> Cow<'a, Utf8Path> {
     let convert = |path: &'a str| -> Cow<'_, str> {
         if file_path.expand_tilde_in_path() {
             shellexpand::tilde_with_context(path, || env.home().and_then(|p| p.to_str().map(|s| s.to_owned())))

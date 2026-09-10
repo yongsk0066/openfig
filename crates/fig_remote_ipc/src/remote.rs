@@ -91,7 +91,7 @@ pub async fn start_remote_ipc(
     Ok(())
 }
 
-pub async fn handle_remote_ipc(
+async fn handle_remote_ipc(
     stream: UnixStream,
     figterm_state: Arc<FigtermState>,
     mut hook: impl RemoteHookHandler + Send,

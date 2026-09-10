@@ -52,7 +52,7 @@ impl Settings {
         ))))
     }
 
-    pub fn set_value(&self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Result<()> {
+    fn set_value(&self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Result<()> {
         match &self.0 {
             inner::Inner::Real => {
                 let mut settings = OldSettings::load()?;
@@ -67,7 +67,7 @@ impl Settings {
         }
     }
 
-    pub fn remove_value(&self, key: impl AsRef<str>) -> Result<()> {
+    fn remove_value(&self, key: impl AsRef<str>) -> Result<()> {
         match &self.0 {
             inner::Inner::Real => {
                 let mut settings = OldSettings::load()?;
@@ -82,7 +82,7 @@ impl Settings {
         }
     }
 
-    pub fn get_value(&self, key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
+    fn get_value(&self, key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
         match &self.0 {
             inner::Inner::Real => Ok(OldSettings::load()?.get(key.as_ref()).map(|v| v.clone())),
             inner::Inner::Fake(map) => Ok(map.lock()?.get(key.as_ref()).cloned()),
@@ -109,18 +109,18 @@ impl Settings {
         }
     }
 
-    pub fn get_bool(&self, key: impl AsRef<str>) -> Result<Option<bool>> {
+    fn get_bool(&self, key: impl AsRef<str>) -> Result<Option<bool>> {
         match &self.0 {
             inner::Inner::Real => Ok(OldSettings::load()?.get_bool(key.as_ref())),
             inner::Inner::Fake(map) => Ok(map.lock()?.get(key.as_ref()).cloned().and_then(|v| v.as_bool())),
         }
     }
 
-    pub fn get_bool_or(&self, key: impl AsRef<str>, default: bool) -> bool {
+    fn get_bool_or(&self, key: impl AsRef<str>, default: bool) -> bool {
         self.get_bool(key).ok().flatten().unwrap_or(default)
     }
 
-    pub fn get_string(&self, key: impl AsRef<str>) -> Result<Option<String>> {
+    fn get_string(&self, key: impl AsRef<str>) -> Result<Option<String>> {
         match &self.0 {
             inner::Inner::Real => Ok(OldSettings::load()?.get_string(key.as_ref())),
             inner::Inner::Fake(map) => Ok(map
@@ -131,7 +131,7 @@ impl Settings {
         }
     }
 
-    pub fn get_string_opt(&self, key: impl AsRef<str>) -> Option<String> {
+    fn get_string_opt(&self, key: impl AsRef<str>) -> Option<String> {
         self.get_string(key).ok().flatten()
     }
 
@@ -139,14 +139,14 @@ impl Settings {
         self.get_string(key).ok().flatten().unwrap_or(default)
     }
 
-    pub fn get_int(&self, key: impl AsRef<str>) -> Result<Option<i64>> {
+    fn get_int(&self, key: impl AsRef<str>) -> Result<Option<i64>> {
         match &self.0 {
             inner::Inner::Real => Ok(OldSettings::load()?.get_int(key.as_ref())),
             inner::Inner::Fake(map) => Ok(map.lock()?.get(key.as_ref()).cloned().and_then(|v| v.as_i64())),
         }
     }
 
-    pub fn get_int_or(&self, key: impl AsRef<str>, default: i64) -> i64 {
+    fn get_int_or(&self, key: impl AsRef<str>, default: i64) -> i64 {
         self.get_int(key).ok().flatten().unwrap_or(default)
     }
 }

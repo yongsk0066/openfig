@@ -106,7 +106,7 @@ pub enum Channel {
 }
 
 impl Channel {
-    pub fn id(&self) -> &'static str {
+    fn id(&self) -> &'static str {
         match self {
             Channel::Stable => "stable",
             Channel::Beta => "beta",
@@ -115,7 +115,7 @@ impl Channel {
         }
     }
 
-    pub fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         match self {
             Channel::Stable => "Stable",
             Channel::Beta => "Beta",

@@ -37,7 +37,7 @@ pub struct InnerFigtermState {
     /// All current sessions of [FigtermSession]'s.
     pub linked_sessions: HashMap<Uuid, FigtermSession>,
     /// The most recent figterm session
-    pub most_recent: Option<Uuid>,
+    most_recent: Option<Uuid>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -52,7 +52,7 @@ impl FigtermState {
     }
 
     /// Inserts a new session id
-    pub fn insert(&self, session: FigtermSession) {
+    pub(crate) fn insert(&self, session: FigtermSession) {
         let mut figterm_state = self.inner.lock();
         figterm_state.most_recent = Some(session.id);
         figterm_state.linked_sessions.insert(session.id, session);
@@ -76,7 +76,7 @@ impl FigtermState {
         res
     }
 
-    pub fn with_most_recent<T>(&self, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
+    fn with_most_recent<T>(&self, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
         let id = guard.most_recent?;
         guard
@@ -114,7 +114,7 @@ impl FigtermState {
         }
     }
 
-    pub fn remove_id(&self, session_id: &Uuid) -> Option<FigtermSession> {
+    pub(crate) fn remove_id(&self, session_id: &Uuid) -> Option<FigtermSession> {
         let mut guard = self.inner.lock();
         if guard.most_recent.as_ref() == Some(session_id) {
             guard.most_recent = None;
@@ -151,26 +151,26 @@ impl From<InterceptMode> for bool {
 #[derive(Debug, Serialize)]
 pub struct FigtermSession {
     pub id: Uuid,
-    pub secret: String,
+    pub(crate) secret: String,
     #[serde(skip)]
     pub sender: flume::Sender<FigtermCommand>,
     #[serde(skip)]
-    pub writer: Option<flume::Sender<Clientbound>>,
+    pub(crate) writer: Option<flume::Sender<Clientbound>>,
     #[serde(skip)]
-    pub dead_since: Option<Instant>, // TODO: prune old sessions
+    pub(crate) dead_since: Option<Instant>, // TODO: prune old sessions
     #[serde(skip)]
     pub edit_buffer: EditBuffer,
     #[serde(skip)]
-    pub last_receive: Instant,
+    pub(crate) last_receive: Instant,
     pub context: Option<ShellContext>,
     #[serde(skip)]
     pub terminal_cursor_coordinates: Option<TerminalCursorCoordinates>,
     #[serde(skip)]
-    pub response_map: HashMap<u64, oneshot::Sender<hostbound::response::Response>>,
+    pub(crate) response_map: HashMap<u64, oneshot::Sender<hostbound::response::Response>>,
     #[serde(skip)]
-    pub nonce_counter: Arc<AtomicU64>,
+    pub(crate) nonce_counter: Arc<AtomicU64>,
     #[serde(skip)]
-    pub on_close_tx: broadcast::Sender<()>,
+    pub(crate) on_close_tx: broadcast::Sender<()>,
     pub intercept: InterceptMode,
     pub intercept_global: InterceptMode,
 }

@@ -40,7 +40,7 @@ pub enum When {
 }
 
 impl When {
-    pub fn all() -> [When; 2] {
+    fn all() -> [When; 2] {
         [Self::Pre, Self::Post]
     }
 }
@@ -206,9 +206,9 @@ impl Clone for Box<dyn ShellIntegration> {
 
 #[derive(Debug, Clone)]
 pub struct ShellScriptShellIntegration {
-    pub shell: Shell,
-    pub when: When,
-    pub path: PathBuf,
+    shell: Shell,
+    when: When,
+    path: PathBuf,
 }
 
 fn get_prefix(s: &str) -> &str {
@@ -283,11 +283,11 @@ impl ShellIntegration for ShellScriptShellIntegration {
 /// files.
 #[derive(Debug, Clone)]
 pub struct DotfileShellIntegration {
-    pub shell: Shell,
-    pub pre: bool,
-    pub post: bool,
-    pub dotfile_directory: PathBuf,
-    pub dotfile_name: &'static str,
+    shell: Shell,
+    pre: bool,
+    post: bool,
+    dotfile_directory: PathBuf,
+    dotfile_name: &'static str,
 }
 
 impl DotfileShellIntegration {

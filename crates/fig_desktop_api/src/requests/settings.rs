@@ -15,7 +15,7 @@ use super::{
     RequestResultImpl,
 };
 
-pub async fn get(request: GetSettingsPropertyRequest) -> RequestResult {
+pub(crate) async fn get(request: GetSettingsPropertyRequest) -> RequestResult {
     let res = match request.key {
         Some(key) => serde_json::to_string(
             &settings::get_value(&key)
@@ -37,7 +37,7 @@ pub async fn get(request: GetSettingsPropertyRequest) -> RequestResult {
     Ok(response.into())
 }
 
-pub async fn update(request: UpdateSettingsPropertyRequest) -> RequestResult {
+pub(crate) async fn update(request: UpdateSettingsPropertyRequest) -> RequestResult {
     match (&request.key, request.value) {
         (Some(key), Some(value)) => {
             let value = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));

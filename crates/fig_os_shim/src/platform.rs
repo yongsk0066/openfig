@@ -11,7 +11,7 @@ pub enum Os {
 }
 
 impl Os {
-    pub fn current() -> Self {
+    pub(crate) fn current() -> Self {
         Self::Mac
     }
 
@@ -19,7 +19,7 @@ impl Os {
         &[Self::Mac]
     }
 
-    pub fn as_str(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             Self::Mac => "macos",
         }

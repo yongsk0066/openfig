@@ -113,7 +113,7 @@ impl Constants {
 }
 
 impl Constants {
-    pub fn script(&self) -> String {
+    fn script(&self) -> String {
         format!("fig.constants = {};", json!(self))
     }
 }

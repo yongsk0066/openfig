@@ -44,14 +44,14 @@ fn is_false(value: &bool) -> bool {
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct BuildDetails {
-    pub version: String,
-    pub hash: Option<&'static str>,
-    pub date: Option<String>,
-    pub variant: String,
+    version: String,
+    hash: Option<&'static str>,
+    date: Option<String>,
+    variant: String,
 }
 
 impl BuildDetails {
-    pub fn new() -> BuildDetails {
+    fn new() -> BuildDetails {
         let date = fig_util::consts::build::DATETIME
             .and_then(|input| OffsetDateTime::parse(input, &Rfc3339).ok())
             .and_then(|time| {
@@ -83,10 +83,10 @@ where
 #[serde(rename_all = "kebab-case")]
 pub struct SystemInfo {
     #[serde(serialize_with = "serialize_os_version")]
-    pub os: Option<&'static OSVersion>,
-    pub chip: Option<String>,
-    pub total_cores: Option<usize>,
-    pub memory: Option<String>,
+    os: Option<&'static OSVersion>,
+    chip: Option<String>,
+    total_cores: Option<usize>,
+    memory: Option<String>,
 }
 
 impl SystemInfo {
@@ -115,7 +115,7 @@ impl SystemInfo {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct EnvVarDiagnostic {
-    pub env_vars: BTreeMap<String, String>,
+    env_vars: BTreeMap<String, String>,
 }
 
 impl EnvVarDiagnostic {
@@ -159,19 +159,19 @@ impl EnvVarDiagnostic {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CurrentEnvironment {
-    pub cwd: Option<String>,
-    pub cli_path: Option<String>,
-    pub os: Os,
-    pub shell_path: Option<String>,
-    pub shell_version: Option<String>,
+    cwd: Option<String>,
+    cli_path: Option<String>,
+    os: Os,
+    shell_path: Option<String>,
+    shell_version: Option<String>,
     #[serde(serialize_with = "serialize_display_option")]
-    pub terminal: Option<Terminal>,
+    terminal: Option<Terminal>,
     #[serde(skip_serializing_if = "is_false")]
-    pub in_ssh: bool,
+    in_ssh: bool,
     #[serde(skip_serializing_if = "is_false")]
-    pub in_ci: bool,
+    in_ci: bool,
     #[serde(skip_serializing_if = "is_false")]
-    pub in_codespaces: bool,
+    in_codespaces: bool,
 }
 
 impl CurrentEnvironment {
@@ -226,11 +226,11 @@ impl CurrentEnvironment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Diagnostics {
-    pub build_details: BuildDetails,
-    pub system_info: SystemInfo,
-    pub environment: CurrentEnvironment,
+    build_details: BuildDetails,
+    system_info: SystemInfo,
+    environment: CurrentEnvironment,
     #[serde(flatten)]
-    pub environment_variables: EnvVarDiagnostic,
+    environment_variables: EnvVarDiagnostic,
 }
 
 impl Diagnostics {

@@ -10,7 +10,7 @@ use fig_settings::history::rusqlite::types::Value;
 
 use super::RequestResult;
 
-pub async fn query(request: HistoryQueryRequest) -> RequestResult {
+pub(crate) async fn query(request: HistoryQueryRequest) -> RequestResult {
     let history = History::new();
     let mut params: Vec<Value> = Vec::with_capacity(request.params.len());
     for (i, param) in request.params.iter().enumerate() {

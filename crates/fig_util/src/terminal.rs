@@ -153,7 +153,7 @@ impl Terminal {
 
     /// Attempts to return the suspected terminal emulator for the current process according to the
     /// process hierarchy. Only the list provided in `terminals` will be searched for.
-    pub fn from_process_info(ctx: &Context, terminals: &Vec<Terminal>) -> Option<Self> {
+    fn from_process_info(ctx: &Context, terminals: &Vec<Terminal>) -> Option<Self> {
         let mut option_pid = Some(Box::new(ctx.process_info().current_pid()));
         let (mut curr_depth, max_depth) = (0, 5);
         while curr_depth < max_depth {
@@ -185,7 +185,7 @@ impl Terminal {
     /// the value from /proc/pid/cmdline except with null bytes replaced with space.
     ///
     /// Only the list provided in `terminals` will be searched for.
-    pub fn try_from_cmdline(cmdline: &str, terminals: &Vec<Terminal>) -> Option<Self> {
+    fn try_from_cmdline(cmdline: &str, terminals: &Vec<Terminal>) -> Option<Self> {
         // Default logic that checks the final path element of the first argument.
         let first_arg_name = cmdline
             .split(' ')

@@ -60,7 +60,7 @@ pub enum ReadGuard<'a, T> {
 }
 
 impl<'a, T> ReadGuard<'a, T> {
-    pub fn try_map<U, F: FnOnce(&T) -> Option<&U>>(self, f: F) -> Option<MappedReadGuard<'a, U>> {
+    fn try_map<U, F: FnOnce(&T) -> Option<&U>>(self, f: F) -> Option<MappedReadGuard<'a, U>> {
         match self {
             ReadGuard::Global(guard) => RwLockReadGuard::<'a, Option<T>>::try_map(guard, |data: &Option<T>| {
                 f(data.as_ref().expect("global backend is not used"))
@@ -105,7 +105,7 @@ pub enum WriteGuard<'a, T> {
 }
 
 impl<'a, T> WriteGuard<'a, T> {
-    pub fn try_map<U, F: FnOnce(&mut T) -> Option<&mut U>>(self, f: F) -> Option<MappedWriteGuard<'a, U>> {
+    fn try_map<U, F: FnOnce(&mut T) -> Option<&mut U>>(self, f: F) -> Option<MappedWriteGuard<'a, U>> {
         match self {
             WriteGuard::Global(guard) => RwLockWriteGuard::<'a, Option<T>>::try_map(guard, |data: &mut Option<T>| {
                 f(data.as_mut().expect("global backend is not used"))
@@ -324,7 +324,7 @@ pub trait JsonStore: Sized {
 }
 
 pub struct OldSettings {
-    pub(crate) inner: Backend,
+    inner: Backend,
 }
 
 impl JsonStore for OldSettings {

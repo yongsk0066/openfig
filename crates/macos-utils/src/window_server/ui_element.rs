@@ -131,7 +131,7 @@ pub struct CGWindowInfo {
 }
 
 impl UIElement {
-    pub fn get_ref(&self) -> AXUIElementRef {
+    fn get_ref(&self) -> AXUIElementRef {
         self.0.as_concrete_TypeRef()
     }
 
@@ -165,7 +165,7 @@ impl UIElement {
         }
     }
 
-    pub fn enable_screen_reader_accessibility(&self) -> Result<()> {
+    pub(crate) fn enable_screen_reader_accessibility(&self) -> Result<()> {
         unsafe {
             let res = self.set_attr::<CFBoolean>(kAXManualAccessibilityAttribute, kCFBooleanTrue);
 
@@ -177,16 +177,16 @@ impl UIElement {
         }
     }
 
-    pub fn is_focused(&self) -> Result<bool> {
+    fn is_focused(&self) -> Result<bool> {
         let focused = self.get_attr::<CFBoolean>(kAXFocusedAttribute)?;
         Ok(focused.into())
     }
 
-    pub fn role(&self) -> Result<CFString> {
+    fn role(&self) -> Result<CFString> {
         self.get_attr::<CFString>(kAXRoleAttribute)
     }
 
-    pub fn is_fullscreen(&self) -> Result<bool> {
+    pub(crate) fn is_fullscreen(&self) -> Result<bool> {
         self.get_attr::<CFBoolean>(kAXFullScreenAttribute).map(|res| res.into())
     }
 
@@ -194,12 +194,12 @@ impl UIElement {
         self.get_attr::<AXValue>(kAXFrameAttribute)?.as_rect().ok_or(-1)
     }
 
-    pub fn focused_window(&self) -> Result<Self> {
+    pub(crate) fn focused_window(&self) -> Result<Self> {
         let window = self.get_attr::<AXUIElement>(kAXFocusedWindowAttribute)?;
         Ok(window.into())
     }
 
-    pub fn dom_class_list(&self) -> Result<Vec<String>> {
+    fn dom_class_list(&self) -> Result<Vec<String>> {
         let class_list = self.get_attr::<CFArray>(kAXDOMClassListAttribute)?;
         let filtered: Vec<_> = class_list
             .iter()

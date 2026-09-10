@@ -18,9 +18,9 @@ use crate::error::{
 
 #[derive(Debug, Clone)]
 pub struct FileIntegration {
-    pub path: PathBuf,
-    pub contents: String,
-    pub mode: Option<u32>,
+    pub(crate) path: PathBuf,
+    pub(crate) contents: String,
+    pub(crate) mode: Option<u32>,
 }
 
 #[async_trait]

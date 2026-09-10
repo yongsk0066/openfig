@@ -10,11 +10,11 @@ use super::{
 };
 use crate::Context;
 
-pub fn current(ctx: Weak<Context>) -> Pid {
+pub(crate) fn current(ctx: Weak<Context>) -> Pid {
     Pid::Real(ctx.clone(), nix::unistd::getpid().into())
 }
 
-pub fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
+pub(crate) fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
     let pid = pid.0;
     let mut info = MaybeUninit::<nix::libc::proc_bsdinfo>::zeroed();
     let ret = unsafe {
@@ -36,7 +36,7 @@ pub fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
     }
 }
 
-pub fn exe(_: Weak<Context>, pid: &RawPid) -> Option<PathBuf> {
+pub(crate) fn exe(_: Weak<Context>, pid: &RawPid) -> Option<PathBuf> {
     let mut buffer = [0u8; 4096];
     let pid = pid.0;
     let buffer_ptr = buffer.as_mut_ptr().cast::<std::ffi::c_void>();
@@ -48,6 +48,6 @@ pub fn exe(_: Weak<Context>, pid: &RawPid) -> Option<PathBuf> {
     }
 }
 
-pub fn cmdline(_: Weak<Context>, _: &RawPid) -> Option<String> {
+pub(crate) fn cmdline(_: Weak<Context>, _: &RawPid) -> Option<String> {
     None
 }

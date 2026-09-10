@@ -5,7 +5,7 @@ use std::path::{
 
 use fig_util::directories;
 
-pub fn backup_file(path: impl AsRef<Path>, backup_dir: Option<impl Into<PathBuf>>) -> std::io::Result<()> {
+pub(crate) fn backup_file(path: impl AsRef<Path>, backup_dir: Option<impl Into<PathBuf>>) -> std::io::Result<()> {
     let pathref = path.as_ref();
     if pathref.exists() {
         let name: String = pathref.file_name().unwrap().to_string_lossy().into_owned();

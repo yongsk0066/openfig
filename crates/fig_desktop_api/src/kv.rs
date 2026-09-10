@@ -1,28 +1,29 @@
 use std::sync::Arc;
 
-use bincode::Options;
 use dashmap::DashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum KVError {
     #[error("{}", .0)]
-    Bincode(#[from] bincode::Error),
+    Serde(#[from] serde_json::Error),
 }
 
 type Result<T, E = KVError> = std::result::Result<T, E>;
 
-// bincode provides a `serialize` and `deserialize` function, but they don't have good defaults that
-// the `bincode::options()` provides
+// The store is process-local (see DashKVStore below), so the encoding only has to be
+// deterministic within a single run: it never reaches disk or another process. This used to be
+// bincode, which is permanently discontinued (RUSTSEC-2025-0141); serde_json is already a
+// dependency of this crate and needs no new one.
 
 #[inline(always)]
 fn serialize(value: impl serde::Serialize) -> Result<Vec<u8>> {
-    Ok(bincode::options().serialize(&value)?)
+    Ok(serde_json::to_vec(&value)?)
 }
 
 #[inline(always)]
 fn deserialize<T: serde::de::DeserializeOwned>(value: &[u8]) -> Result<T> {
-    Ok(bincode::options().deserialize(value)?)
+    Ok(serde_json::from_slice(value)?)
 }
 
 pub trait KVStore {

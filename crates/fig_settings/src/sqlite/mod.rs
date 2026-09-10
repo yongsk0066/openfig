@@ -27,7 +27,13 @@ use tracing::info;
 use crate::Result;
 use crate::error::DbOpenError;
 
-const STATE_TABLE_NAME: &str = "state";
+/// The statements this module runs, spelled out instead of `format!`ed from a table name on every
+/// call: `prepare_cached` keys on the SQL text, so a freshly formatted string allocated and hashed
+/// per statement for no reason. `state` is the only table these touch.
+const SELECT_STATE: &str = "SELECT value FROM state WHERE key = ?1";
+const SELECT_ALL_STATE: &str = "SELECT key, value FROM state";
+const UPSERT_STATE: &str = "INSERT OR REPLACE INTO state (key, value) VALUES (?1, ?2)";
+const DELETE_STATE: &str = "DELETE FROM state WHERE key = ?1";
 
 static DATABASE: LazyLock<Result<Db, DbOpenError>> = LazyLock::new(|| {
     let db = Db::new().map_err(|e| DbOpenError(e.to_string()))?;
@@ -176,9 +182,9 @@ impl Db {
         Ok(())
     }
 
-    fn get_value<T: FromSql>(&self, table: &'static str, key: impl AsRef<str>) -> Result<Option<T>> {
+    fn get_value<T: FromSql>(&self, key: impl AsRef<str>) -> Result<Option<T>> {
         let conn = self.conn();
-        let mut stmt = conn.prepare_cached(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
+        let mut stmt = conn.prepare_cached(SELECT_STATE)?;
         match stmt.query_row([key.as_ref()], |row| row.get(0)) {
             Ok(data) => Ok(Some(data)),
             Err(Error::QueryReturnedNoRows) => Ok(None),
@@ -187,34 +193,32 @@ impl Db {
     }
 
     pub(crate) fn get_state_value(&self, key: impl AsRef<str>) -> Result<Option<serde_json::Value>> {
-        self.get_value(STATE_TABLE_NAME, key)
+        self.get_value(key)
     }
 
-    fn set_value<T: ToSql>(&self, table: &'static str, key: impl AsRef<str>, value: T) -> Result<()> {
+    fn set_value<T: ToSql>(&self, key: impl AsRef<str>, value: T) -> Result<()> {
         self.conn()
-            .prepare_cached(&format!("INSERT OR REPLACE INTO {table} (key, value) VALUES (?1, ?2)"))?
+            .prepare_cached(UPSERT_STATE)?
             .execute(params![key.as_ref(), value])?;
         Ok(())
     }
 
     pub(crate) fn set_state_value(&self, key: impl AsRef<str>, value: impl Into<serde_json::Value>) -> Result<()> {
-        self.set_value(STATE_TABLE_NAME, key, value.into())
+        self.set_value(key, value.into())
     }
 
-    fn unset_value(&self, table: &'static str, key: impl AsRef<str>) -> Result<()> {
-        self.conn()
-            .prepare_cached(&format!("DELETE FROM {table} WHERE key = ?1"))?
-            .execute([key.as_ref()])?;
+    fn unset_value(&self, key: impl AsRef<str>) -> Result<()> {
+        self.conn().prepare_cached(DELETE_STATE)?.execute([key.as_ref()])?;
         Ok(())
     }
 
     pub(crate) fn unset_state_value(&self, key: impl AsRef<str>) -> Result<()> {
-        self.unset_value(STATE_TABLE_NAME, key)
+        self.unset_value(key)
     }
 
-    fn is_value_set(&self, table: &'static str, key: impl AsRef<str>) -> Result<bool> {
+    fn is_value_set(&self, key: impl AsRef<str>) -> Result<bool> {
         let conn = self.conn();
-        let mut stmt = conn.prepare_cached(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
+        let mut stmt = conn.prepare_cached(SELECT_STATE)?;
         match stmt.query_row([key.as_ref()], |_| Ok(())) {
             Ok(()) => Ok(true),
             Err(Error::QueryReturnedNoRows) => Ok(false),
@@ -223,12 +227,12 @@ impl Db {
     }
 
     pub fn is_state_value_set(&self, key: impl AsRef<str>) -> Result<bool> {
-        self.is_value_set(STATE_TABLE_NAME, key)
+        self.is_value_set(key)
     }
 
-    fn all_values(&self, table: &'static str) -> Result<Map<String, serde_json::Value>> {
+    fn all_values(&self) -> Result<Map<String, serde_json::Value>> {
         let conn = self.conn();
-        let mut stmt = conn.prepare_cached(&format!("SELECT key, value FROM {table}"))?;
+        let mut stmt = conn.prepare_cached(SELECT_ALL_STATE)?;
         let rows = stmt.query_map([], |row| {
             let key: String = row.get(0)?;
             let value: serde_json::Value = row.get(1)?;
@@ -244,7 +248,7 @@ impl Db {
     }
 
     pub(crate) fn all_state_values(&self) -> Result<Map<String, serde_json::Value>> {
-        self.all_values(STATE_TABLE_NAME)
+        self.all_values()
     }
 
     // atomic style operations
@@ -257,11 +261,7 @@ impl Db {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
 
-        let value = tx.query_row::<Option<T>, _, _>(
-            &format!("SELECT value FROM {STATE_TABLE_NAME} WHERE key = ?1"),
-            [key.as_ref()],
-            |row| row.get(0),
-        );
+        let value = tx.query_row::<Option<T>, _, _>(SELECT_STATE, [key.as_ref()], |row| row.get(0));
 
         let value_0: Option<T> = match value {
             Ok(value) => value,
@@ -272,15 +272,9 @@ impl Db {
         let value_1 = op(&value_0);
 
         if let Some(value) = value_1 {
-            tx.execute(
-                &format!("INSERT OR REPLACE INTO {STATE_TABLE_NAME} (key, value) VALUES (?1, ?2)"),
-                params![key.as_ref(), value],
-            )?;
+            tx.execute(UPSERT_STATE, params![key.as_ref(), value])?;
         } else {
-            tx.execute(
-                &format!("DELETE FROM {STATE_TABLE_NAME} WHERE key = ?1"),
-                [key.as_ref()],
-            )?;
+            tx.execute(DELETE_STATE, [key.as_ref()])?;
         }
 
         tx.commit()?;

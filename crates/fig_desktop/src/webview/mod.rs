@@ -15,8 +15,6 @@ use std::sync::{
 
 use fig_desktop_api::init_script::javascript_init;
 use fig_os_shim::Context;
-use fig_proto::fig::ClientOriginatedMessage;
-use fig_proto::fig::client_originated_message::Submessage;
 use fig_remote_ipc::figterm::FigtermState;
 use fig_util::consts::PRODUCT_NAME;
 use fig_util::{
@@ -82,7 +80,6 @@ use crate::protocol::{
     spec,
 };
 use crate::remote_ipc::RemoteHook;
-use crate::request::api_request;
 use crate::tray::{
     self,
     build_tray,
@@ -141,7 +138,6 @@ pub struct WebviewManager {
     window_id_map: WryIdMap,
     event_loop: EventLoop,
     figterm_state: Arc<FigtermState>,
-    intercept_state: Arc<InterceptState>,
     platform_state: Arc<PlatformState>,
     notifications_state: Arc<WebviewNotificationsState>,
     api_state: Arc<ApiState>,
@@ -188,14 +184,13 @@ impl WebviewManager {
         GLOBAL_PROXY.set(proxy.clone()).unwrap();
 
         let figterm_state = Arc::new(FigtermState::default());
-        let intercept_state = Arc::new(InterceptState::default());
         let platform_state = Arc::new(PlatformState::new(proxy.clone()));
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApiState {
             ctx: Arc::clone(&context),
             figterm_state: figterm_state.clone(),
-            intercept_state: intercept_state.clone(),
+            intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
             proxy: Box::new(proxy),
         });
@@ -205,7 +200,6 @@ impl WebviewManager {
             window_id_map: Default::default(),
             event_loop,
             figterm_state,
-            intercept_state,
             platform_state,
             notifications_state,
             api_state,
@@ -287,73 +281,6 @@ impl WebviewManager {
                 last_sent: Default::default(),
             },
         ));
-
-        let (api_handler_tx, mut api_handler_rx) = tokio::sync::mpsc::unbounded_channel::<(WindowId, String)>();
-        let (sync_api_handler_tx, mut sync_api_handler_rx) = tokio::sync::mpsc::unbounded_channel::<(
-            WindowId,
-            fig_desktop_api::error::Result<ClientOriginatedMessage>,
-        )>();
-
-        {
-            let sync_proxy = self.event_loop.create_proxy();
-            let sync_figterm_state = self.figterm_state.clone();
-            let sync_intercept_state = self.intercept_state.clone();
-            let sync_notifications_state = self.notifications_state.clone();
-
-            tokio::spawn(async move {
-                while let Some((fig_id, message)) = sync_api_handler_rx.recv().await {
-                    let proxy = sync_proxy.clone();
-                    let figterm_state = sync_figterm_state.clone();
-                    let intercept_state = sync_intercept_state.clone();
-                    let notifications_state = sync_notifications_state.clone();
-                    api_request(
-                        fig_id,
-                        message,
-                        &figterm_state,
-                        &intercept_state,
-                        &notifications_state,
-                        &proxy.clone(),
-                    )
-                    .await;
-                }
-            });
-
-            let proxy = self.event_loop.create_proxy();
-            let figterm_state = self.figterm_state.clone();
-            let intercept_state = self.intercept_state.clone();
-            let notifications_state = self.notifications_state.clone();
-
-            tokio::spawn(async move {
-                while let Some((fig_id, payload)) = api_handler_rx.recv().await {
-                    let message = fig_desktop_api::handler::request_from_b64(&payload);
-                    if matches!(
-                        message,
-                        Ok(ClientOriginatedMessage {
-                            id: _,
-                            submessage: Some(Submessage::PositionWindowRequest(_) | Submessage::WindowFocusRequest(_))
-                        })
-                    ) {
-                        sync_api_handler_tx.send((fig_id, message)).ok();
-                    } else {
-                        let proxy = proxy.clone();
-                        let figterm_state = figterm_state.clone();
-                        let intercept_state = intercept_state.clone();
-                        let notifications_state = notifications_state.clone();
-                        tokio::spawn(async move {
-                            api_request(
-                                fig_id,
-                                message,
-                                &figterm_state,
-                                &intercept_state,
-                                &notifications_state,
-                                &proxy.clone(),
-                            )
-                            .await;
-                        });
-                    }
-                }
-            });
-        }
 
         file_watcher::setup_listeners(self.notifications_state.clone(), self.event_loop.create_proxy()).await;
 
@@ -446,7 +373,6 @@ impl WebviewManager {
                                         &self.platform_state,
                                         &self.notifications_state,
                                         window_target,
-                                        &api_handler_tx,
                                     );
                                 } else {
                                     trace!(
@@ -471,7 +397,6 @@ impl WebviewManager {
                                         &self.platform_state,
                                         &self.notifications_state,
                                         window_target,
-                                        &api_handler_tx,
                                     );
                                 } else {
                                     trace!(
@@ -632,8 +557,6 @@ pub fn build_dashboard(
         .with_theme(THEME.and_then(to_tao_theme))
         .build(event_loop)?;
 
-    let proxy = event_loop.create_proxy();
-
     let mut url = dashboard::url();
 
     if show_onboarding {
@@ -644,14 +567,6 @@ pub fn build_dashboard(
 
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(url.as_str())
-        .with_ipc_handler(move |payload| {
-            proxy.send_event_or_log(Event::WindowEvent {
-                window_id: DASHBOARD_ID.clone(),
-                window_event: WindowEvent::Api {
-                    payload: payload.into_body(),
-                },
-            });
-        })
         .with_devtools(true)
         .with_asynchronous_custom_protocol(
             "figresource".into(),
@@ -704,18 +619,8 @@ pub fn build_autocomplete(
 
     let window = window_builder.build(event_loop)?;
 
-    let proxy = event_loop.create_proxy();
-
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(autocomplete::url().as_str())
-        .with_ipc_handler(move |payload| {
-            proxy.send_event_or_log(Event::WindowEvent {
-                window_id: AUTOCOMPLETE_ID.clone(),
-                window_event: WindowEvent::Api {
-                    payload: payload.into_body(),
-                },
-            });
-        })
         .with_asynchronous_custom_protocol(
             "fig".into(),
             utils::wrap_custom_protocol(Arc::clone(&state.ctx), "fig", AutocompleteId, icons::handle),

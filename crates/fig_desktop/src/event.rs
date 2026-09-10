@@ -123,10 +123,6 @@ pub enum WindowEvent {
 
     Reload,
 
-    Api {
-        /// A base64 encoded protobuf
-        payload: String,
-    },
     Devtools,
     DebugMode(bool),
 
@@ -140,11 +136,10 @@ impl WindowEvent {
             self,
             WindowEvent::Hide
                 | WindowEvent::SetEnabled(_)
-                // TODO: we really shouldnt need to allow these to be called when disabled, 
+                // TODO: we really shouldnt need to allow these to be called when disabled,
                 // however we allow them at the moment because notification listeners are
                 // initialized early on and we dont have a way to delay them until the window
                 // is enabled
-                | WindowEvent::Api { .. }
                 | WindowEvent::Emit {
                     event_name: EmitEventName::GlobalErrorOccurred | EmitEventName::ProtoMessageReceived,
                     ..

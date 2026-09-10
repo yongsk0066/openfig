@@ -19,16 +19,13 @@ use fig_os_shim::{
     ContextArcProvider,
     ContextProvider,
 };
-use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
-    ClientOriginatedMessage,
     DragWindowRequest,
     InsertTextRequest,
     NotificationRequest,
     OnboardingRequest,
     PositionWindowRequest,
     RunProcessRequest,
-    ServerOriginatedMessage,
     UpdateApplicationPropertiesRequest,
     WindowFocusRequest,
 };
@@ -39,18 +36,9 @@ use fig_settings::{
     State,
     StateProvider,
 };
-use tracing::{
-    trace,
-    warn,
-};
 
 use crate::InterceptState;
-use crate::event::{
-    EmitEventName,
-    Event,
-    EventSender,
-    WindowEvent,
-};
+use crate::event::EventSender;
 use crate::webview::WindowId;
 use crate::webview::notification::WebviewNotificationsState;
 
@@ -158,64 +146,4 @@ impl<'a> fig_desktop_api::handler::EventHandler for EventHandler<'a> {
             request.context.intercept_state,
         )
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn api_request(
-    window_id: WindowId,
-    message: fig_desktop_api::error::Result<ClientOriginatedMessage>,
-    figterm_state: &FigtermState,
-    intercept_state: &InterceptState,
-    notifications_state: &WebviewNotificationsState,
-    proxy: &dyn EventSender,
-) {
-    let response = match message {
-        Ok(request) => {
-            let id = request.id;
-            trace!(?request, %window_id, "Received request");
-            match fig_desktop_api::handler::api_request(
-                EventHandler::default(),
-                Context {
-                    figterm_state,
-                    intercept_state,
-                    notifications_state,
-                    proxy,
-                    window_id: &window_id,
-                    settings: &Settings::new(),
-                    state: &State::new(),
-                    ctx: fig_os_shim::Context::new(),
-                },
-                request,
-            )
-            .await
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    warn!(?err, ?id, "Error handling request");
-                    ServerOriginatedMessage {
-                        id,
-                        submessage: Some(ServerOriginatedSubMessage::Error(err.to_string())),
-                    }
-                },
-            }
-        },
-        Err(err) => {
-            warn!(?err, "Error decoding message");
-            ServerOriginatedMessage {
-                id: None,
-                submessage: Some(ServerOriginatedSubMessage::Error(err.to_string())),
-            }
-        },
-    };
-
-    proxy.send_event_or_log(Event::WindowEvent {
-        window_id,
-        window_event: WindowEvent::Emit {
-            event_name: match response.id {
-                Some(_) => EmitEventName::ProtoMessageReceived,
-                None => EmitEventName::GlobalErrorOccurred,
-            },
-            payload: fig_desktop_api::handler::response_to_b64(response).into(),
-        },
-    });
 }

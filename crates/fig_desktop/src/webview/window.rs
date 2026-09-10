@@ -23,7 +23,6 @@ use tao::dpi::{
     Position,
 };
 use tao::window::Window;
-use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
     debug,
     error,
@@ -297,7 +296,6 @@ impl WindowState {
         platform_state: &PlatformState,
         notifications_state: &WebviewNotificationsState,
         window_target: &EventLoopWindowTarget,
-        api_tx: &UnboundedSender<(WindowId, String)>,
     ) {
         match event {
             WindowEvent::UpdateWindowGeometry {
@@ -425,9 +423,6 @@ impl WindowState {
             WindowEvent::Emit { event_name, payload } => {
                 self.emit(event_name, payload);
             },
-            WindowEvent::Api { payload } => {
-                api_tx.send((self.window_id.clone(), payload)).unwrap();
-            },
             WindowEvent::Devtools => {
                 if self.webview.is_devtools_open() {
                     self.webview.close_devtools();
@@ -453,14 +448,7 @@ impl WindowState {
             },
             WindowEvent::Batch(events) => {
                 for event in events {
-                    self.handle(
-                        event,
-                        figterm_state,
-                        platform_state,
-                        notifications_state,
-                        window_target,
-                        api_tx,
-                    );
+                    self.handle(event, figterm_state, platform_state, notifications_state, window_target);
                 }
             },
         }

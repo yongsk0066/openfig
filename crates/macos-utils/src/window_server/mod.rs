@@ -251,6 +251,23 @@ impl WindowServer {
             observer,
         }
     }
+
+    /// Drop every AX observer and register them again from the current running-application list.
+    ///
+    /// Registration otherwise only happens inside [`WindowServer::new`], which runs once at
+    /// startup — so granting accessibility permission while the app is running left it tracking
+    /// zero applications until the next restart, even though the UI reported autocomplete as
+    /// enabled.
+    ///
+    /// # Safety
+    ///
+    /// Same clause as [`WindowServerInner::register`]: must be called on the thread whose run
+    /// loop the AX sources are attached to, i.e. the tao main thread.
+    pub unsafe fn reregister_all(&mut self) {
+        // SAFETY: the caller has discharged the run-loop affinity clause; the callback argument
+        // is fixed inside `register` itself.
+        unsafe { self._inner.as_mut().get_unchecked_mut() }.register_all();
+    }
 }
 
 impl Drop for WindowServer {

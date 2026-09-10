@@ -829,7 +829,26 @@ impl PlatformStateImpl {
                 Ok(())
             },
             PlatformBoundEvent::AccessibilityUpdated { enabled } => {
-                let _was_enabled = ACCESSIBILITY_ENABLED.swap(enabled, Ordering::SeqCst);
+                let was_enabled = ACCESSIBILITY_ENABLED.swap(enabled, Ordering::SeqCst);
+
+                // `WindowServer::new` is the only thing that ever registered AX observers, and
+                // it runs once during `Initialize`. Without accessibility permission every
+                // `register` call returns early, so granting permission at runtime left the app
+                // tracking zero applications — reporting autocomplete as enabled while nothing
+                // followed the caret — until the next restart.
+                if enabled
+                    && !was_enabled
+                    && let Some(window_server) = self.window_server.lock().unwrap().as_mut()
+                {
+                    // SAFETY:
+                    // Operation: `WindowServer::reregister_all`, an unsafe fn.
+                    // Contract (see its `# Safety`): must run on the thread owning the run loop
+                    // the AX sources are attached to.
+                    // Evidence: `PlatformBoundEvent`s are dispatched from `webview/mod.rs:503`,
+                    // inside `event_loop.run`, i.e. the tao main thread — the same thread
+                    // `WindowServer::new` was called on during `Initialize`.
+                    unsafe { window_server.reregister_all() };
+                }
 
                 let proxy = self.proxy.clone();
                 let notifications_state = notifications_state.clone();

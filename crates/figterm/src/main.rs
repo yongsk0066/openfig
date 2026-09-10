@@ -360,8 +360,8 @@ fn launch_shell(command: Option<&[String]>) -> Result<()> {
         }
     }
 
-    execvp(&cargs[0], &cargs).expect("Failed to execvp");
-    unreachable!()
+    let err = execvp(&cargs[0], &cargs).unwrap_err();
+    panic!("Failed to execvp: {err}");
 }
 
 fn figterm_main(command: Option<&[String]>) -> Result<()> {
@@ -603,15 +603,14 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                             false
                                         };
 
-                                        if !handled_action {
-                                            if let Some(bytes) = raw {
+                                        if !handled_action
+                                            && let Some(bytes) = raw {
                                                 if (event.key == KeyCode::Char('c') || event.key == KeyCode::Char('d'))
                                                     && event.modifiers == Modifiers::CTRL {
                                                     key_interceptor.reset();
                                                 }
                                                 write_buffer.extend(&bytes);
                                             }
-                                        }
                                     }
                                     Ok((_, InputEvent::Resized)) => {
                                         terminal.flush()?;
@@ -693,11 +692,10 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                 write_buffer.reserve(write_buffer.len());
                             }
 
-                            if can_send_edit_buffer(&term) {
-                                if let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
+                            if can_send_edit_buffer(&term)
+                                && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                                     warn!("Failed to send edit buffer: {err}");
                                 }
-                            }
 
                             Ok(())
                         }
@@ -746,11 +744,10 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                 // Check if to send the edit buffer because of timeout
                 _ = edit_buffer_interval.tick() => {
                     let send_eb = INSERTION_LOCKED_AT.read().unwrap().is_some();
-                    if send_eb && can_send_edit_buffer(&term) {
-                        if let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
+                    if send_eb && can_send_edit_buffer(&term)
+                        && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                             warn!(%err, "Failed to send edit buffer");
                         }
-                    }
                     Ok(())
                 }
                 _ = &mut child_rx => {

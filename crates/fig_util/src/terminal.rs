@@ -142,10 +142,10 @@ impl Terminal {
     pub fn parent_terminal(ctx: &Context) -> Option<Self> {
         let env = ctx.env();
 
-        if let Ok(bundle_id) = env.get("__CFBundleIdentifier") {
-            if let Some(term) = Self::from_bundle_id(bundle_id) {
-                return Some(term);
-            }
+        if let Ok(bundle_id) = env.get("__CFBundleIdentifier")
+            && let Some(term) = Self::from_bundle_id(bundle_id)
+        {
+            return Some(term);
         }
 
         match env.get("TERM_PROGRAM").ok().as_deref() {
@@ -170,19 +170,19 @@ impl Terminal {
         let (mut curr_depth, max_depth) = (0, 5);
         while curr_depth < max_depth {
             if let Some(pid) = option_pid {
-                if let Some(exe) = pid.exe() {
-                    if let Some(name) = exe.file_name().and_then(|s| s.to_str()) {
-                        for terminal in terminals {
-                            if terminal.executable_names().contains(&name) {
-                                return Some(terminal.clone());
-                            }
+                if let Some(exe) = pid.exe()
+                    && let Some(name) = exe.file_name().and_then(|s| s.to_str())
+                {
+                    for terminal in terminals {
+                        if terminal.executable_names().contains(&name) {
+                            return Some(terminal.clone());
                         }
                     }
                 }
-                if let Some(cmdline) = pid.cmdline() {
-                    if let Some(terminal) = Self::try_from_cmdline(&cmdline, terminals) {
-                        return Some(terminal.clone());
-                    }
+                if let Some(cmdline) = pid.cmdline()
+                    && let Some(terminal) = Self::try_from_cmdline(&cmdline, terminals)
+                {
+                    return Some(terminal.clone());
                 }
                 option_pid = pid.parent();
                 curr_depth += 1;

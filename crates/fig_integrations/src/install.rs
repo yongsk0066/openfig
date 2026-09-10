@@ -176,11 +176,12 @@ async fn remove_in_dir_with_prefix_unless(dir: &std::path::Path, prefix: &str, u
 
     if let Ok(mut entries) = fs::read_dir(dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with(prefix) && !unless(name) {
-                    fs::remove_file(entry.path()).await.ok();
-                    fs::remove_dir_all(entry.path()).await.ok();
-                }
+            if let Some(name) = entry.file_name().to_str()
+                && name.starts_with(prefix)
+                && !unless(name)
+            {
+                fs::remove_file(entry.path()).await.ok();
+                fs::remove_dir_all(entry.path()).await.ok();
             }
         }
     }

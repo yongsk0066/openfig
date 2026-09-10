@@ -57,10 +57,10 @@ impl EventListener for EventHandler {
                 let hook = new_prompt_hook(Some(context));
                 let message = hook_to_message(hook);
 
-                if let Some(cwd) = &shell_state.local_context.current_working_directory {
-                    if cwd.exists() {
-                        std::env::set_current_dir(cwd).ok();
-                    }
+                if let Some(cwd) = &shell_state.local_context.current_working_directory
+                    && cwd.exists()
+                {
+                    std::env::set_current_dir(cwd).ok();
                 }
 
                 self.main_loop_sender
@@ -71,10 +71,10 @@ impl EventListener for EventHandler {
                     error!(%err, "Sender error");
                 }
 
-                if self.csi_u_enabled {
-                    if let Err(err) = self.main_loop_sender.send(MainLoopEvent::SetCsiU) {
-                        error!(%err, "Sender error");
-                    }
+                if self.csi_u_enabled
+                    && let Err(err) = self.main_loop_sender.send(MainLoopEvent::SetCsiU)
+                {
+                    error!(%err, "Sender error");
                 }
             },
             Event::PreExec => {
@@ -91,10 +91,10 @@ impl EventListener for EventHandler {
                     error!(%err, "Sender error");
                 }
 
-                if self.csi_u_enabled {
-                    if let Err(err) = self.main_loop_sender.send(MainLoopEvent::UnsetCsiU) {
-                        error!(%err, "Sender error");
-                    }
+                if self.csi_u_enabled
+                    && let Err(err) = self.main_loop_sender.send(MainLoopEvent::UnsetCsiU)
+                {
+                    error!(%err, "Sender error");
                 }
             },
             Event::CommandInfo(command_info) => {

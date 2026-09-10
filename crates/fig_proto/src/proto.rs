@@ -32,5 +32,6 @@ pub(crate) mod remote {
 
 /// Stress Testing Protocol Buffers
 pub(crate) mod stress {
+    #![allow(dead_code)]
     include!(concat!(env!("OUT_DIR"), "/stress.rs"));
 }

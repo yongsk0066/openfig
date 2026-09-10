@@ -663,7 +663,7 @@ pub fn build_dashboard(
             "api".into(),
             utils::wrap_custom_protocol(Arc::clone(&ctx), "api", DashboardId, api::handle),
         )
-        .with_navigation_handler(navigation_handler(DASHBOARD_ID, &[r"^localhost$", r"^127\.0\.0\.1$"]))
+        .with_navigation_handler(navigation_handler(DASHBOARD_ID, &[r"^localhost$"]))
         .with_initialization_script(javascript_init(true))
         .with_clipboard(true)
         .with_hotkeys_zoom(true);
@@ -741,7 +741,7 @@ pub fn build_autocomplete(
         .with_devtools(true)
         .with_transparent(true)
         .with_initialization_script(javascript_init(true))
-        .with_navigation_handler(navigation_handler(AUTOCOMPLETE_ID, &[r"localhost$", r"^127\.0\.0\.1$"]))
+        .with_navigation_handler(navigation_handler(AUTOCOMPLETE_ID, &[r"^localhost$"]))
         .with_clipboard(true)
         .with_hotkeys_zoom(true)
         .with_accept_first_mouse(true);
@@ -781,7 +781,8 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         settings,
         "autocomplete.disable",
         |notification: JsonNotification, proxy: &EventLoopProxy| {
-            let enabled = !notification.as_bool().unwrap_or(false);
+            let enabled =
+                !notification.as_bool().unwrap_or(false) && PlatformState::accessibility_is_enabled().unwrap_or(true);
             debug!(%enabled, "Autocomplete");
             proxy.send_event_or_log(Event::WindowEvent {
                 window_id: AUTOCOMPLETE_ID,
@@ -837,4 +838,36 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             });
         }
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The autocomplete window used to allow `r"localhost$"` — no start anchor — while the
+    /// dashboard used `r"^localhost$"`. `developer.autocomplete.host` can point the window at an
+    /// arbitrary origin, so an unanchored pattern let `evil-localhost` through.
+    #[test]
+    fn only_exactly_localhost_is_allowed() {
+        let handler = navigation_handler(AUTOCOMPLETE_ID, &[r"^localhost$"]);
+
+        assert!(handler("http://localhost/".into()));
+        assert!(handler("http://localhost:8080/autocomplete".into()));
+
+        assert!(!handler("http://evil-localhost/".into()));
+        assert!(!handler("http://x.notlocalhost/".into()));
+        assert!(!handler("http://localhost.evil.com/".into()));
+        assert!(!handler("https://example.com/".into()));
+    }
+
+    /// `Url::domain()` returns `None` for an IP literal, so a `^127\.0\.0\.1$` entry could never
+    /// match and its removal changes nothing: the loopback IP was already denied.
+    #[test]
+    fn an_ip_literal_never_matched_the_allowlist() {
+        let handler = navigation_handler(AUTOCOMPLETE_ID, &[r"^localhost$", r"^127\.0\.0\.1$"]);
+        assert!(!handler("http://127.0.0.1/".into()));
+
+        let handler = navigation_handler(AUTOCOMPLETE_ID, &[r"^localhost$"]);
+        assert!(!handler("http://127.0.0.1/".into()));
+    }
 }

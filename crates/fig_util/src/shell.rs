@@ -4,6 +4,7 @@ use std::path::{
     PathBuf,
 };
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use clap::ValueEnum;
 use fig_os_shim::Env;
@@ -110,25 +111,32 @@ impl Shell {
     }
 }
 
-const BASH_RE: &str = r"GNU bash, version (\d+\.\d+\.\d+)";
-const ZSH_RE: &str = r"(\d+\.\d+)";
+/// Matches the first line of `bash --version`.
+///
+/// The words between `GNU bash,` and the version number are localized (`version` in the C locale,
+/// `\uBC84\uC804` under `LANG=ko_KR`), so anything non-numeric is skipped instead of being matched
+/// literally. `shell_version` also forces `LC_ALL=C`; this is the second line of defence.
+static BASH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^GNU bash,\D*(\d+\.\d+\.\d+)").unwrap());
+
+/// Matches the first line of `zsh --version`, e.g. `zsh 5.9 (arm64-apple-darwin26.0)` or
+/// `zsh 5.9.2 (aarch64-apple-darwin25.4.0)`. The patch component is optional but must not be
+/// truncated when it is present.
+static ZSH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^zsh\s+(\d+\.\d+(?:\.\d+)?)").unwrap());
 
 async fn shell_version(shell: &Shell, exe_path: &Path) -> Result<String, Error> {
     let err = || Error::ShellVersion(*shell);
-    match shell {
-        Shell::Bash => {
-            let re = Regex::new(BASH_RE).unwrap();
-            let version_output = Command::new(exe_path).arg("--version").output().await?;
-            let version_capture = re.captures(std::str::from_utf8(&version_output.stdout)?);
-            Ok(version_capture.ok_or_else(err)?.get(1).ok_or_else(err)?.as_str().into())
-        },
-        Shell::Zsh => {
-            let re = Regex::new(ZSH_RE).unwrap();
-            let version_output = Command::new(exe_path).arg("--version").output().await?;
-            let version_capture = re.captures(std::str::from_utf8(&version_output.stdout)?);
-            Ok(version_capture.ok_or_else(err)?.get(1).ok_or_else(err)?.as_str().into())
-        },
-    }
+    let re: &Regex = match shell {
+        Shell::Bash => &BASH_RE,
+        Shell::Zsh => &ZSH_RE,
+    };
+    // `LC_ALL=C` keeps the banner in English regardless of the user's locale.
+    let version_output = Command::new(exe_path)
+        .arg("--version")
+        .env("LC_ALL", "C")
+        .output()
+        .await?;
+    let version_capture = re.captures(std::str::from_utf8(&version_output.stdout)?);
+    Ok(version_capture.ok_or_else(err)?.get(1).ok_or_else(err)?.as_str().into())
 }
 
 #[cfg(test)]
@@ -137,34 +145,59 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_version() {
+        // Every entry must resolve to a `major.minor[.patch]` triple. `bash` resolves through
+        // `$PATH` (Homebrew bash 5.x on this machine), `/bin/bash` is the Apple-shipped 3.2.57.
         let tests = [
-            (Shell::Bash, "/bin/bash", false),
-            (Shell::Bash, "bash", false),
-            (Shell::Zsh, "/bin/zsh", false),
+            (Shell::Bash, "/bin/bash"),
+            (Shell::Bash, "bash"),
+            (Shell::Zsh, "/bin/zsh"),
         ];
 
-        for (shell, exe_path_str, skip) in tests {
-            if skip {
-                continue;
-            }
-
+        for (shell, exe_path_str) in tests {
             let exe_path = Path::new(exe_path_str);
             let version: String = shell_version(&shell, exe_path)
                 .await
-                .unwrap_or_else(|err| panic!("exe {} failed. Error: {:?}", exe_path_str, err));
-            println!("{}: {version:?}\n", exe_path.display());
+                .unwrap_or_else(|err| panic!("exe {exe_path_str} failed. Error: {err:?}"));
+
+            let mut parts = version.split('.');
+            let major: u32 = parts
+                .next()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or_else(|| panic!("{exe_path_str}: no major in {version:?}"));
+            let minor = parts
+                .next()
+                .unwrap_or_else(|| panic!("{exe_path_str}: no minor in {version:?}"));
+            assert!(
+                minor.parse::<u32>().is_ok(),
+                "{exe_path_str}: minor {minor:?} of {version:?} is not numeric"
+            );
+            if let Some(patch) = parts.next() {
+                assert!(
+                    patch.parse::<u32>().is_ok(),
+                    "{exe_path_str}: patch {patch:?} of {version:?} is not numeric"
+                );
+            }
+            assert!(parts.next().is_none(), "{exe_path_str}: trailing junk in {version:?}");
+            assert!(major >= 3, "{exe_path_str}: implausible major {major} in {version:?}");
         }
+
+        // `/bin/bash` is pinned by macOS and will not move off 3.2.57.
+        assert_eq!(
+            shell_version(&Shell::Bash, Path::new("/bin/bash")).await.unwrap(),
+            "3.2.57"
+        );
     }
 
     #[test]
     fn test_bash_re() {
-        let re = Regex::new(BASH_RE).unwrap();
-
         let bash_3_version = indoc::indoc! {r"
             GNU bash, version 3.2.57(1)-release (x86_64-apple-darwin23)
             Copyright (C) 2007 Free Software Foundation, Inc.
         "};
-        assert_eq!(re.captures(bash_3_version).unwrap().get(1).unwrap().as_str(), "3.2.57");
+        assert_eq!(
+            BASH_RE.captures(bash_3_version).unwrap().get(1).unwrap().as_str(),
+            "3.2.57"
+        );
 
         let bash_5_version = indoc::indoc! {r"
             GNU bash, version 5.2.26(1)-release (aarch64-apple-darwin23.2.0)
@@ -174,13 +207,61 @@ mod tests {
             This is free software; you are free to change and redistribute it.
             There is NO WARRANTY, to the extent permitted by law.
         "};
-        assert_eq!(re.captures(bash_5_version).unwrap().get(1).unwrap().as_str(), "5.2.26");
+        assert_eq!(
+            BASH_RE.captures(bash_5_version).unwrap().get(1).unwrap().as_str(),
+            "5.2.26"
+        );
+    }
+
+    /// Homebrew bash 5.3+ is built with NLS, so under `LANG=ko_KR` the banner reads
+    /// `GNU bash, 버전 5.3.15(1)-release`. The old `GNU bash, version …` pattern missed it and
+    /// `test_shell_version` failed on every run.
+    #[test]
+    fn test_bash_re_localized() {
+        let ko = indoc::indoc! {r"
+            GNU bash, 버전 5.3.15(1)-release (aarch64-apple-darwin25.4.0)
+            Copyright (C) 2025 Free Software Foundation, Inc.
+            라이선스 GPLv3+: GNU GPL 버전 3 이상 <http://gnu.org/license/gpl.html>
+        "};
+        assert_eq!(BASH_RE.captures(ko).unwrap().get(1).unwrap().as_str(), "5.3.15");
+
+        // Other NLS banners take the same shape.
+        assert_eq!(
+            BASH_RE
+                .captures("GNU bash, Version 5.1.16(1)-release")
+                .unwrap()
+                .get(1)
+                .unwrap()
+                .as_str(),
+            "5.1.16"
+        );
+
+        // A line that merely mentions a version elsewhere must not match.
+        assert!(BASH_RE.captures("License GPLv3+: GNU GPL version 3 or later").is_none());
     }
 
     #[test]
     fn test_zsh_re() {
-        let re = Regex::new(ZSH_RE).unwrap();
-        let zsh_version = "zsh 5.9 (arm-apple-darwin22.1.0)";
-        assert_eq!(re.captures(zsh_version).unwrap().get(1).unwrap().as_str(), "5.9");
+        // `/bin/zsh` has no patch component, Homebrew's does. Neither may be truncated.
+        assert_eq!(
+            ZSH_RE
+                .captures("zsh 5.9 (arm-apple-darwin22.1.0)")
+                .unwrap()
+                .get(1)
+                .unwrap()
+                .as_str(),
+            "5.9"
+        );
+        assert_eq!(
+            ZSH_RE
+                .captures("zsh 5.9.2 (aarch64-apple-darwin25.4.0)")
+                .unwrap()
+                .get(1)
+                .unwrap()
+                .as_str(),
+            "5.9.2"
+        );
+        // The old `(\d+\.\d+)` pattern matched the first number anywhere, e.g. in the target triple.
+        assert!(ZSH_RE.captures("arm-apple-darwin22.1.0").is_none());
     }
 }

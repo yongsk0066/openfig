@@ -37,25 +37,18 @@ impl JsonNotification {
     }
 }
 
+/// Fan-out for `settings.json` changes, from the file watcher to the webview watchers.
+///
+/// There used to be a parallel set of `state_channels` with `send_state*`/`subscribe_state*`
+/// and no subscriber anywhere — left over from before state moved into sqlite.
 #[derive(Debug, Default)]
 pub struct NotificationBus {
-    state_channels: DashMap<String, Sender<JsonNotification>, FnvBuildHasher>,
     settings_channels: DashMap<String, Sender<JsonNotification>, FnvBuildHasher>,
 }
 
 impl NotificationBus {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn subscribe_state(&self, key: String) -> Receiver<JsonNotification> {
-        self.state_channels
-            .entry(key)
-            .or_insert_with(|| {
-                let (tx, _) = tokio::sync::broadcast::channel(CHANNEL_SIZE);
-                tx
-            })
-            .subscribe()
     }
 
     pub fn subscribe_settings(&self, key: String) -> Receiver<JsonNotification> {
@@ -68,37 +61,9 @@ impl NotificationBus {
             .subscribe()
     }
 
-    pub fn send_state(&self, key: impl AsRef<str>, value: JsonNotification) {
-        if let Some(tx) = self.state_channels.get(key.as_ref()) {
-            tx.send(value).ok();
-        }
-    }
-
     pub fn send_settings(&self, key: impl AsRef<str>, value: JsonNotification) {
         if let Some(tx) = self.settings_channels.get(key.as_ref()) {
             tx.send(value).ok();
-        }
-    }
-
-    pub fn send_state_new(&self, key: impl AsRef<str>, value: &Value) {
-        if let Some(tx) = self.state_channels.get(key.as_ref()) {
-            tx.send(JsonNotification::NewValue { new: value.clone() }).ok();
-        }
-    }
-
-    pub fn send_state_remove(&self, key: impl AsRef<str>, value: &Value) {
-        if let Some(tx) = self.state_channels.get(key.as_ref()) {
-            tx.send(JsonNotification::RemoveValue { old: value.clone() }).ok();
-        }
-    }
-
-    pub fn send_state_changed(&self, key: impl AsRef<str>, old: &Value, new: &Value) {
-        if let Some(tx) = self.state_channels.get(key.as_ref()) {
-            tx.send(JsonNotification::ChangedValue {
-                old: old.clone(),
-                new: new.clone(),
-            })
-            .ok();
         }
     }
 

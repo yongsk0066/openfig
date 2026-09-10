@@ -22,6 +22,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::RwLock;
 
+use ::url::Url;
 use clap::Parser;
 use event::Event;
 use fig_log::{
@@ -53,7 +54,6 @@ use tracing::{
     error,
     warn,
 };
-use url::Url;
 use webview::notification::WebviewNotificationsState;
 pub use webview::{
     AUTOCOMPLETE_ID,
@@ -64,10 +64,9 @@ use webview::{
     AutocompleteOptions,
     DashboardOptions,
     WebviewManager,
-    autocomplete,
     build_autocomplete,
     build_dashboard,
-    dashboard,
+    url,
 };
 
 // #[global_allocator]
@@ -157,7 +156,7 @@ async fn main() -> ExitCode {
                 page,
             },
             true,
-            dashboard::url,
+            url::dashboard,
         )
         .unwrap();
     webview_manager
@@ -166,7 +165,7 @@ async fn main() -> ExitCode {
             build_autocomplete,
             AutocompleteOptions,
             autocomplete_enabled,
-            autocomplete::url,
+            url::autocomplete,
         )
         .unwrap();
 

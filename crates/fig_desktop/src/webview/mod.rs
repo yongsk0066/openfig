@@ -1,7 +1,6 @@
-pub mod autocomplete;
-pub mod dashboard;
 pub mod menu;
 pub mod notification;
+pub mod url;
 pub mod window;
 pub mod window_id;
 
@@ -12,6 +11,7 @@ use std::sync::{
     LazyLock,
 };
 
+use ::url::Url;
 use fig_desktop_api::init_script::javascript_init;
 use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
@@ -46,7 +46,6 @@ use tracing::{
     trace,
     warn,
 };
-use url::Url;
 use window::WindowState;
 use wry::{
     Theme as WryTheme,
@@ -290,7 +289,7 @@ impl WebviewManager {
         init_webview_notification_listeners(self.event_loop.create_proxy()).await;
 
         let tray_visible = !fig_settings::settings::get_bool_or("app.hideMenubarIcon", false);
-        let tray = build_tray(&self.event_loop, &self.figterm_state).await.unwrap();
+        let tray = build_tray().unwrap();
         if let Err(err) = tray.set_visible(tray_visible) {
             error!(%err, "Failed to set tray visible");
         }
@@ -581,7 +580,7 @@ pub fn build_dashboard(
         .with_theme(THEME.and_then(to_tao_theme))
         .build(event_loop)?;
 
-    let mut url = dashboard::url();
+    let mut url = self::url::dashboard();
 
     if show_onboarding {
         url.set_path(ONBOARDING_PATH);
@@ -644,7 +643,7 @@ pub fn build_autocomplete(
     let window = window_builder.build(event_loop)?;
 
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
-        .with_url(autocomplete::url().as_str())
+        .with_url(self::url::autocomplete().as_str())
         .with_asynchronous_custom_protocol(
             "fig".into(),
             utils::wrap_custom_protocol(Arc::clone(&state.ctx), "fig", AutocompleteId, icons::handle),
@@ -749,7 +748,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         settings,
         "developer.dashboard.host",
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
-            let url = dashboard::url();
+            let url = self::url::dashboard();
             debug!(%url, "Dashboard host");
             proxy.send_event_or_log(Event::WindowEvent {
                 window_id: DASHBOARD_ID,
@@ -762,7 +761,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         settings,
         "developer.autocomplete.host",
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
-            let url = autocomplete::url();
+            let url = self::url::autocomplete();
             debug!(%url, "Autocomplete host");
             proxy.send_event_or_log(Event::WindowEvent {
                 window_id: AUTOCOMPLETE_ID,

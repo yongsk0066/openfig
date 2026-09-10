@@ -37,22 +37,21 @@ impl Integration for FileIntegration {
                 access,
             };
 
-            let mut path = self.path.as_path();
+            // Walk up until an ancestor is accessible, reporting the highest one that was not.
+            // Same behaviour as before — including that reaching an accessible ancestor does not
+            // clear an error found below it — but `ancestors()` terminates. The old `loop` only
+            // ever broke from inside its `if let Some(parent)` arm, so a path whose `parent()` is
+            // `None` (`/`, or a relative path with a single component) span forever at 100% CPU.
             let mut res = Ok(());
-            loop {
-                if let Some(parent) = path.parent() {
-                    match access(parent, AccessFlags::R_OK | AccessFlags::W_OK | AccessFlags::X_OK) {
-                        Ok(_) => {
-                            break;
-                        },
-                        Err(err) => {
-                            res = Err(Error::PermissionDenied {
-                                path: parent.into(),
-                                inner: err.into(),
-                            });
-                            path = parent;
-                        },
-                    }
+            for parent in self.path.ancestors().skip(1) {
+                match access(parent, AccessFlags::R_OK | AccessFlags::W_OK | AccessFlags::X_OK) {
+                    Ok(()) => break,
+                    Err(err) => {
+                        res = Err(Error::PermissionDenied {
+                            path: parent.into(),
+                            inner: err.into(),
+                        });
+                    },
                 }
             }
             res?;
@@ -161,5 +160,26 @@ mod tests {
         // fix integration file
         integration.install().await.unwrap();
         assert!(integration.is_installed().await.is_ok());
+    }
+
+    /// The parent-permission walk used to be a `loop` that only broke from inside its
+    /// `if let Some(parent)` arm, so any path whose ancestors run out — a relative path with one
+    /// component, or `/` itself — span forever. Every case here must return.
+    #[tokio::test]
+    async fn is_installed_terminates_for_paths_without_a_parent() {
+        for path in ["integration.txt", "/", "."] {
+            let integration = FileIntegration {
+                path: PathBuf::from(path),
+                contents: "test".into(),
+                mode: None,
+            };
+
+            let result = tokio::time::timeout(std::time::Duration::from_secs(5), integration.is_installed())
+                .await
+                .unwrap_or_else(|_| panic!("is_installed({path:?}) did not terminate"));
+
+            // The point is that it returns at all; none of these is a valid installation.
+            assert!(result.is_err(), "is_installed({path:?}) unexpectedly succeeded");
+        }
     }
 }

@@ -10,14 +10,20 @@ use accessibility_sys::{
     AXObserverCreate,
     AXObserverGetRunLoopSource,
     AXObserverRef,
+    AXObserverRemoveNotification,
     AXUIElementRef,
     kAXErrorSuccess,
     pid_t,
 };
-use core_foundation::base::TCFType;
+use core_foundation::base::{
+    CFRelease,
+    CFRetain,
+    TCFType,
+};
 use core_foundation::runloop::{
     CFRunLoopAddSource,
     CFRunLoopGetCurrent,
+    CFRunLoopRef,
     CFRunLoopRemoveSource,
     kCFRunLoopDefaultMode,
 };
@@ -28,49 +34,50 @@ use core_foundation::string::CFString;
 ///
 /// # Invariants
 ///
-/// - `inner` is a live `AXObserverRef` returned by `AXObserverCreate` (Create rule, +1). Note that
-///   this crate never balances that +1: see the leak note on [`AXObserver::create`].
-/// - `ax_ref` is a live `AXUIElementRef` that outlives this value. This is *not* enforced by this
-///   type; see the `# Safety` contract of [`AXObserver::create`].
+/// - `inner` is a live `AXObserverRef` returned by `AXObserverCreate` (Create rule, +1), owned by
+///   this value and released in `Drop`.
+/// - `ax_ref` is a live `AXUIElementRef`. This value holds its own reference on it — taken with
+///   `CFRetain` in [`AXObserver::create`] and released in `Drop` — so it stays live for exactly as
+///   long as the observer that names it can fire.
+/// - `subscriptions` lists the notification names successfully registered through
+///   [`AXObserver::subscribe`], so `Drop` can unregister each one.
 /// - `callback_data` is pinned for the whole lifetime of this value, and its address is the
 ///   `refcon` that HIServices passes back to the `AXObserverCallback`. It is therefore aliased by
-///   foreign code from the first successful [`AXObserver::subscribe`] until the run-loop source is
-///   removed in `Drop`.
-/// - Run-loop affinity: the `CFRunLoop` that `create` ran on is the only run loop the source was
-///   added to, and `Drop` must run on that same run loop. Nothing in the type system enforces this;
-///   see finding #2 in `docs/13-unsafe-review.md`.
+///   foreign code from the first successful [`AXObserver::subscribe`] until `Drop` unregisters the
+///   notifications and removes the run-loop source.
+/// - `run_loop` is the `CFRunLoop` that `create` ran on — the only run loop the source was added to
+///   — captured so `Drop` removes the source from that run loop rather than from whichever thread's
+///   run loop happens to be current.
 pub struct AXObserver<T> {
     inner: AXObserverRef,
     ax_ref: AXUIElementRef,
+    run_loop: CFRunLoopRef,
+    subscriptions: Vec<CFString>,
     callback_data: Pin<Box<T>>,
 }
 
-// SAFETY: UNPROVEN — see docs/13-unsafe-review.md #2.
+// SAFETY: PARTIAL — see docs/13-unsafe-review.md #2.
 //
-// Proposition asserted: `AXObserver<T>` may be moved to another thread (`Send`) and shared by
-// reference across threads (`Sync`) for every `T`.
+// Proposition asserted: `AXObserver<T>` may be moved to another thread when `T` can.
 //
-// What can be proved:
+// What is proved:
 // - `AXObserverRef` and `AXUIElementRef` are CFTypes. `CFRetain`/`CFRelease` are documented as
-//   thread-safe (Apple, "Memory Management Programming Guide for Core Foundation"), so merely
-//   transferring the pointers between threads is not itself a data race.
+//   thread-safe (Apple, "Memory Management Programming Guide for Core Foundation"), so transferring
+//   the pointers between threads is not itself a data race, and this value owns a reference on each
+//   of them, so neither can be freed underneath it.
+// - `T: Send` is now required, so the impl no longer promotes an arbitrary `!Send` payload.
+// - `Drop` removes the run-loop source from the *captured* `run_loop`, not from
+//   `CFRunLoopGetCurrent()`, so an off-thread drop detaches the source that was actually attached.
+//   It also unregisters every notification before `callback_data` is deallocated.
 //
-// What is NOT proved and makes this impl unsound as written:
-// 1. `T` is unconstrained. `unsafe impl<T> Send for AXObserver<T>` promotes an arbitrary `!Send`
-//    `T` (e.g. `Rc`, a `MainThreadMarker`-bearing value) into a `Send` value. The impl should at
-//    minimum be bounded `T: Send` / `T: Sync`.
-// 2. `Drop` calls `CFRunLoopRemoveSource(CFRunLoopGetCurrent(), ..)`. `CFRunLoopGetCurrent` returns
-//    the *calling thread's* run loop (Apple, CFRunLoop reference). If this value is dropped on a
-//    thread other than the one `create` ran on, the source stays attached to the original run loop
-//    while `callback_data` is deallocated, and the next AX notification dereferences a dangling
-//    `refcon` in `application_ax_callback` -> use-after-free.
-//
-// Today no such drop is reachable: every `create`/`deregister` path runs on the tao main thread
-// (`PlatformBoundEvent::Initialize` and the `NSWorkspace` notification selectors). That is a
-// project invariant that nothing enforces, not a proof of this impl.
-unsafe impl<T> Send for AXObserver<T> {}
-// SAFETY: UNPROVEN — see the comment on the `Send` impl above and docs/13-unsafe-review.md #2.
-unsafe impl<T> Sync for AXObserver<T> {}
+// What remains unproved: `CFRunLoopRemoveSource` from a thread other than the run loop's owner
+// is thread-safe per CFRunLoop's documented thread-safety, but a notification already *in
+// flight* on the run-loop thread could still be executing `application_ax_callback` with the
+// old `refcon` while the drop proceeds. Today every create/drop pair runs on the tao main thread
+// (`PlatformBoundEvent::Initialize`, `reregister_all`, and the `NSWorkspace` notification
+// selectors), which serialises them against the callbacks; that is a project invariant nothing
+// enforces. `Sync` is no longer asserted — nothing shares an `&AXObserver` across threads.
+unsafe impl<T: Send> Send for AXObserver<T> {}
 
 impl<T> AXObserver<T> {
     /// Create an observer for `pid` and attach its run-loop source to the *current* run loop.
@@ -79,22 +86,19 @@ impl<T> AXObserver<T> {
     ///
     /// The caller must ensure all of the following.
     ///
-    /// 1. `ax_ref` is a non-null `AXUIElementRef` that stays alive for at least as long as the
-    ///    returned `AXObserver<T>`. `subscribe` passes it to `AXObserverAddNotification` without
-    ///    retaining it, so this type does not keep it alive by itself.
+    /// 1. `ax_ref` is a live, non-null `AXUIElementRef` *at the moment of this call*. It is
+    ///    retained here and released in `Drop`, so the caller does not have to keep it alive
+    ///    afterwards.
     /// 2. `callback` is a function whose ABI is `AXObserverCallback` and which is prepared to be
     ///    invoked with `refcon == &*callback_data` — that is, it must reinterpret `refcon` as `*mut
     ///    T` and nothing else — for as long as the returned value lives.
-    /// 3. `callback` and the returned value's `Drop` both run on the thread whose run loop is
-    ///    current at this call. See the `Send`/`Sync` note above.
+    /// 3. `callback` runs on the thread whose run loop is current at this call.
     /// 4. The process is AX-trusted (`AXIsProcessTrusted`), otherwise `AXObserverCreate` fails and
     ///    this returns `Err` — that is an error, not UB, but callers rely on it.
     ///
-    /// If those hold, the returned value owns the `+1` reference produced by `AXObserverCreate`
-    /// and a pinned `T` whose address is stable for the value's lifetime.
-    ///
-    /// Leak note: `Drop` removes the run-loop source but never calls `CFRelease(self.inner)`, so
-    /// each observer leaks one `AXObserverRef`. See docs/13-unsafe-review.md #6.
+    /// If those hold, the returned value owns the `+1` reference produced by `AXObserverCreate`,
+    /// one reference on `ax_ref`, and a pinned `T` whose address is stable for the value's
+    /// lifetime. All three are released in `Drop`.
     pub unsafe fn create(
         pid: pid_t,
         ax_ref: AXUIElementRef,
@@ -136,15 +140,26 @@ impl<T> AXObserver<T> {
         //   program, so there is no data race.
         // Postcondition: the observer's source is attached to *this thread's* run loop. That
         // pairing is the premise of the `Drop` impl below and of `create`'s `# Safety` clause 3.
-        CFRunLoopAddSource(
-            CFRunLoopGetCurrent(),
-            AXObserverGetRunLoopSource(observer),
-            kCFRunLoopDefaultMode,
-        );
+        let run_loop = CFRunLoopGetCurrent();
+        CFRunLoopAddSource(run_loop, AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+
+        // SAFETY:
+        // Operation: the `CFRetain` FFI call.
+        // Contract (Apple, "Memory Management Programming Guide for Core Foundation"):
+        // `CFRetain(cf)` requires a live, non-null CFType and returns it with the count raised
+        // by one; it is documented thread-safe.
+        // Evidence: `ax_ref`'s liveness at this point is this function's `# Safety` clause 1.
+        // Postcondition: this value owns one reference on `ax_ref`, balanced in `Drop`. That is
+        // what makes the unretained-looking `ax_ref` field sound on its own, instead of relying
+        // on `WindowServerInner::register` leaking the element forever
+        // ("soundness by leak", docs/13-unsafe-review.md #6).
+        CFRetain(ax_ref.cast());
 
         Ok(Self {
             inner: observer,
             ax_ref,
+            run_loop,
+            subscriptions: Vec::new(),
             callback_data: Box::pin(data),
         })
     }
@@ -213,40 +228,64 @@ impl<T> AXObserver<T> {
             )
         };
 
-        if err == kAXErrorSuccess { Ok(()) } else { Err(err) }
+        if err == kAXErrorSuccess {
+            // Recorded so `Drop` can unregister it. Without this the registration outlived the
+            // observer and kept the `refcon` reachable.
+            self.subscriptions.push(name);
+            Ok(())
+        } else {
+            Err(err)
+        }
     }
 }
 
 impl<T> Drop for AXObserver<T> {
     fn drop(&mut self) {
         // SAFETY:
-        // Operations: `CFRunLoopGetCurrent`, `AXObserverGetRunLoopSource`,
-        // `CFRunLoopRemoveSource`, and the read of the extern static `kCFRunLoopDefaultMode`.
-        // Contract (Apple CFRunLoop reference): `CFRunLoopRemoveSource(rl, source, mode)`
-        // requires non-null arguments; removing a source that is not attached is a documented
-        // no-op.
+        // Operations, in order: `AXObserverRemoveNotification` once per successful
+        // subscription, `AXObserverGetRunLoopSource`, `CFRunLoopRemoveSource`, and two
+        // `CFRelease` calls.
+        //
+        // Contracts:
+        // - `AXObserverRemoveNotification(observer, element, notification)` (HIServices) requires a live
+        //   observer, a live element and a live notification name; removing a notification that is not
+        //   registered returns `kAXErrorNotificationNotRegistered`, which is an error code, not UB.
+        // - `CFRunLoopRemoveSource(rl, source, mode)` (Apple CFRunLoop reference) requires non-null
+        //   arguments; removing a source that is not attached is a documented no-op.
+        // - `CFRelease(cf)` requires a live, non-null CFType this frame owns a reference on, and is
+        //   documented thread-safe.
+        //
         // Evidence:
-        // - `self.inner` is live until this `drop` returns (type INVARIANT), so
-        //   `AXObserverGetRunLoopSource` is valid and returns the same Get-rule source that `create`
-        //   attached.
-        // - `CFRunLoopGetCurrent()` is non-null on every thread.
-        // Purpose of this operation: it is what stops foreign code from dereferencing the
-        // `refcon` after `self.callback_data` is deallocated immediately after this `drop` body.
+        // - `self.inner` and `self.ax_ref` are live until this body finishes (type INVARIANT: this value
+        //   owns one reference on each, taken in `create`), so every call above has live arguments and the
+        //   two releases are balanced, not over-releases.
+        // - `self.subscriptions` contains exactly the names `subscribe` registered successfully, each a
+        //   `CFString` owned by this value.
+        // - `self.run_loop` is the run loop `create` attached the source to, captured there rather than
+        //   re-derived from `CFRunLoopGetCurrent()`, which is thread-local and would name the wrong run
+        //   loop on an off-thread drop.
         //
-        // UNPROVEN — see docs/13-unsafe-review.md #2. The proof above only holds if this runs on
-        // the same thread as `create`; `CFRunLoopGetCurrent()` is thread-local, and the
-        // `unsafe impl Send` above makes an off-thread drop expressible in safe code. On an
-        // off-thread drop the source survives, `callback_data` is freed, and the next
-        // notification is a use-after-free.
+        // Purpose: unregistering the notifications and removing the run-loop source is what stops
+        // foreign code from dereferencing the `refcon` after `self.callback_data` is deallocated
+        // immediately after this body.
         //
-        // Leak note: `CFRelease(self.inner)` is missing here, so the `+1` from
-        // `AXObserverCreate` is never balanced. See docs/13-unsafe-review.md #6.
+        // Residual risk — see docs/13-unsafe-review.md #2: a notification already in flight on
+        // the run-loop thread can still be inside `application_ax_callback` while an off-thread
+        // drop runs. Every create/drop pair in this crate happens on the tao main thread, which
+        // serialises them; that is a project invariant nothing enforces.
         unsafe {
+            for notification in &self.subscriptions {
+                AXObserverRemoveNotification(self.inner, self.ax_ref, notification.as_concrete_TypeRef());
+            }
+
             CFRunLoopRemoveSource(
-                CFRunLoopGetCurrent(),
+                self.run_loop,
                 AXObserverGetRunLoopSource(self.inner),
                 kCFRunLoopDefaultMode,
             );
+
+            CFRelease(self.inner.cast());
+            CFRelease(self.ax_ref.cast());
         }
     }
 }

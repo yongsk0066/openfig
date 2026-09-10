@@ -24,7 +24,10 @@ use accessibility_sys::{
     pid_t,
 };
 use ax_observer::AXObserver;
-use core_foundation::base::TCFType;
+use core_foundation::base::{
+    CFRelease,
+    TCFType,
+};
 use core_foundation::string::{
     CFString,
     CFStringRef,
@@ -508,6 +511,27 @@ impl ObserverClass {
     }
 }
 
+/// Owns the `+1` that `AXUIElementCreateApplication` returns, so every exit path from
+/// [`WindowServerInner::register`] balances it.
+///
+/// `AXObserver::create` retains the element itself, so dropping this after a successful
+/// registration leaves the observer holding the only reference — which is exactly the lifetime
+/// the observer needs.
+struct OwnedAxRef(AXUIElementRef);
+
+impl Drop for OwnedAxRef {
+    fn drop(&mut self) {
+        // SAFETY:
+        // Operation: the `CFRelease` FFI call.
+        // Contract (Apple, "Memory Management Programming Guide for Core Foundation"):
+        // requires a live, non-null CFType on which the caller owns a reference.
+        // Evidence: `self.0` is the `+1` returned by `AXUIElementCreateApplication`, which this
+        // value took ownership of at construction and has not released; nothing else releases
+        // it. `AXUIElementCreateApplication` does not return NULL for a well-formed pid.
+        unsafe { CFRelease(self.0.cast()) };
+    }
+}
+
 /// The observer keys to drop when `bundle_id` reports a termination: every tracked instance of
 /// that bundle id whose pid no longer resolves to a running application.
 ///
@@ -533,8 +557,8 @@ impl WindowServerInner {
     ///
     /// - `WindowServer::new` is the only caller. It calls `inner.init()` once, *before* storing the
     ///   box in the private `WindowServer::_inner` field.
-    /// - The one other borrow of `_inner` is `WindowServer::reregister_all`, which runs on the
-    ///   same (main) thread, from inside the tao event loop's `PlatformBoundEvent` dispatch.
+    /// - The one other borrow of `_inner` is `WindowServer::reregister_all`, which runs on the same
+    ///   (main) thread, from inside the tao event loop's `PlatformBoundEvent` dispatch.
     /// - Every other `&mut WindowServerInner` is created inside an `ObserverClass` selector from
     ///   the raw ivar, and those selectors are delivered serially by the main run loop.
     /// - `register_all` performs no run-loop turn (it only calls AppKit accessors and
@@ -646,12 +670,15 @@ impl WindowServerInner {
         // AX calls reject with `kAXErrorInvalidUIElement`.
         // Postcondition: `ax_ref` is a live element that this frame owns one reference to.
         //
-        // Leak note: that `+1` is never released on any path through this function, and the
-        // `UIElement::from` conversions below follow the *Get* rule, so they add and remove
-        // their own reference without consuming it. The element therefore stays alive forever,
-        // which is what makes `AXObserver`'s unretained `ax_ref` field sound — soundness by
-        // leak. See docs/13-unsafe-review.md #6.
-        let ax_ref = AXUIElementCreateApplication(pid);
+        // That `+1` used to be leaked on every path, deliberately: it was the only thing
+        // keeping `AXObserver`'s unretained `ax_ref` field alive ("soundness by leak",
+        // docs/13-unsafe-review.md #6). `AXObserver::create` now takes its own reference, so
+        // the guard below can balance this one on every exit. The `UIElement::from` conversions
+        // follow the *Get* rule and retain independently.
+        // `owned_ax_ref` must stay in scope until the end of this function: it is what releases
+        // the reference, and `ax_ref` below is a plain copy of the pointer.
+        let owned_ax_ref = OwnedAxRef(AXUIElementCreateApplication(pid));
+        let ax_ref = owned_ax_ref.0;
 
         if from_activation {
             // In Swift had 0.25s delay before this...?

@@ -1,13 +1,13 @@
 use std::ffi::c_void;
 use std::fmt;
 
+use accessibility::AXAttribute;
 use accessibility::util::ax_call;
 use accessibility_sys::{
     _AXUIElementGetWindow,
     AXError,
     AXUIElement,
     AXUIElementCopyAttributeNames,
-    AXUIElementCopyAttributeValue,
     AXUIElementRef,
     AXUIElementSetAttributeValue,
     AXValue,
@@ -17,6 +17,7 @@ use accessibility_sys::{
     kAXDOMClassListAttribute,
     kAXEnhancedUserInterfaceAttribute,
     kAXErrorAttributeUnsupported,
+    kAXErrorNoValue,
     kAXFocusedAttribute,
     kAXFocusedWindowAttribute,
     kAXFrameAttribute,
@@ -210,43 +211,31 @@ impl UIElement {
         ax_call(|window_id: *mut CGWindowID| _AXUIElementGetWindow(self.get_ref(), window_id))
     }
 
+    /// Read an accessibility attribute, delegating to the vendored `AXUIElement::attribute`.
+    ///
+    /// This crate used to reimplement `AXUIElementCopyAttributeValue` and wrap the result with
+    /// `wrap_under_get_rule`, retaining a value that already arrived at `+1` — one leaked
+    /// reference per attribute read, three of them per caret update, i.e. per keystroke
+    /// (docs/13-unsafe-review.md #12). The vendored implementation applies the Create rule the
+    /// API actually documents, so delegating both removes the duplicate FFI and closes the leak
+    /// without this crate calling `CFRelease` itself.
     fn get_attr_ref(&self, attr: &str) -> Result<CFType> {
         // SAFETY:
-        // Operations: (1) `ax_call::<_, CFTypeRef>`, ending in
-        // `MaybeUninit::<CFTypeRef>::assume_init()`; (2) the `AXUIElementCopyAttributeValue`
-        // FFI call; (3) `CFType::wrap_under_get_rule(cf_ref)`.
-        //
-        // (1)+(2) Contract of `ax_call`: the closure must initialize `*out` on
-        // `kAXErrorSuccess`. Contract of `AXUIElementCopyAttributeValue(element, attribute,
-        // *value)` (HIServices): `element` and `attribute` must be live CF objects; on
-        // `kAXErrorSuccess` it writes a `+1` value through `value` ("the caller is responsible
-        // for releasing"), otherwise it writes nothing.
-        // Evidence:
-        // - `self.get_ref()` returns the `AXUIElementRef` owned by this `UIElement`, live for the duration
-        //   of `&self` (TYPE FACT: the `AXUIElement` field holds a `+1`).
-        // - `attr` is a `CFString` local; the CFString is dropped only at the end of the closure body, i.e.
-        //   after the FFI call returns, and `as_concrete_TypeRef` follows the Get rule so it does not
-        //   transfer ownership.
-        // - `CFTypeRef` is a raw pointer, so any value written is a valid `CFTypeRef`.
-        //
-        // (3) Contract of `wrap_under_get_rule`: non-null (asserted) and live; it `CFRetain`s.
-        // Evidence: liveness is the postcondition of (2).
-        //
-        // BUG (retain-count, not UB): (2) follows the **Copy rule** and yields `+1`, but (3)
-        // applies the **Get rule** and retains again, giving `+2` while the returned `CFType`
-        // will only release once. Every attribute read through this crate therefore leaks one
-        // reference to the returned value. The fix is `wrap_under_create_rule`, which consumes
-        // the `+1`; it is deliberately not applied in this review because an over-release would
-        // convert a leak into a use-after-free and there is no way to exercise it here.
-        // See docs/13-unsafe-review.md #12.
-        unsafe {
-            let cf_ref = ax_call(|value_ref: *mut CFTypeRef| {
-                let attr = CFString::new(attr);
-                let attr_ref = attr.as_concrete_TypeRef();
-                AXUIElementCopyAttributeValue(self.get_ref(), attr_ref, value_ref)
-            })?;
-            Ok(CFType::wrap_under_get_rule(cf_ref))
-        }
+        // Operation: `accessibility::AXUIElement::wrap_under_get_rule`.
+        // Contract (core-foundation `TCFType`): the reference must be non-null (asserted
+        // inside) and live; the call performs `CFRetain` and the wrapper `CFRelease`s on drop.
+        // Evidence: `self.get_ref()` is the `AXUIElementRef` this `UIElement` owns a reference
+        // on (TYPE FACT), live for the duration of `&self`.
+        // Postcondition: `element` borrows the same element with its own balanced reference;
+        // `self`'s reference count is unchanged once it drops at the end of this function.
+        let element = unsafe { accessibility::AXUIElement::wrap_under_get_rule(self.get_ref()) };
+
+        element
+            .attribute(&AXAttribute::<CFType>::new(&CFString::new(attr)))
+            .map_err(|err| match err {
+                accessibility::Error::Ax(code) => code,
+                accessibility::Error::NotFound => kAXErrorNoValue,
+            })
     }
 
     fn get_attr<T: ConcreteCFType>(&self, attr: &str) -> Result<T> {

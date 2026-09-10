@@ -61,6 +61,7 @@ use objc::runtime::{
     Sel,
     class_addMethod,
     objc_getClass,
+    object_getClass,
 };
 use objc::{
     Encode,
@@ -256,25 +257,47 @@ impl PlatformStateImpl {
         CString::new(types).unwrap()
     }
 
+    /// The Objective-C class behind wry's `WryWebView`, taken off a live webview.
+    ///
+    /// It cannot be looked up by name: since wry 0.57 the class is registered through objc2's
+    /// `define_class!` with no explicit `#[name = ...]`, and objc2 0.6 then derives the runtime
+    /// name from the module path plus the crate version --
+    /// `wry::wkwebview::class::wry_web_view::WryWebView0.57.0`, not `WryWebView`. Reading the
+    /// class off an instance survives every wry version bump.
+    fn wry_web_view_class(window_map: &FigIdMap) -> Option<*mut Class> {
+        use wry::WebViewExtMacOS;
+
+        let window = window_map.values().next()?;
+        let webview = window.webview.webview();
+        let obj: *const Object = (&*webview as *const wry::WryWebView).cast();
+        // SAFETY: `webview` holds a strong reference for the length of this borrow.
+        let class = unsafe { object_getClass(obj) };
+        (!class.is_null()).then_some(class.cast_mut())
+    }
+
     // Add an implementation for an ObjC selector, which will override default WKWebView & WryWebView
     // behavior
-    fn override_webview_method<F>(sel: Sel, func: F)
+    fn override_webview_method<F>(webview_class: Option<*mut Class>, sel: Sel, func: F)
     where
         F: MethodImplementation<Callee = Object>,
     {
-        // https://github.com/tauri-apps/wry/blob/17d324b70e4d580c43c9d4ab37bd265005356bf4/src/webview/wkwebview/mod.rs#L258
-        Self::override_objc_class_method("WryWebView", sel, func);
+        Self::override_objc_class_method(webview_class, "WryWebView", sel, func);
     }
 
     fn override_app_delegate_method<F>(sel: Sel, func: F)
     where
         F: MethodImplementation<Callee = Object>,
     {
-        // https://github.com/tauri-apps/tao/blob/75eb0c1e7e83a766af0e083ce09c761d1974cde4/src/platform_impl/macos/app_delegate.rs#L42
-        Self::override_objc_class_method("TaoAppDelegateParent", sel, func);
+        // tao still registers this one with the old `objc` ClassDecl under a literal name:
+        // https://github.com/tauri-apps/tao/blob/dev/src/platform_impl/macos/app_delegate.rs
+        const CLASS: &str = "TaoAppDelegateParent";
+        let name = CString::new(CLASS).unwrap();
+        // SAFETY: `name` is a valid NUL-terminated C string.
+        let class = unsafe { objc_getClass(name.as_ptr()) as *mut Class };
+        Self::override_objc_class_method((!class.is_null()).then_some(class), CLASS, sel, func);
     }
 
-    fn override_objc_class_method<F>(class: &str, sel: Sel, func: F)
+    fn override_objc_class_method<F>(class: Option<*mut Class>, class_name: &str, sel: Sel, func: F)
     where
         F: MethodImplementation<Callee = Object>,
     {
@@ -290,13 +313,12 @@ impl PlatformStateImpl {
 
         let types = Self::method_type_encoding(&F::Ret::encode(), encs);
 
-        let name = CString::new(class).unwrap();
-
-        let res = unsafe {
-            let cls = objc_getClass(name.as_ptr()) as *mut Class;
-            class_addMethod(cls, sel, func.imp(), types.as_ptr())
+        let res = match class {
+            // SAFETY: `class` is a registered class and `types` matches `func`'s signature.
+            Some(class) => unsafe { class_addMethod(class, sel, func.imp(), types.as_ptr()) },
+            None => false,
         };
-        trace!(%class, sel =% sel.name(), %res, "class_addMethod");
+        trace!(class = %class_name, sel =% sel.name(), %res, "class_addMethod");
     }
 
     pub(super) fn handle(
@@ -446,11 +468,17 @@ impl PlatformStateImpl {
                 }
 
                 // Use objc runtime to override WryWebview methods
+                let webview_class = Self::wry_web_view_class(window_map);
                 Self::override_webview_method(
+                    webview_class,
                     sel!(shouldDelayWindowOrderingForEvent:),
                     should_delay_window_ordering as extern "C" fn(&Object, Sel, id) -> BOOL,
                 );
-                Self::override_webview_method(sel!(mouseDown:), mouse_down as extern "C" fn(&Object, Sel, id));
+                Self::override_webview_method(
+                    webview_class,
+                    sel!(mouseDown:),
+                    mouse_down as extern "C" fn(&Object, Sel, id),
+                );
 
                 extern "C" fn application_should_handle_reopen(
                     _this: &Object,

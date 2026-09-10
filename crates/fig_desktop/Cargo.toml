@@ -40,7 +40,7 @@ infer = "0.22.0"
 libc.workspace = true
 macos-utils = { path = "../macos-utils" }
 mime = "0.3.17"
-muda = { version = "=0.15.3", default-features = false }
+muda = { version = "0.19.3", default-features = false }
 nix.workspace = true
 notify = "8.0.0"
 objc.workspace = true
@@ -55,20 +55,14 @@ serde.workspace = true
 serde_json.workspace = true
 shellexpand.workspace = true
 sysinfo.workspace = true
-tao = { version = "=0.31.1", features = ["serde"] }
+tao = { version = "0.37.0", features = ["serde"] }
 tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tray-icon = { version = "=0.19.3", default-features = false }
+tray-icon = { version = "0.24.2", default-features = false }
 url = { workspace = true, features = ["serde"] }
 uuid.workspace = true
-wry = { version = "=0.48.1", default-features = false, features = [
-    # "tao",
-    "protocol",
-    "devtools",
-    "transparent",
-    "linux-body",
-] }
+wry = { version = "0.57.0", default-features = false, features = ["devtools"] }
 
 [dev-dependencies]
 

@@ -150,7 +150,7 @@ impl FigMessage {
 
     fn encode(message_type: FigMessageType, body: Bytes) -> Result<Bytes, FigMessageEncodeError> {
         let msg = Self {
-            inner: Bytes::from(body.to_vec()),
+            inner: body,
             message_type,
         };
 

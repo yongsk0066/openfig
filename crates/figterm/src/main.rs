@@ -14,6 +14,10 @@ use std::ffi::{
     CString,
     OsStr,
 };
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
 use std::sync::{
     LazyLock,
     Mutex,
@@ -223,6 +227,26 @@ fn main_loop_channel() -> (flume::Sender<MainLoopEvent>, flume::Receiver<MainLoo
     flume::unbounded()
 }
 
+/// Set when the shell pushes a new environment/alias snapshot (`UpdateShellContextRequest`),
+/// cleared by the next edit-buffer hook that carries one.
+///
+/// The environment (73 variables / ~3.8 KB here) and the alias table (~7.9 KB) are cloned into
+/// every hook, and an edit-buffer hook goes out on every keystroke: ~13.5 KB per key, ~76x the
+/// 178 B the hook itself needs. Both only change when the shell says so — once per prompt at
+/// most — so the edit-buffer hook carries them only on the first hook after such a change and
+/// sends `environment_variables: []` / `alias: None` otherwise.
+///
+/// Only `send_edit_buffer` consumes the flag. The prompt/preexec/postexec hooks always carry the
+/// full context: they are the ones the desktop side seeds a session's context from, and they fire
+/// at most once per command.
+///
+/// This half is useless on its own — a receiver that treats an empty `environment_variables` as
+/// "the shell has no environment" would wipe the session. It must ship together with the desktop
+/// side (`with_update` keeping the previous env when a hook carries none) and the JS guard in
+/// `packages/autocomplete-app/src/state/index.ts`, because protobuf-es decodes an empty repeated
+/// field as `[]`, which is truthy.
+static CONTEXT_DIRTY: AtomicBool = AtomicBool::new(true);
+
 /// The terminal emulator figterm is running inside.
 ///
 /// Resolving this walks five levels of the process tree with a syscall at each step (plus building
@@ -232,7 +256,22 @@ fn main_loop_channel() -> (flume::Sender<MainLoopEvent>, flume::Receiver<MainLoo
 static PARENT_TERMINAL: LazyLock<Option<String>> =
     LazyLock::new(|| FigTerminal::parent_terminal(&Context::new()).map(|s| s.to_string()));
 
+/// The full shell context, environment and aliases included.
+///
+/// Used by the prompt/preexec/postexec and intercepted-key hooks, which fire at most once per
+/// command. The edit-buffer hook uses [`shell_state_to_edit_buffer_context`] instead.
 fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
+    shell_state_to_context_inner(shell_state, true)
+}
+
+/// The context for an edit-buffer hook: environment and aliases only on the first hook after the
+/// shell pushed a new snapshot. See [`CONTEXT_DIRTY`].
+fn shell_state_to_edit_buffer_context(shell_state: &ShellState) -> (local::ShellContext, bool) {
+    let dirty = CONTEXT_DIRTY.swap(false, Ordering::AcqRel);
+    (shell_state_to_context_inner(shell_state, dirty), dirty)
+}
+
+fn shell_state_to_context_inner(shell_state: &ShellState, include_environment: bool) -> local::ShellContext {
     let terminal = PARENT_TERMINAL.clone();
 
     local::ShellContext {
@@ -257,11 +296,19 @@ fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
             .username
             .as_deref()
             .and_then(|username| HOSTNAME.as_deref().map(|hostname| format!("{username}@{hostname}"))),
-        environment_variables: SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison().clone(),
+        environment_variables: if include_environment {
+            SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison().clone()
+        } else {
+            Vec::new()
+        },
         qterm_version: Some(env!("CARGO_PKG_VERSION").into()),
         preexec: Some(shell_state.preexec),
         osc_lock: Some(shell_state.osc_lock),
-        alias: SHELL_ALIAS.lock_ignore_poison().clone(),
+        alias: if include_environment {
+            SHELL_ALIAS.lock_ignore_poison().clone()
+        } else {
+            None
+        },
     }
 }
 
@@ -373,14 +420,20 @@ async fn send_edit_buffer(
     trace!("buffer bytes: {:02X?}", edit_buffer.buffer.as_bytes());
     trace!("buffer chars: {:?}", edit_buffer.buffer.chars().collect::<Vec<_>>());
 
-    let context = shell_state_to_context(shell_state);
+    let (context, was_dirty) = shell_state_to_edit_buffer_context(shell_state);
 
     let edit_buffer_hook = new_edit_buffer_hook(Some(context), edit_buffer.buffer, cursor_idx, 0, cursor_coordinates);
     let message = hook_to_message(edit_buffer_hook);
 
     trace!("Sending: {message:?}");
 
-    sender.send_async(message).await?;
+    if let Err(err) = sender.send_async(message).await {
+        // The snapshot never reached the desktop, so the next hook has to carry it again.
+        if was_dirty {
+            CONTEXT_DIRTY.store(true, Ordering::Release);
+        }
+        return Err(err.into());
+    }
     Ok(())
 }
 

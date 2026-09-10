@@ -2,6 +2,7 @@ use std::path::{
     Path,
     PathBuf,
 };
+use std::sync::atomic::Ordering;
 use std::time::{
     Duration,
     SystemTime,
@@ -46,6 +47,7 @@ use crate::event_handler::EventHandler;
 use crate::interceptor::KeyInterceptor;
 use crate::pty::AsyncMasterPty;
 use crate::{
+    CONTEXT_DIRTY,
     EXPECTED_BUFFER,
     INSERTION_LOCKED_AT,
     LockIgnorePoison as _,
@@ -259,14 +261,23 @@ pub async fn process_figterm_request(
             Ok(Some(response))
         },
         FigtermRequest::UpdateShellContext(request) => {
-            if request.update_environment_variables {
-                *SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison() = request.environment_variables;
-            }
-            if request.update_alias {
-                *SHELL_ALIAS.lock_ignore_poison() = request.alias;
-            }
+            update_shell_context(request);
             Ok(None)
         },
+    }
+}
+
+/// Replaces the environment/alias snapshot the hooks report, and marks the context dirty so the
+/// next edit-buffer hook carries the new one. See [`crate::CONTEXT_DIRTY`].
+fn update_shell_context(request: figterm::UpdateShellContextRequest) {
+    if request.update_environment_variables {
+        *SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison() = request.environment_variables;
+    }
+    if request.update_alias {
+        *SHELL_ALIAS.lock_ignore_poison() = request.alias;
+    }
+    if request.update_environment_variables || request.update_alias {
+        CONTEXT_DIRTY.store(true, Ordering::Release);
     }
 }
 
@@ -427,5 +438,75 @@ mod tests {
         assert_eq!(output.status.code(), Some(25));
         assert_eq!(output.stdout, b"hello world 2\n");
         assert_eq!(output.stderr, b"hello world 1\n");
+    }
+
+    /// The edit-buffer hook carries the environment and alias snapshot on the first hook after the
+    /// shell pushed one, and nothing on the hooks after that; the prompt/preexec/postexec hooks
+    /// always carry the full context. See `crate::CONTEXT_DIRTY`.
+    #[test]
+    fn edit_buffer_context_carries_the_environment_once_per_update() {
+        use alacritty_terminal::term::ShellState;
+
+        use crate::{
+            shell_state_to_context,
+            shell_state_to_edit_buffer_context,
+        };
+
+        let shell_state = ShellState::default();
+        update_shell_context(figterm::UpdateShellContextRequest {
+            update_environment_variables: true,
+            environment_variables: vec![
+                fig_proto::local::EnvironmentVariable {
+                    key: "PATH".into(),
+                    value: Some("/usr/bin".into()),
+                },
+                fig_proto::local::EnvironmentVariable {
+                    key: "HOME".into(),
+                    value: Some("/home/me".into()),
+                },
+            ],
+            update_alias: true,
+            alias: Some("gs='git status'\n".into()),
+        });
+
+        let (first, dirty) = shell_state_to_edit_buffer_context(&shell_state);
+        assert!(dirty);
+        assert_eq!(first.environment_variables.len(), 2);
+        assert_eq!(first.alias.as_deref(), Some("gs='git status'\n"));
+
+        for _ in 0..1_000 {
+            let (next, dirty) = shell_state_to_edit_buffer_context(&shell_state);
+            assert!(!dirty);
+            assert!(next.environment_variables.is_empty());
+            assert_eq!(next.alias, None);
+            // Everything else stays in the lean hook.
+            assert_eq!(next.qterm_version, first.qterm_version);
+            assert_eq!(next.terminal, first.terminal);
+        }
+
+        // The per-command hooks are unaffected.
+        let full = shell_state_to_context(&shell_state);
+        assert_eq!(full.environment_variables.len(), 2);
+        assert_eq!(full.alias.as_deref(), Some("gs='git status'\n"));
+
+        // A fresh snapshot re-arms exactly one full hook.
+        update_shell_context(figterm::UpdateShellContextRequest {
+            update_environment_variables: true,
+            environment_variables: vec![fig_proto::local::EnvironmentVariable {
+                key: "PATH".into(),
+                value: Some("/usr/local/bin".into()),
+            }],
+            update_alias: false,
+            alias: None,
+        });
+        let (again, dirty) = shell_state_to_edit_buffer_context(&shell_state);
+        assert!(dirty);
+        assert_eq!(again.environment_variables.len(), 1);
+        assert!(
+            shell_state_to_edit_buffer_context(&shell_state)
+                .0
+                .environment_variables
+                .is_empty()
+        );
     }
 }

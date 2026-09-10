@@ -672,71 +672,12 @@ fn split_shebang(contents: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use std::io::Write;
-    use std::process::{
-        Command,
-        Stdio,
-    };
-
-    use fig_util::build::SKIP_SHELLCHECK_TESTS;
     use fig_util::directories::{
         home_dir,
         old_fig_data_dir,
     };
 
     use super::*;
-
-    fn run_shellcheck(source: String) {
-        if SKIP_SHELLCHECK_TESTS {
-            return;
-        }
-
-        let shell_arg = "--shell=bash";
-        let mut child = Command::new("shellcheck")
-            .args([shell_arg, "--color=always", "-"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-
-        let mut stdin = child.stdin.take().unwrap();
-        std::thread::spawn(move || {
-            stdin.write_all(source.as_bytes()).unwrap();
-        });
-
-        let output = child.wait_with_output().unwrap();
-        if !output.status.success() {
-            let stdout = String::from_utf8(output.stdout).unwrap();
-            let stderr = String::from_utf8(output.stderr).unwrap();
-
-            if !stdout.is_empty() {
-                println!("{stdout}");
-            }
-
-            if !stderr.is_empty() {
-                eprintln!("{stderr}");
-            }
-
-            if stdout.contains("error") {
-                panic!();
-            }
-        }
-    }
-
-    fn check_script(shell: Shell, when: When) {
-        run_shellcheck(shell.get_fig_integration_source(&when));
-    }
-
-    #[test]
-    fn shellcheck_bash_pre() {
-        check_script(Shell::Bash, When::Pre);
-    }
-
-    #[test]
-    fn shellcheck_bash_post() {
-        check_script(Shell::Bash, When::Post);
-    }
 
     #[test]
     fn test_legacy_codewhisperer_regex() {

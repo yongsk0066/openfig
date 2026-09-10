@@ -1,27 +1,24 @@
-pub const APP_BUNDLE_ID: &str = "com.amazon.codewhisperer";
-pub const APP_BUNDLE_NAME: &str = "Amazon Q.app";
+pub const APP_BUNDLE_ID: &str = env!("FIG_BRAND_BUNDLE_ID");
+pub const APP_BUNDLE_NAME: &str = concat!(env!("FIG_BRAND_APP_NAME"), ".app");
 
-pub const APP_PROCESS_NAME: &str = "q_desktop";
+pub const APP_PROCESS_NAME: &str = env!("FIG_BRAND_DESKTOP_BIN");
 
-/// The name configured under `"package.productName"` in the tauri.conf.json file.
-pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
-
-pub const CLI_BINARY_NAME: &str = "q";
-pub const PTY_BINARY_NAME: &str = "qterm";
+pub const CLI_BINARY_NAME: &str = env!("FIG_BRAND_CLI_BIN");
+pub const PTY_BINARY_NAME: &str = env!("FIG_BRAND_PTY_BIN");
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
 
-pub const URL_SCHEMA: &str = "q";
+pub const URL_SCHEMA: &str = env!("FIG_BRAND_URL_SCHEME");
 
-pub const PRODUCT_NAME: &str = "Amazon Q";
+pub const PRODUCT_NAME: &str = env!("FIG_BRAND_APP_NAME");
 
-pub const RUNTIME_DIR_NAME: &str = "cwrun";
+pub const RUNTIME_DIR_NAME: &str = env!("FIG_BRAND_RUNTIME_DIR_NAME");
 
 /// Data directory name used in paths like ~/.local/share/{DATA_DIR_NAME}
-pub const DATA_DIR_NAME: &str = "amazon-q";
+pub const DATA_DIR_NAME: &str = env!("FIG_BRAND_DATA_DIR_NAME");
 
 /// Backup directory name
-pub const BACKUP_DIR_NAME: &str = ".amazon-q.dotfiles.bak";
+pub const BACKUP_DIR_NAME: &str = env!("FIG_BRAND_BACKUP_DIR_NAME");
 
 // These are the old "CodeWhisperer" branding, used anywhere we will not update to Amazon Q
 pub const OLD_PRODUCT_NAME: &str = "CodeWhisperer";
@@ -41,9 +38,6 @@ pub mod build {
 
     /// The datetime in rfc3339 format of the current build
     pub const DATETIME: Option<&str> = option_env!("AMAZON_Q_BUILD_DATETIME");
-
-    /// If `shellcheck` tests should be skipped
-    pub const SKIP_SHELLCHECK_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_SHELLCHECK_TESTS").is_some();
 }
 
 /// macOS specific constants

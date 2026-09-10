@@ -2,3 +2,10 @@ packages:
   - proto
   - tests/fig-api
   - packages/*
+
+# pnpm 12 refuses to run dependency build scripts unless decided here.
+# buf downloads its CLI binary in postinstall; the other two are not needed at build time.
+allowBuilds:
+  "@bufbuild/buf": true
+  core-js: false
+  esbuild: false

@@ -310,15 +310,21 @@ impl WebviewManager {
             .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::InitializePostRun))
             .expect("Failed to send post init event");
 
+        // Push menu clicks instead of polling for them. `MenuEvent::receiver().try_recv()` ran
+        // on *every* iteration of the event loop — measured at 25,391 iterations over seven
+        // minutes — and made menu handling depend on some other event arriving to wake the loop.
+        {
+            let menu_proxy = self.event_loop.create_proxy();
+            MenuEvent::set_event_handler(Some(move |menu_event: MenuEvent| {
+                info!(?menu_event, "Menu Event");
+                menu::handle_event(&menu_event, &menu_proxy);
+                tray::handle_event(&menu_event, &menu_proxy);
+            }));
+        }
+
         self.event_loop.run(move |event, window_target, control_flow| {
             *control_flow = ControlFlow::Wait;
             trace!(?event, "Main loop event");
-
-            if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
-                info!(?menu_event, "Menu Event");
-                menu::handle_event(&menu_event, &proxy);
-                tray::handle_event(&menu_event, &proxy);
-            }
 
             match event {
                 WryEvent::NewEvents(StartCause::Init) => info!("{PRODUCT_NAME} has started"),
@@ -505,6 +511,10 @@ impl WebviewManager {
                     }
                 },
                 WryEvent::MainEventsCleared | WryEvent::NewEvents(StartCause::WaitCancelled { .. }) => {},
+                // tao raises these from a global `NSEvent` monitor and offers no way to turn
+                // them off; 2,090 of them in a seven-minute log, each one preparing a `trace!`
+                // record nothing wants.
+                WryEvent::DeviceEvent { .. } => {},
                 event => trace!(?event, "Unhandled event"),
             }
         });

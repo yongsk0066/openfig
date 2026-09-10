@@ -461,7 +461,7 @@ impl WebviewManager {
                             },
                         },
                         Event::WindowEventAll { window_event } => {
-                            for (_window_id, window_state) in self.window_id_map.iter() {
+                            for window_state in self.window_id_map.values() {
                                 if window_state.enabled() || window_event.is_allowed_while_disabled() {
                                     window_state.handle(
                                         window_event.clone(),

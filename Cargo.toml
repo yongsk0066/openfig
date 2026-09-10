@@ -13,7 +13,7 @@ default-members = ["crates/fig_desktop", "crates/figterm", "crates/fig_cli"]
 [workspace.package]
 authors = ["OpenFig contributors"]
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.98"
 homepage = ""
 repository = ""
 publish = false
@@ -144,7 +144,6 @@ filter_map_next = "warn"
 flat_map_option = "warn"
 float_cmp_const = "warn"
 fn_params_excessive_bools = "warn"
-from_iter_instead_of_collect = "warn"
 if_let_mutex = "warn"
 implicit_clone = "warn"
 imprecise_flops = "warn"

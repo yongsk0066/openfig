@@ -42,10 +42,10 @@ const SYNC_BUFFER_SIZE: usize = 0x20_0000;
 const SYNC_ESCAPE_START_LEN: usize = 5;
 
 /// Start of the DCS sequence for beginning synchronized updates.
-const SYNC_START_ESCAPE_START: [u8; SYNC_ESCAPE_START_LEN] = [b'\x1b', b'P', b'=', b'1', b's'];
+const SYNC_START_ESCAPE_START: [u8; SYNC_ESCAPE_START_LEN] = *b"\x1bP=1s";
 
 /// Start of the DCS sequence for terminating synchronized updates.
-const SYNC_END_ESCAPE_START: [u8; SYNC_ESCAPE_START_LEN] = [b'\x1b', b'P', b'=', b'2', b's'];
+const SYNC_END_ESCAPE_START: [u8; SYNC_ESCAPE_START_LEN] = *b"\x1bP=2s";
 
 /// Parse colors in XParseColor format.
 fn xparse_color(color: &[u8]) -> Option<Rgb> {
@@ -108,10 +108,9 @@ fn parse_number(input: &[u8]) -> Option<u8> {
     let mut num: u8 = 0;
     for c in input {
         let c = *c as char;
-        if let Some(digit) = c.to_digit(10) {
+        {
+            let digit = c.to_digit(10)?;
             num = num.checked_mul(10).and_then(|v| v.checked_add(digit as u8))?;
-        } else {
-            return None;
         }
     }
     Some(num)

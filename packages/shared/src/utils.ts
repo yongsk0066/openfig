@@ -208,9 +208,6 @@ export function localProtocol(domain: string, path: string) {
     modifiedDomain = domain;
   }
 
-  if (window.fig?.constants?.os === "windows") {
-    return `https://fig.${modifiedDomain}/${path}`;
-  }
   return `fig://${modifiedDomain}/${path}`;
 }
 

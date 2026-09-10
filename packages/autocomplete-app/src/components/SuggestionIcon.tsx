@@ -31,12 +31,6 @@ const transformIconUri = (icon: URL): URL => {
     host = "path";
   }
 
-  if (window.fig.constants?.os === "windows") {
-    return new URL(
-      `https://fig.${host}${icon.pathname}${icon.search}${icon.hash}`,
-    );
-  }
-
   return new URL(`fig://${host}${icon.pathname}${icon.search}${icon.hash}`);
 };
 

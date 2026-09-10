@@ -281,7 +281,6 @@ impl DebugSubcommand {
                 }
                 println!("\n\n\n-------\nFinished writing to {}", outfile.display());
                 println!("Please send this file to the development team");
-                println!("Or attach it to a Github issue (run '{}')", "fig issue".magenta());
             },
             DebugSubcommand::VerifyCodesign => {
                 Command::new("codesign")

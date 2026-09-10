@@ -1215,11 +1215,7 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
     async fn check(&self, context: &SupportedTerminalCheckContext) -> Result<(), DoctorError> {
         if context.terminal.is_none() {
             Err(DoctorError::Error {
-                reason: format!(
-                    "Unsupported terminal, if you believe this is a mistake or would like to see support for your terminal, run {}",
-                    format!("{CLI_BINARY_NAME} issue").magenta()
-                )
-                .into(),
+                reason: "Unsupported terminal".into(),
                 info: vec![
                     format!(
                         "__CFBundleIdentifier: {}",
@@ -1763,21 +1759,11 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         println!();
         println!("{} Doctor found errors. Please fix them and try again.", CROSS.red());
         println!();
-        println!(
-            "If you are not sure how to fix it, please open an issue with {} to let us know!",
-            format!("{CLI_BINARY_NAME} issue").magenta()
-        );
-        println!();
     } else {
         // If early exit is disabled, no errors are thrown
         if !config.all {
             println!("{} Everything looks good!", CHECKMARK.green());
         }
-        println!();
-        println!(
-            "  {PRODUCT_NAME} still not working? Run {} to let us know!",
-            format!("{CLI_BINARY_NAME} issue").magenta()
-        );
         println!();
     }
 

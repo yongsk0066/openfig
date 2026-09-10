@@ -4,7 +4,6 @@ use fig_integrations::install::InstallComponents;
 use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
 use fig_util::consts::PRODUCT_NAME;
-use fig_util::url::USER_MANUAL;
 use muda::{
     IconMenuItem,
     Menu,
@@ -15,10 +14,7 @@ use muda::{
     Submenu,
 };
 use tao::event_loop::ControlFlow;
-use tracing::{
-    error,
-    trace,
-};
+use tracing::trace;
 use tray_icon::{
     Icon,
     TrayIcon,
@@ -100,11 +96,6 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
                 #[allow(clippy::exit)]
                 std::process::exit(0);
             });
-        },
-        "user-manual" => {
-            if let Err(err) = fig_util::open_url(USER_MANUAL) {
-                error!(%err, "Failed to open user manual url");
-            }
         },
         id => {
             trace!(?id, "Unhandled tray event");
@@ -282,7 +273,6 @@ impl MenuElement {
 
 fn menu() -> Vec<MenuElement> {
     let not_working = MenuElement::entry(None, None, format!("{PRODUCT_NAME} not working?"), "not-working");
-    let manual = MenuElement::entry(None, None, "User Guide", "user-manual");
     let version = MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION")));
     let quit = MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit");
     // let dashboard = MenuElement::entry(None, None, "Dashboard", "dashboard");
@@ -296,7 +286,6 @@ fn menu() -> Vec<MenuElement> {
 
     menu.extend(vec![
         MenuElement::Separator,
-        manual,
         not_working,
         MenuElement::Separator,
         version,

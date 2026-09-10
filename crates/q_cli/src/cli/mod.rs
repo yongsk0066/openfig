@@ -10,7 +10,6 @@ mod init;
 mod installation;
 mod integrations;
 pub mod internal;
-mod issue;
 mod settings;
 mod theme;
 mod uninstall;
@@ -124,8 +123,6 @@ pub enum CliRootCommands {
     Init(init::InitArgs),
     /// Get or set theme
     Theme(theme::ThemeArgs),
-    /// Create a new Github issue
-    Issue(issue::IssueArgs),
     /// Fix and diagnose common issues
     Doctor(doctor::DoctorArgs),
     /// Generate CLI completion spec
@@ -232,7 +229,6 @@ impl Cli {
                 CliRootCommands::Theme(theme_args) => theme_args.execute().await,
                 CliRootCommands::Settings(settings_args) => settings_args.execute(&cli_context).await,
                 CliRootCommands::Debug(debug_subcommand) => debug_subcommand.execute().await,
-                CliRootCommands::Issue(args) => args.execute().await,
                 CliRootCommands::Completion(args) => args.execute(),
                 CliRootCommands::Internal(internal_subcommand) => internal_subcommand.execute().await,
                 CliRootCommands::Launch => launch_dashboard().await,

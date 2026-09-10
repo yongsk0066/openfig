@@ -29,14 +29,3 @@ pub fn open_url(url: impl AsRef<str>) -> Result<(), Error> {
 pub async fn open_url_async(url: impl AsRef<str>) -> Result<(), Error> {
     open_macos(url)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[ignore]
-    #[test]
-    fn test_open_url() {
-        open_url("https://fig.io").unwrap();
-    }
-}

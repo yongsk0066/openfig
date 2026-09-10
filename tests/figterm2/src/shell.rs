@@ -200,8 +200,16 @@ impl Shell {
             }
         });
 
-        // give time for shell to spawn
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // Wait for the pty binary to come up and hand us its shell context, rather than guessing
+        // a fixed delay: the tests run right after a build, when the machine is still busy, and a
+        // 500 ms guess made them flaky.
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while shell_context.lock().await.is_none() {
+            if std::time::Instant::now() > deadline {
+                anyhow::bail!("{} never connected within 15 s", fig_util::consts::PTY_BINARY_NAME);
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
 
         Ok(Shell {
             desktop_socket,

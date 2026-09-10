@@ -6,7 +6,6 @@ use std::sync::atomic::{
     Ordering,
 };
 
-use fig_os_shim::Context;
 use serde::{
     Deserialize,
     Serialize,
@@ -47,14 +46,21 @@ pub fn is_cargo_debug_build() -> bool {
     cfg!(debug_assertions) && !fig_settings::state::get_bool_or("developer.override-cargo-debug", false)
 }
 
-pub fn wrap_custom_protocol<F, Fut, W>(
-    ctx: Arc<Context>,
+/// Adapt an `async fn(state, request, window_id)` into a wry asynchronous custom-protocol
+/// handler.
+///
+/// Generic over the state so each protocol carries exactly what it needs: the asset protocols
+/// take an `Arc<fig_os_shim::Context>`, `api://` takes an [`crate::webview::ApiState`]. Before
+/// that the closure only carried the os context and `api://` read five process globals instead.
+pub fn wrap_custom_protocol<S, F, Fut, W>(
+    ctx: Arc<S>,
     proto_name: &'static str,
     window_id: W,
     f: F,
 ) -> impl Fn(WebViewId<'_>, HttpRequest<Vec<u8>>, RequestAsyncResponder) + 'static
 where
-    F: Fn(Arc<Context>, HttpRequest<Vec<u8>>, WindowId) -> Fut + Send + Copy + 'static,
+    S: Send + Sync + 'static,
+    F: Fn(Arc<S>, HttpRequest<Vec<u8>>, WindowId) -> Fut + Send + Copy + 'static,
     Fut: Future<Output = anyhow::Result<HttpResponse<Cow<'static, [u8]>>>> + Send + 'static,
     W: WindowIdProvider + Copy + Send + Sync + 'static,
 {

@@ -139,34 +139,36 @@ pub struct WindowServer {
 
 // SAFETY: UNPROVEN — see docs/13-unsafe-review.md #3.
 //
-// Proposition asserted: `WindowServer` may be moved between threads and shared by `&` across
-// threads. This is load-bearing: `fig_desktop::platform::macos::UNMANAGED` stores it as
-// `RwLock<Option<Arc<Mutex<WindowServer>>>>` in a `static`, and a `static` requires `Sync`.
+// Proposition asserted: `WindowServer` may be moved between threads.
 //
-// The previous comment ("observer id pointer is send + sync safe") is folklore: neither the
-// Rust Reference nor Apple documentation says an arbitrary Objective-C object pointer is safe
-// to use from any thread, and the field it names is not the only field.
+// This is still load-bearing, but much less so than it was: the value now lives in
+// `fig_desktop::platform::macos::PlatformStateImpl::window_server`, which is reached through an
+// `Arc<PlatformState>` that crosses task boundaries, so `Send` is required. `Sync` is no longer
+// asserted — it was only needed while the value sat in a `static`.
 //
 // What actually has to hold, field by field:
-// - `observer: Retained<ObserverClass>`. `Retained<T>` is `Send`/`Sync` iff `T` is; the
-//   `define_class!`-generated `ObserverClass` is neither, because its `Ivars` hold a `*mut c_void`.
-//   Moving the `Retained` across threads only performs `objc_retain`/ `objc_release`, which Apple
+// - `observer: Retained<ObserverClass>`. `Retained<T>` is `Send` iff `T` is; the
+//   `define_class!`-generated `ObserverClass` is not, because its `Ivars` hold a `*mut c_void`.
+//   Moving the `Retained` across threads only performs `objc_retain`/`objc_release`, which Apple
 //   documents as atomic, so the *refcount* is race-free.
-// - `_inner: Pin<Box<WindowServerInner>>`. Its `DashMap<_, AXObserver<_>>` is `Send`/`Sync` only
-//   through `AXObserver`'s own unconstrained `unsafe impl`, which is itself unproven (see the
-//   comment on `AXObserver`). Dropping the map off the run-loop thread is a use-after-free; see
-//   docs/13-unsafe-review.md #2.
+// - `_inner: Pin<Box<WindowServerInner>>`. Its `DashMap<_, AXObserver<_>>` is `Send` only through
+//   `AXObserver`'s own `unsafe impl`. Dropping the map off the run-loop thread is a use-after-free;
+//   see docs/13-unsafe-review.md #2.
 // - The `ObserverClass` selectors reconstruct `&mut WindowServerInner` from the raw `handler` ivar.
-//   If a `&WindowServer` on another thread could reach `_inner`, that `&mut` would alias. It cannot
-//   today only because `_inner` is private and never read.
+//   `_inner` is private and never read through a `&WindowServer`, so no aliasing `&mut` can be
+//   formed.
 //
 // Missing premise: nothing constrains `WindowServer` to the thread whose run loop the AX
 // sources were attached to. Today every construction, mutation and destruction happens on the
-// tao main thread, and the value stored in `UNMANAGED` is never read back or dropped, so no
-// off-thread access is reachable. That is a project invariant nothing enforces, not a proof.
+// tao main thread (the `PlatformBoundEvent` handler runs there), so no off-thread access is
+// reachable. That is a project invariant nothing enforces, not a proof.
 unsafe impl Send for WindowServer {}
-// SAFETY: UNPROVEN — see the comment on the `Send` impl above and docs/13-unsafe-review.md #3.
-unsafe impl Sync for WindowServer {}
+
+impl std::fmt::Debug for WindowServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WindowServer").finish_non_exhaustive()
+    }
+}
 
 pub struct WindowServerInner {
     observers: DashMap<ApplicationSpecifier, AXObserver<AccessibilityCallbackData>, fnv::FnvBuildHasher>,

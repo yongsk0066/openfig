@@ -12,7 +12,7 @@ use tao::dpi::{
 };
 
 use crate::event::{
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
     WindowPosition,
 };

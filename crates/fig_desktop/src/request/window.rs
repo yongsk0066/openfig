@@ -14,22 +14,20 @@ use super::{
     RequestResult,
     RequestResultImpl,
 };
+use crate::AUTOCOMPLETE_ID;
 use crate::event::{
     Event,
+    EventSender,
     WindowEvent,
     WindowGeometryResult,
 };
 use crate::webview::WindowId;
-use crate::{
-    AUTOCOMPLETE_ID,
-    EventLoopProxy,
-};
 
 pub async fn position_window(
     request: PositionWindowRequest,
     window_id: WindowId,
     figterm_state: &FigtermState,
-    proxy: &EventLoopProxy,
+    proxy: &dyn EventSender,
 ) -> RequestResult {
     debug!(?request, %window_id, "Position Window Request");
 
@@ -73,12 +71,10 @@ pub async fn position_window(
         );
     }
 
-    proxy
-        .send_event(Event::WindowEvent {
-            window_id,
-            window_event: WindowEvent::Batch(events),
-        })
-        .map_err(|_err| "the event loop has exited")?;
+    proxy.send_event_or_err(Event::WindowEvent {
+        window_id,
+        window_event: WindowEvent::Batch(events),
+    })?;
 
     match rx.recv().await {
         Some(WindowGeometryResult { is_above, is_clipped }) => RequestResult::Ok(Box::new(
@@ -91,16 +87,14 @@ pub async fn position_window(
     }
 }
 
-pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &EventLoopProxy) -> RequestResult {
+pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &dyn EventSender) -> RequestResult {
     debug!(?request, %window_id, "Window Focus Request");
     match request.r#type() {
         FocusAction::TakeFocus => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id,
-                    window_event: WindowEvent::Show,
-                })
-                .map_err(|_err| "the event loop has exited")?;
+            proxy.send_event_or_err(Event::WindowEvent {
+                window_id,
+                window_event: WindowEvent::Show,
+            })?;
         },
         FocusAction::ReturnFocus => return Err("ReturnFocus not implemented".into()),
     }
@@ -108,14 +102,12 @@ pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &Eve
     RequestResult::success()
 }
 
-pub async fn drag(request: DragWindowRequest, window_id: WindowId, proxy: &EventLoopProxy) -> RequestResult {
+pub async fn drag(request: DragWindowRequest, window_id: WindowId, proxy: &dyn EventSender) -> RequestResult {
     debug!(?request, %window_id, "Window Drag Request");
-    proxy
-        .send_event(Event::WindowEvent {
-            window_id,
-            window_event: WindowEvent::Drag,
-        })
-        .map_err(|_err| "the event loop has exited")?;
+    proxy.send_event_or_err(Event::WindowEvent {
+        window_id,
+        window_event: WindowEvent::Drag,
+    })?;
 
     RequestResult::success()
 }

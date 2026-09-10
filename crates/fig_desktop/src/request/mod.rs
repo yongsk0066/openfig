@@ -9,10 +9,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use fig_desktop_api::handler::Wrapped;
-use fig_desktop_api::kv::{
-    DashKVStore,
-    KVStore,
-};
 #[allow(unused_imports)]
 pub use fig_desktop_api::requests::{
     Error,
@@ -48,39 +44,25 @@ use tracing::{
     warn,
 };
 
+use crate::InterceptState;
 use crate::event::{
     EmitEventName,
     Event,
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
 };
 use crate::webview::WindowId;
 use crate::webview::notification::WebviewNotificationsState;
-use crate::{
-    EventLoopProxy,
-    InterceptState,
-};
 
 pub struct Context<'a> {
     pub figterm_state: &'a FigtermState,
     pub intercept_state: &'a InterceptState,
     pub notifications_state: &'a WebviewNotificationsState,
-    pub proxy: &'a EventLoopProxy,
+    pub proxy: &'a dyn EventSender,
     pub window_id: &'a WindowId,
-    pub dash_kv_store: &'a DashKVStore,
     pub settings: &'a Settings,
     pub state: &'a State,
     pub ctx: Arc<fig_os_shim::Context>,
-}
-
-impl KVStore for Context<'_> {
-    fn set_raw(&self, key: impl Into<Vec<u8>>, value: impl Into<Vec<u8>>) {
-        self.dash_kv_store.set_raw(key, value);
-    }
-
-    fn get_raw(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-        self.dash_kv_store.get_raw(key)
-    }
 }
 
 impl SettingsProvider for Context<'_> {
@@ -185,8 +167,7 @@ pub async fn api_request(
     figterm_state: &FigtermState,
     intercept_state: &InterceptState,
     notifications_state: &WebviewNotificationsState,
-    proxy: &EventLoopProxy,
-    dash_kv_store: &DashKVStore,
+    proxy: &dyn EventSender,
 ) {
     let response = match message {
         Ok(request) => {
@@ -200,7 +181,6 @@ pub async fn api_request(
                     notifications_state,
                     proxy,
                     window_id: &window_id,
-                    dash_kv_store,
                     settings: &Settings::new(),
                     state: &State::new(),
                     ctx: fig_os_shim::Context::new(),

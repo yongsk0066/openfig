@@ -5,10 +5,6 @@ use fig_desktop_api::handler::{
     EventHandler,
     Wrapped,
 };
-use fig_desktop_api::kv::{
-    DashKVStore,
-    KVStore,
-};
 use fig_desktop_api::requests::{
     RequestResult,
     RequestResultImpl,
@@ -38,20 +34,9 @@ enum Cli {
 struct MockHandler;
 
 struct Context {
-    kv: DashKVStore,
     settings: Settings,
     state: State,
     ctx: Arc<fig_os_shim::Context>,
-}
-
-impl KVStore for Context {
-    fn set_raw(&self, key: impl Into<Vec<u8>>, value: impl Into<Vec<u8>>) {
-        self.kv.set_raw(key, value);
-    }
-
-    fn get_raw(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-        self.kv.get_raw(key)
-    }
 }
 
 impl SettingsProvider for Context {
@@ -99,7 +84,6 @@ async fn main() {
             let response = fig_desktop_api::handler::api_request(
                 MockHandler,
                 Context {
-                    kv: DashKVStore::new(),
                     settings: Settings::new(),
                     state: State::new(),
                     ctx: fig_os_shim::Context::new(),

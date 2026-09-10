@@ -22,14 +22,16 @@ use super::{
     RequestResult,
     RequestResultImpl,
 };
-use crate::EventLoopProxy;
-use crate::event::Event;
+use crate::event::{
+    Event,
+    EventSender,
+};
 
 async fn finish_onboarding() {
     fig_settings::state::set_value("desktop.completedOnboarding", true).ok();
 }
 
-pub async fn onboarding<Ctx>(request: OnboardingRequest, proxy: &EventLoopProxy, ctx: &Ctx) -> RequestResult
+pub async fn onboarding<Ctx>(request: OnboardingRequest, proxy: &dyn EventSender, ctx: &Ctx) -> RequestResult
 where
     Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
 {
@@ -67,7 +69,7 @@ where
                 Err(err) => RequestResult::error(err.to_string()),
             };
 
-            proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).ok();
+            proxy.send_event_or_log(Event::ControlFlow(ControlFlow::Exit));
             result
         },
         OnboardingAction::FinishOnboarding => {

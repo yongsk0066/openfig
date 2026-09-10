@@ -27,7 +27,6 @@ use fig_settings::state::StateProvider;
 use tracing::warn;
 
 use crate::error::Result;
-use crate::kv::KVStore;
 use crate::requests::{
     self,
     RequestResult,
@@ -42,7 +41,7 @@ pub struct Wrapped<Ctx, Req> {
 
 #[async_trait::async_trait]
 pub trait EventHandler {
-    type Ctx: KVStore + EnvProvider + FsProvider + Sync + Send;
+    type Ctx: EnvProvider + FsProvider + Sync + Send;
 
     async fn notification(&self, request: Wrapped<Self::Ctx, NotificationRequest>) -> RequestResult {
         RequestResult::unimplemented(request.request)
@@ -95,7 +94,7 @@ pub async fn api_request<Ctx, E>(
     request: ClientOriginatedMessage,
 ) -> Result<ServerOriginatedMessage>
 where
-    Ctx: KVStore + SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
+    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
     E: EventHandler<Ctx = Ctx> + Sync,
 {
     let request_id = match request.id {
@@ -129,7 +128,7 @@ async fn handle_request<Ctx, E>(
     message: ClientOriginatedMessage,
 ) -> RequestResult
 where
-    Ctx: KVStore + SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
+    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
     E: EventHandler<Ctx = Ctx> + Sync,
 {
     macro_rules! request {

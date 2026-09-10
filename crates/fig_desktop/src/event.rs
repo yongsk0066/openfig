@@ -6,7 +6,10 @@ use tao::dpi::{
     Position,
     Size,
 };
-use tao::event_loop::ControlFlow;
+use tao::event_loop::{
+    ControlFlow,
+    EventLoopClosed,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use wry::Theme;
 
@@ -155,21 +158,41 @@ impl WindowEvent {
     }
 }
 
-/// Fire an [`Event`] at the tao event loop from a place that cannot meaningfully handle the loop
-/// having exited.
+/// The event-loop handle the request handlers and IPC tasks hold.
 ///
-/// The event loop only ever ends via `process::exit` (`local_ipc/commands.rs`, `tray.rs`), so an
-/// IPC message, tray click, menu accelerator or settings-watcher wake-up that arrives during
-/// shutdown races it by design. Unwrapping the send result turned that ordinary race into a
-/// panicking task; the event is simply dropped instead.
-pub trait EventLoopProxyExt {
-    fn send_event_or_log(&self, event: Event);
-}
+/// A trait rather than `EventLoopProxy` directly, so the `api://` handler and the request
+/// handlers underneath it can be exercised in tests: tao refuses to create an `EventLoop`
+/// anywhere but the process main thread, and libtest runs every test on a spawned one.
+pub trait EventSender: Send + Sync {
+    /// Send `event`, handing it back if the event loop has already exited.
+    #[must_use = "an undelivered event is handed back"]
+    fn try_send_event(&self, event: Event) -> Option<Event>;
 
-impl EventLoopProxyExt for crate::EventLoopProxy {
+    /// Send `event`, turning a closed event loop into an error for the caller to report.
+    fn send_event_or_err(&self, event: Event) -> Result<(), &'static str> {
+        match self.try_send_event(event) {
+            None => Ok(()),
+            Some(_) => Err("the event loop has exited"),
+        }
+    }
+
+    /// Send `event` from a place that cannot meaningfully handle the loop having exited.
+    ///
+    /// The event loop only ever ends via `process::exit` (`local_ipc/commands.rs`, `tray.rs`),
+    /// so an IPC message, tray click, menu accelerator or settings-watcher wake-up that arrives
+    /// during shutdown races it by design. Unwrapping the send result turned that ordinary race
+    /// into a panicking task; the event is simply dropped instead.
     fn send_event_or_log(&self, event: Event) {
-        if let Err(tao::event_loop::EventLoopClosed(event)) = self.send_event(event) {
+        if let Some(event) = self.try_send_event(event) {
             tracing::debug!(?event, "Dropped event: the event loop has exited");
         }
+    }
+}
+
+impl EventSender for crate::EventLoopProxy {
+    fn try_send_event(&self, event: Event) -> Option<Event> {
+        crate::EventLoopProxy::send_event(self, event)
+            .err()
+            .map(|EventLoopClosed(event)| event)
     }
 }

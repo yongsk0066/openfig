@@ -31,7 +31,7 @@ use super::{
 };
 use crate::event::{
     Event,
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
 };
 use crate::platform::PlatformState;

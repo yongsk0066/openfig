@@ -9,7 +9,7 @@ use muda::{
 
 use crate::event::{
     Event,
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
 };
 use crate::{

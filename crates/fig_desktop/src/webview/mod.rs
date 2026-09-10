@@ -14,7 +14,6 @@ use std::sync::{
 };
 
 use fig_desktop_api::init_script::javascript_init;
-use fig_desktop_api::kv::DashKVStore;
 use fig_os_shim::Context;
 use fig_proto::fig::ClientOriginatedMessage;
 use fig_proto::fig::client_originated_message::Submessage;
@@ -64,7 +63,7 @@ use self::notification::WebviewNotificationsState;
 use self::window_id::DashboardId;
 use crate::event::{
     Event,
-    EventLoopProxyExt,
+    EventSender,
     ShowMessageNotification,
     WindowEvent,
 };
@@ -145,16 +144,27 @@ pub struct WebviewManager {
     intercept_state: Arc<InterceptState>,
     platform_state: Arc<PlatformState>,
     notifications_state: Arc<WebviewNotificationsState>,
-    dash_kv_store: Arc<DashKVStore>,
-    context: Arc<Context>,
+    api_state: Arc<ApiState>,
 }
 
+/// Everything the `api://` protocol handler needs, captured by its `wrap_custom_protocol`
+/// closure.
+///
+/// This used to be five `OnceLock` globals set in [`WebviewManager::new`], because the closure
+/// signature only carried an `Arc<fig_os_shim::Context>` and a `WindowId`. They made
+/// `protocol/api.rs` untestable — its own TODO said so.
+pub struct ApiState {
+    pub ctx: Arc<Context>,
+    pub figterm_state: Arc<FigtermState>,
+    pub intercept_state: Arc<InterceptState>,
+    pub notifications_state: Arc<WebviewNotificationsState>,
+    pub proxy: Box<dyn EventSender>,
+}
+
+/// The last global standing: `platform/macos.rs`'s `application_should_handle_reopen` IMP is an
+/// `extern "C"` function with no way to receive captured state. Lane 2 #30 replaces that
+/// injection with `WryEvent::Reopen` and this can go with it.
 pub static GLOBAL_PROXY: OnceLock<EventLoopProxy> = OnceLock::new();
-pub static FIGTERM_STATE: OnceLock<Arc<FigtermState>> = OnceLock::new();
-pub static INTERCEPT_STATE: OnceLock<Arc<InterceptState>> = OnceLock::new();
-pub static PLATFORM_STATE: OnceLock<Arc<PlatformState>> = OnceLock::new();
-pub static NOTIFICATIONS_STATE: OnceLock<Arc<WebviewNotificationsState>> = OnceLock::new();
-pub static DASH_KV_STORE: OnceLock<Arc<DashKVStore>> = OnceLock::new();
 
 impl WebviewManager {
     #[allow(unused_variables)]
@@ -178,19 +188,17 @@ impl WebviewManager {
         GLOBAL_PROXY.set(proxy.clone()).unwrap();
 
         let figterm_state = Arc::new(FigtermState::default());
-        FIGTERM_STATE.set(figterm_state.clone()).unwrap();
-
         let intercept_state = Arc::new(InterceptState::default());
-        INTERCEPT_STATE.set(intercept_state.clone()).unwrap();
-
-        let platform_state = Arc::new(PlatformState::new(proxy));
-        PLATFORM_STATE.set(platform_state.clone()).unwrap();
-
+        let platform_state = Arc::new(PlatformState::new(proxy.clone()));
         let notifications_state = Arc::new(WebviewNotificationsState::default());
-        NOTIFICATIONS_STATE.set(notifications_state.clone()).unwrap();
 
-        let dash_kv_store = Arc::new(DashKVStore::new());
-        DASH_KV_STORE.set(dash_kv_store.clone()).unwrap();
+        let api_state = Arc::new(ApiState {
+            ctx: Arc::clone(&context),
+            figterm_state: figterm_state.clone(),
+            intercept_state: intercept_state.clone(),
+            notifications_state: notifications_state.clone(),
+            proxy: Box::new(proxy),
+        });
 
         Self {
             fig_id_map: Default::default(),
@@ -200,8 +208,7 @@ impl WebviewManager {
             intercept_state,
             platform_state,
             notifications_state,
-            dash_kv_store,
-            context,
+            api_state,
         }
     }
 
@@ -229,7 +236,7 @@ impl WebviewManager {
     pub fn build_webview<T>(
         &mut self,
         window_id: WindowId,
-        builder: impl Fn(Arc<Context>, &mut WebContext, &EventLoop, T) -> anyhow::Result<(Window, WebView)>,
+        builder: impl Fn(Arc<ApiState>, &mut WebContext, &EventLoop, T) -> anyhow::Result<(Window, WebView)>,
         options: T,
         enabled: bool,
         url_fn: impl Fn() -> Url,
@@ -238,7 +245,7 @@ impl WebviewManager {
             .join("webcontexts")
             .join(window_id.0.as_ref());
         let mut web_context = WebContext::new(Some(web_context_path));
-        let (window, webview) = builder(Arc::clone(&self.context), &mut web_context, &self.event_loop, options)?;
+        let (window, webview) = builder(Arc::clone(&self.api_state), &mut web_context, &self.event_loop, options)?;
         self.insert_webview(window, window_id, webview, web_context, enabled, url_fn());
         Ok(())
     }
@@ -292,7 +299,6 @@ impl WebviewManager {
             let sync_figterm_state = self.figterm_state.clone();
             let sync_intercept_state = self.intercept_state.clone();
             let sync_notifications_state = self.notifications_state.clone();
-            let dash_kv_store = self.dash_kv_store.clone();
 
             tokio::spawn(async move {
                 while let Some((fig_id, message)) = sync_api_handler_rx.recv().await {
@@ -307,7 +313,6 @@ impl WebviewManager {
                         &intercept_state,
                         &notifications_state,
                         &proxy.clone(),
-                        &dash_kv_store,
                     )
                     .await;
                 }
@@ -317,7 +322,6 @@ impl WebviewManager {
             let figterm_state = self.figterm_state.clone();
             let intercept_state = self.intercept_state.clone();
             let notifications_state = self.notifications_state.clone();
-            let dash_kv_store = self.dash_kv_store.clone();
 
             tokio::spawn(async move {
                 while let Some((fig_id, payload)) = api_handler_rx.recv().await {
@@ -335,7 +339,6 @@ impl WebviewManager {
                         let figterm_state = figterm_state.clone();
                         let intercept_state = intercept_state.clone();
                         let notifications_state = notifications_state.clone();
-                        let dash_kv_store = dash_kv_store.clone();
                         tokio::spawn(async move {
                             api_request(
                                 fig_id,
@@ -344,7 +347,6 @@ impl WebviewManager {
                                 &intercept_state,
                                 &notifications_state,
                                 &proxy.clone(),
-                                &dash_kv_store,
                             )
                             .await;
                         });
@@ -608,7 +610,7 @@ pub struct DashboardOptions {
 }
 
 pub fn build_dashboard(
-    ctx: Arc<Context>,
+    state: Arc<ApiState>,
     web_context: &mut WebContext,
     event_loop: &EventLoop,
     DashboardOptions {
@@ -654,7 +656,7 @@ pub fn build_dashboard(
         .with_asynchronous_custom_protocol(
             "figresource".into(),
             utils::wrap_custom_protocol(
-                Arc::clone(&ctx),
+                Arc::clone(&state.ctx),
                 "figresource::Dashboard",
                 DashboardId,
                 resource::handle::<resource::Dashboard>,
@@ -662,7 +664,7 @@ pub fn build_dashboard(
         )
         .with_asynchronous_custom_protocol(
             "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "api", DashboardId, api::handle),
+            utils::wrap_custom_protocol(Arc::clone(&state), "api", DashboardId, api::handle),
         )
         .with_navigation_handler(navigation_handler(DASHBOARD_ID, &[r"^localhost$"]))
         .with_initialization_script(javascript_init(true))
@@ -677,7 +679,7 @@ pub fn build_dashboard(
 pub struct AutocompleteOptions;
 
 pub fn build_autocomplete(
-    ctx: Arc<Context>,
+    state: Arc<ApiState>,
     web_context: &mut WebContext,
     event_loop: &EventLoop,
     _autocomplete_options: AutocompleteOptions,
@@ -716,20 +718,20 @@ pub fn build_autocomplete(
         })
         .with_asynchronous_custom_protocol(
             "fig".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "fig", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "fig", AutocompleteId, icons::handle),
         )
         .with_asynchronous_custom_protocol(
             "icon".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "icon", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "icon", AutocompleteId, icons::handle),
         )
         .with_asynchronous_custom_protocol(
             "spec".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "spec", AutocompleteId, spec::handle),
+            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "spec", AutocompleteId, spec::handle),
         )
         .with_asynchronous_custom_protocol(
             "figresource".into(),
             utils::wrap_custom_protocol(
-                Arc::clone(&ctx),
+                Arc::clone(&state.ctx),
                 "figresource::Autocomplete",
                 AutocompleteId,
                 resource::handle::<resource::Autocomplete>,
@@ -737,7 +739,7 @@ pub fn build_autocomplete(
         )
         .with_asynchronous_custom_protocol(
             "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "api", AutocompleteId, api::handle),
+            utils::wrap_custom_protocol(Arc::clone(&state), "api", AutocompleteId, api::handle),
         )
         .with_devtools(true)
         .with_transparent(true)

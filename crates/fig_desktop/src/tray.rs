@@ -23,7 +23,7 @@ use tray_icon::{
 
 use crate::event::{
     Event,
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
 };
 use crate::{

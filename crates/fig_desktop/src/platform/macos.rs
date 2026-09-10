@@ -13,7 +13,6 @@ use std::sync::{
     Arc,
     LazyLock,
     Mutex,
-    RwLock,
 };
 
 use accessibility_sys::{
@@ -99,7 +98,7 @@ use super::{
 };
 use crate::event::{
     Event,
-    EventLoopProxyExt,
+    EventSender,
     WindowEvent,
     WindowPosition,
 };
@@ -130,10 +129,6 @@ pub const DEFAULT_CARET_WIDTH: f64 = 10.0;
 #[allow(non_upper_case_globals)]
 const kCGFloatingWindowLevelKey: i32 = 5;
 
-static UNMANAGED: Unmanaged = Unmanaged {
-    window_server: RwLock::new(Option::<Arc<Mutex<WindowServer>>>::None),
-};
-
 static ACCESSIBILITY_ENABLED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(accessibility_is_enabled()));
 
 static MACOS_VERSION: LazyLock<semver::Version> = LazyLock::new(|| {
@@ -148,16 +143,20 @@ pub fn is_ventura() -> bool {
     MACOS_VERSION.major >= 13
 }
 
-struct Unmanaged {
-    window_server: RwLock<Option<Arc<Mutex<WindowServer>>>>,
-}
-
 #[derive(Debug, Serialize)]
 pub struct PlatformStateImpl {
     #[serde(skip)]
     proxy: EventLoopProxy,
     #[serde(skip)]
     focused_window: Mutex<Option<PlatformWindowImpl>>,
+    /// The AX observer registry.
+    ///
+    /// This is the only owner: dropping it drops every `AXObserver`. It used to live in a
+    /// `static`, which is what forced the (unproven) `unsafe impl Sync for WindowServer`;
+    /// hanging it off the state that already reaches every user removes that requirement and
+    /// gives `AccessibilityUpdated` a handle to re-register with.
+    #[serde(skip)]
+    window_server: Mutex<Option<WindowServer>>,
 }
 
 #[derive(Debug, Clone)]
@@ -248,6 +247,7 @@ impl PlatformStateImpl {
         Self {
             proxy,
             focused_window: Mutex::new(focused_window),
+            window_server: Mutex::new(None),
         }
     }
 
@@ -414,15 +414,11 @@ impl PlatformStateImpl {
 
                 let (tx, rx) = flume::unbounded::<WindowServerEvent>();
 
-                UNMANAGED
-                    .window_server
-                    .write()
-                    .unwrap()
-                    .replace(Arc::new(Mutex::new(WindowServer::new(
-                        tx,
-                        APP_BUNDLE_ID,
-                        fig_util::terminal::xterm_bundle_ids(),
-                    ))));
+                self.window_server.lock().unwrap().replace(WindowServer::new(
+                    tx,
+                    APP_BUNDLE_ID,
+                    fig_util::terminal::xterm_bundle_ids(),
+                ));
 
                 let accessibility_proxy = self.proxy.clone();
                 let mut distributed = NotificationCenter::distributed_center();

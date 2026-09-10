@@ -4,7 +4,7 @@ use fig_proto::fig::{
     PingRequest,
     PingResponse,
 };
-use fig_util::open_url_async;
+use macos_utils::open_url;
 
 use super::{
     RequestResult,
@@ -13,7 +13,7 @@ use super::{
 
 pub(crate) async fn open_in_external_application(request: OpenInExternalApplicationRequest) -> RequestResult {
     match request.url {
-        Some(url) => match open_url_async(&url).await {
+        Some(url) => match open_url(&url) {
             Ok(_) => RequestResult::success(),
             Err(err) => RequestResult::error(format!("Failed to open url {url}: {err}")),
         },

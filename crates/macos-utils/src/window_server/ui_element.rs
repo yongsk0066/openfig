@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt;
 
@@ -172,6 +174,38 @@ pub struct CGWindowInfo {
     pub level: i64,
 }
 
+thread_local! {
+    /// The `AXAttribute`s this file asks for, built once per thread.
+    ///
+    /// `get_attr`/`set_attr` used to call `CFString::new(attr)` on every attribute access, which
+    /// allocates a CoreFoundation string and a UTF-16 copy of the name. `caret_position` reads
+    /// three attributes per update, i.e. three allocations per keystroke, and
+    /// `find_window_by_bounds` walks a subtree reading `kAXChildrenAttribute` at every level
+    /// (F-65). The names are `&'static str` constants, so the strings can be built once.
+    ///
+    /// A `thread_local!` rather than a `LazyLock`: `CFString` and `AXAttribute` are `!Sync`
+    /// (core-foundation makes no thread-safety claim for its wrappers, and `AXAttribute` holds a
+    /// `PhantomData<*const T>`), so a `static` would need an `unsafe impl Sync`. Per-thread costs
+    /// one map at most — the AX calls all happen on the window-server thread.
+    static ATTRIBUTES: RefCell<HashMap<&'static str, AXAttribute<CFType>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// The cached `AXAttribute` for `attr`, building it on first use on this thread.
+///
+/// Returns a clone (one `CFRetain`, no allocation) rather than a borrow so that the `RefCell`
+/// borrow ends before any accessibility call: `AXUIElementCopyAttributeValue` blocks on the
+/// target application and can pump the run loop, which could deliver an `AXObserver` callback
+/// that re-enters this function on the same thread — with a live `borrow_mut` that would panic.
+fn cached_attribute(attr: &'static str) -> AXAttribute<CFType> {
+    ATTRIBUTES.with_borrow_mut(|attributes| {
+        attributes
+            .entry(attr)
+            .or_insert_with(|| AXAttribute::new(&CFString::new(attr)))
+            .clone()
+    })
+}
+
 impl UIElement {
     fn get_ref(&self) -> AXUIElementRef {
         self.0.as_concrete_TypeRef()
@@ -212,7 +246,9 @@ impl UIElement {
     /// (docs/13-unsafe-review.md #12). The vendored implementation applies the Create rule the
     /// API actually documents, so delegating both removes the duplicate FFI and closes the leak
     /// without this crate calling `CFRelease` itself.
-    fn get_attr_ref(&self, attr: &str) -> Result<CFType> {
+    fn get_attr_ref(&self, attr: &'static str) -> Result<CFType> {
+        let attribute = cached_attribute(attr);
+
         // SAFETY:
         // Operation: `accessibility::AXUIElement::wrap_under_get_rule`.
         // Contract (core-foundation `TCFType`): the reference must be non-null (asserted
@@ -223,19 +259,17 @@ impl UIElement {
         // `self`'s reference count is unchanged once it drops at the end of this function.
         let element = unsafe { accessibility::AXUIElement::wrap_under_get_rule(self.get_ref()) };
 
-        element
-            .attribute(&AXAttribute::<CFType>::new(&CFString::new(attr)))
-            .map_err(|err| match err {
-                accessibility::Error::Ax(code) => code,
-                accessibility::Error::NotFound => kAXErrorNoValue,
-            })
+        element.attribute(&attribute).map_err(|err| match err {
+            accessibility::Error::Ax(code) => code,
+            accessibility::Error::NotFound => kAXErrorNoValue,
+        })
     }
 
-    fn get_attr<T: ConcreteCFType>(&self, attr: &str) -> Result<T> {
+    fn get_attr<T: ConcreteCFType>(&self, attr: &'static str) -> Result<T> {
         self.get_attr_ref(attr)?.downcast::<T>().ok_or(-1)
     }
 
-    fn set_attr<T: ConcreteCFType>(&self, attr: &str, value: T::Ref) -> Result<()> {
+    fn set_attr<T: ConcreteCFType>(&self, attr: &'static str, value: T::Ref) -> Result<()> {
         // SAFETY:
         // Operations: the `AXUIElementSetAttributeValue` FFI call and `value.as_void_ptr()`
         // (`TCFTypeRef::as_void_ptr`, an unsafe-free but pointer-punning conversion).
@@ -243,15 +277,20 @@ impl UIElement {
         // three must be live CF objects; the function does not take ownership of any of them.
         // Evidence:
         // - `self.get_ref()` is live for `&self` (TYPE FACT, as in `get_attr_ref`).
-        // - `attr` is a `CFString` local, alive until the end of this block, i.e. past the call.
+        // - `attribute` owns the `CFString`, and it is a local alive until the end of this function, i.e.
+        //   past the call.
         // - `value: T::Ref` is a `TCFTypeRef` supplied by the caller. Callers in this file pass
         //   `kCFBooleanTrue`, an immortal CoreFoundation singleton, so liveness holds. This is the one
         //   obligation this private helper places on its callers; it is discharged by inspection because
         //   both call sites are in `enable_screen_reader_accessibility`.
         // Postcondition: no ownership changes; `err == 0` means the attribute was set.
+        let attribute = cached_attribute(attr);
         unsafe {
-            let attr = CFString::new(attr);
-            let err = AXUIElementSetAttributeValue(self.get_ref(), attr.as_concrete_TypeRef(), value.as_void_ptr());
+            let err = AXUIElementSetAttributeValue(
+                self.get_ref(),
+                attribute.as_CFString().as_concrete_TypeRef(),
+                value.as_void_ptr(),
+            );
 
             if err == 0 { Ok(()) } else { Err(err) }
         }

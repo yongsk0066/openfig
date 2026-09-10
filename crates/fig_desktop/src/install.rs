@@ -69,11 +69,12 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
         LAUNCH_AGENT_LABEL,
         PTY_BINARY_NAME,
     };
-    use fig_util::launchd_plist::{
+    use macos_utils::bundle::get_bundle_path;
+
+    use crate::launchd_plist::{
         LaunchdPlist,
         create_launch_agent,
     };
-    use macos_utils::bundle::get_bundle_path;
 
     let local_bin = fig_util::directories::home_local_bin()?;
     if let Err(err) = fs::create_dir_all(&local_bin) {

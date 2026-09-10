@@ -149,7 +149,7 @@ pub async fn open_ui_element(command: OpenUiElementCommand, proxy: &EventLoopPro
 }
 
 pub async fn open_browser(command: OpenBrowserCommand) -> LocalResult {
-    if let Err(err) = fig_util::open_url(command.url) {
+    if let Err(err) = macos_utils::open_url(command.url) {
         error!(%err, "Error opening browser");
     }
     Ok(LocalResponse::Success(None))

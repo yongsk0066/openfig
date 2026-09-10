@@ -8,6 +8,7 @@ mod event;
 // mod figterm;
 mod file_watcher;
 mod install;
+mod launchd_plist;
 mod local_ipc;
 pub mod notification_bus;
 mod platform;

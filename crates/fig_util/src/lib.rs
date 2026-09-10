@@ -1,10 +1,8 @@
 pub mod directories;
-mod open;
 mod shell;
 pub mod terminal;
 
 pub mod consts;
-pub mod launchd_plist;
 
 use std::path::{
     Path,
@@ -12,10 +10,6 @@ use std::path::{
 };
 
 pub use consts::*;
-pub use open::{
-    open_url,
-    open_url_async,
-};
 
 /// The executable of this process's parent, skipping `toolbox-exec`.
 ///

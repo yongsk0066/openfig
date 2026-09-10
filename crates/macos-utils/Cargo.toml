@@ -30,11 +30,13 @@ objc2-foundation = { workspace = true, features = [
     "NSEnumerator",
     "NSOperation",
     "NSProcessInfo",
+    "NSURL",
 ] }
 dashmap.workspace = true
 flume.workspace = true
 fnv = "1.0.7"
 accessibility-sys = { path = "./accessibility-master/accessibility-sys" }
 accessibility = { path = "./accessibility-master/accessibility" }
+thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true

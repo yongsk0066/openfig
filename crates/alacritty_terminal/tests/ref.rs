@@ -123,9 +123,7 @@ fn ref_test(dir: &Path) {
     let mut terminal = Term::new_test(size, Mock, ref_config.history_size as usize);
     let mut parser: Processor = Processor::new();
 
-    for byte in recording {
-        parser.advance(&mut terminal, byte);
-    }
+    parser.advance(&mut terminal, &recording);
 
     // Truncate invisible lines from the grid.
     let mut term_grid = terminal.grid().clone();

@@ -903,9 +903,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                             trace!("Read {size} bytes from master");
 
                             let old_delayed_count = term.get_delayed_events_count();
-                            for byte in &write_buffer[..size] {
-                                processor.advance(&mut term, *byte);
-                            }
+                            processor.advance(&mut term, &write_buffer[..size]);
 
                             let delayed_count = term.get_delayed_events_count();
 

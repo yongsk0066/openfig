@@ -125,6 +125,10 @@ struct ProcessorState {
     /// DCS sequence waiting for termination.
     dcs: Option<Dcs>,
 
+    /// Set when a synchronized update has just begun, so `advance_until_terminated` hands the
+    /// rest of the chunk back instead of parsing it: those bytes have to be buffered, not drawn.
+    terminated: bool,
+
     /// State for synchronized terminal updates.
     sync_state: SyncState,
 }
@@ -174,17 +178,33 @@ impl Processor {
         Self::default()
     }
 
-    /// Process a new byte from the PTY.
+    /// Process a chunk of bytes from the PTY.
+    ///
+    /// Takes a slice rather than a byte: vte's ground state uses `memchr` to find the next ESC and
+    /// dispatches the whole run of printable text in one `str::from_utf8`, and feeding it one byte
+    /// at a time defeated that entirely — every non-ASCII character also went through the
+    /// partial-utf8 reassembly path, three bytes at a time, for every Hangul or emoji character on
+    /// screen.
+    ///
+    /// A synchronized update may begin part-way through the chunk, so the parser is asked to stop
+    /// as soon as that happens (`Perform::terminated`) and the remaining bytes are buffered.
     #[inline]
-    pub fn advance<H>(&mut self, handler: &mut H, byte: u8)
+    pub fn advance<H>(&mut self, handler: &mut H, bytes: &[u8])
     where
         H: Handler,
     {
-        if self.state.sync_state.timeout.is_none() {
-            let mut performer = Performer::new(&mut self.state, handler);
-            self.parser.advance(&mut performer, &[byte]);
-        } else {
-            self.advance_sync(handler, byte);
+        let mut processed = 0;
+        while processed != bytes.len() {
+            if self.state.sync_state.timeout.is_none() {
+                self.state.terminated = false;
+                let mut performer = Performer::new(&mut self.state, handler);
+                processed += self
+                    .parser
+                    .advance_until_terminated(&mut performer, &bytes[processed..]);
+            } else {
+                self.advance_sync(handler, bytes[processed]);
+                processed += 1;
+            }
         }
     }
 
@@ -193,16 +213,21 @@ impl Processor {
     where
         H: Handler,
     {
-        // Process all synchronized bytes.
-        for i in 0..self.state.sync_state.buffer.len() {
-            let byte = self.state.sync_state.buffer[i];
+        // Move the buffer out so the performer can borrow `self.state`; it is put back below so
+        // the 2 MiB allocation survives. Process all synchronized bytes in one go — `advance`
+        // (not `advance_until_terminated`) because a nested sync escape inside the buffer must be
+        // ignored, which is what the unconditional reset below has always done.
+        let buffer = std::mem::take(&mut self.state.sync_state.buffer);
+        {
             let mut performer = Performer::new(&mut self.state, handler);
-            self.parser.advance(&mut performer, &[byte]);
+            self.parser.advance(&mut performer, &buffer);
         }
 
         // Resetting state after processing makes sure we don't interpret buffered sync escapes.
+        self.state.sync_state.buffer = buffer;
         self.state.sync_state.buffer.clear();
         self.state.sync_state.timeout = None;
+        self.state.terminated = false;
     }
 
     /// Synchronized update expiration time.
@@ -972,6 +997,12 @@ impl<'a, H> vte::Perform for Performer<'a, H>
 where
     H: Handler + 'a,
 {
+    /// See [`ProcessorState::terminated`].
+    #[inline(always)]
+    fn terminated(&self) -> bool {
+        self.state.terminated
+    }
+
     #[inline]
     fn print(&mut self, c: char) {
         self.handler.input(c);
@@ -1029,6 +1060,8 @@ where
         match self.state.dcs {
             Some(Dcs::SyncStart) => {
                 self.state.sync_state.timeout = Some(Instant::now() + SYNC_UPDATE_TIMEOUT);
+                // Stop the parser here: everything after this byte belongs in the sync buffer.
+                self.state.terminated = true;
             },
             Some(Dcs::SyncEnd) => (),
             _ => {
@@ -1671,9 +1704,14 @@ mod tests {
         index: CharsetIndex,
         charset: StandardCharset,
         attr: Option<Attr>,
+        printed: String,
     }
 
     impl Handler for MockHandler {
+        fn input(&mut self, c: char) {
+            self.printed.push(c);
+        }
+
         fn terminal_attribute(&mut self, attr: Attr) {
             self.attr = Some(attr);
         }
@@ -1698,8 +1736,58 @@ mod tests {
                 index: CharsetIndex::G0,
                 charset: StandardCharset::Ascii,
                 attr: None,
+                printed: String::new(),
             }
         }
+    }
+
+    /// A chunk is now handed to the parser whole, so a synchronized update that begins part-way
+    /// through it must stop the parser: everything after the start belongs in the sync buffer, not
+    /// on screen. Without `Perform::terminated` the trailing bytes were drawn immediately.
+    #[test]
+    fn synchronized_update_started_mid_chunk_buffers_the_rest() {
+        let mut parser = Processor::new();
+        let mut handler = MockHandler::default();
+
+        // "A", DCS =1s ST (start a synchronized update), then "BC" — one chunk.
+        parser.advance(&mut handler, b"A\x1bP=1s\x1b\\BC");
+
+        assert_eq!(handler.printed, "A", "text after the sync start must not be drawn yet");
+        assert!(parser.sync_timeout().is_some(), "the synchronized update did not start");
+        // 3, not 2: `unhook` fires on the ESC of the ST terminator, so the trailing `\\` of the
+        // terminator is buffered along with "BC" and is discarded again on replay.
+        assert_eq!(parser.sync_bytes_count(), 3, "trailing bytes must be buffered");
+
+        // Ending the update replays them.
+        parser.stop_sync(&mut handler);
+        assert_eq!(handler.printed, "ABC");
+        assert!(parser.sync_timeout().is_none());
+        assert_eq!(parser.sync_bytes_count(), 0);
+    }
+
+    /// Chunking must not change what the parser sees; in particular a multi-byte codepoint split
+    /// across two chunks has to be reassembled.
+    #[test]
+    fn chunking_does_not_change_the_output() {
+        let input = "가나다 hello \u{1b}[1m world 😀 끝".as_bytes();
+
+        let mut whole = MockHandler::default();
+        Processor::new().advance(&mut whole, input);
+
+        for split in 1..input.len() {
+            let mut parser = Processor::new();
+            let mut split_handler = MockHandler::default();
+            parser.advance(&mut split_handler, &input[..split]);
+            parser.advance(&mut split_handler, &input[split..]);
+            assert_eq!(split_handler.printed, whole.printed, "split at {split}");
+        }
+
+        let mut byte_at_a_time = MockHandler::default();
+        let mut parser = Processor::new();
+        for byte in input {
+            parser.advance(&mut byte_at_a_time, &[*byte]);
+        }
+        assert_eq!(byte_at_a_time.printed, whole.printed);
     }
 
     #[test]
@@ -1709,9 +1797,7 @@ mod tests {
         let mut parser = Processor::new();
         let mut handler = MockHandler::default();
 
-        for byte in BYTES {
-            parser.advance(&mut handler, *byte);
-        }
+        parser.advance(&mut handler, BYTES);
 
         assert_eq!(handler.attr, Some(Attr::Bold));
     }
@@ -1725,9 +1811,7 @@ mod tests {
         let mut parser = Processor::new();
         let mut handler = MockHandler::default();
 
-        for byte in BYTES {
-            parser.advance(&mut handler, *byte);
-        }
+        parser.advance(&mut handler, BYTES);
 
         let spec = Rgb { r: 128, g: 66, b: 255 };
 
@@ -1753,9 +1837,7 @@ mod tests {
         let mut handler = MockHandler::default();
         let mut parser = Processor::new();
 
-        for byte in BYTES {
-            parser.advance(&mut handler, *byte);
-        }
+        parser.advance(&mut handler, BYTES);
     }
 
     #[test]
@@ -1764,9 +1846,7 @@ mod tests {
         let mut parser = Processor::new();
         let mut handler = MockHandler::default();
 
-        for byte in BYTES {
-            parser.advance(&mut handler, *byte);
-        }
+        parser.advance(&mut handler, BYTES);
 
         assert_eq!(handler.index, CharsetIndex::G0);
         assert_eq!(handler.charset, StandardCharset::SpecialCharacterAndLineDrawing);
@@ -1778,15 +1858,13 @@ mod tests {
         let mut parser = Processor::new();
         let mut handler = MockHandler::default();
 
-        for byte in &BYTES[..3] {
-            parser.advance(&mut handler, *byte);
-        }
+        parser.advance(&mut handler, &BYTES[..3]);
 
         assert_eq!(handler.index, CharsetIndex::G1);
         assert_eq!(handler.charset, StandardCharset::SpecialCharacterAndLineDrawing);
 
         let mut handler = MockHandler::default();
-        parser.advance(&mut handler, BYTES[3]);
+        parser.advance(&mut handler, &BYTES[3..]);
 
         assert_eq!(handler.index, CharsetIndex::G1);
     }

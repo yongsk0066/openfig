@@ -16,7 +16,6 @@ default = []
 [dependencies]
 anstream.workspace = true
 async-trait.workspace = true
-bytes.workspace = true
 clap.workspace = true
 clap_complete = "4.5.46"
 clap_complete_fig = "4.4.0"
@@ -41,7 +40,6 @@ nix.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSRunningApplication"] }
 objc2-foundation.workspace = true
 owo-colors = "4.2.0"
-rand.workspace = true
 regex.workspace = true
 semver.workspace = true
 serde.workspace = true

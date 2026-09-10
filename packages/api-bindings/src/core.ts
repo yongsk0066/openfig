@@ -111,6 +111,6 @@ const setupEventListeners = (): void => {
 
 // We want this to be run automatically
 if (!window?.fig?.quiet) {
-  console.log("[q] setting up event listeners...");
+  console.log("[fig] setting up event listeners...");
 }
 setupEventListeners();

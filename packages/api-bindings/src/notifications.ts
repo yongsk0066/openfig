@@ -103,6 +103,6 @@ const unsubscribeFromAll = () => {
 };
 
 if (!window?.fig?.quiet) {
-  console.log("[q] unsubscribing any existing notifications...");
+  console.log("[fig] unsubscribing any existing notifications...");
 }
 unsubscribeFromAll();

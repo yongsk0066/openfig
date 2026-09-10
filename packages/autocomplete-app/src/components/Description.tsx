@@ -24,7 +24,7 @@ const Description = ({
   height,
 }: DescriptionProps) => {
   const descriptionRef = useRef<HTMLDivElement>(null);
-  const { settings } = useAutocompleteStore();
+  const settings = useAutocompleteStore((state) => state.settings);
 
   const hint = useMemo(() => {
     const keys = Object.entries(settings).reduce((acc, pair) => {

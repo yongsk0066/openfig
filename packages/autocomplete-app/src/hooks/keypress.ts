@@ -3,6 +3,7 @@ import logger from "loglevel";
 import { Keybindings, Shell } from "@fig/api-bindings";
 import { SETTINGS, getSetting } from "@fig/api-bindings-wrappers";
 import { ACTIONS, AutocompleteAction } from "../actions";
+import { useShallow } from "zustand/shallow";
 import { useAutocompleteStore } from "../state";
 import { Visibility } from "../state/types";
 
@@ -27,26 +28,29 @@ export const useAutocompleteKeypressCallback = (
   shake: () => void,
   changeSize: (direction: Direction) => void,
 ): Parameters<typeof Keybindings.pressed>[0] => {
-  const {
-    suggestions,
-    visibleState,
-    selectedIndex,
+  // Only the five reactive values this hook reads; everything else in the store
+  // (parser result, generator states, history mode, …) no longer rebuilds the
+  // keypress callback on every keystroke.
+  const { suggestions, visibleState, selectedIndex, scrollWrapAround } = useAutocompleteStore(
+    useShallow((state) => ({
+      suggestions: state.suggestions,
+      visibleState: state.visibleState,
+      selectedIndex: state.selectedIndex,
+      scrollWrapAround: state.settings[SETTINGS.SCROLL_WRAP_AROUND],
+    })),
+  );
 
-    setHistoryModeEnabled,
-    setUserFuzzySearchEnabled,
-    settings,
-
-    insertTextForItem,
-    insertCommonPrefix,
-    scroll: scrollToIndex,
-    setVisibleState,
-
-    figState,
-    setFigState,
-  } = useAutocompleteStore();
+  const setHistoryModeEnabled = useAutocompleteStore((state) => state.setHistoryModeEnabled);
+  const setUserFuzzySearchEnabled = useAutocompleteStore(
+    (state) => state.setUserFuzzySearchEnabled,
+  );
+  const insertTextForItem = useAutocompleteStore((state) => state.insertTextForItem);
+  const insertCommonPrefix = useAutocompleteStore((state) => state.insertCommonPrefix);
+  const scrollToIndex = useAutocompleteStore((state) => state.scroll);
+  const setVisibleState = useAutocompleteStore((state) => state.setVisibleState);
+  const setFigState = useAutocompleteStore((state) => state.setFigState);
 
   const selectedItem = suggestions[selectedIndex];
-  const scrollWrapAround = settings[SETTINGS.SCROLL_WRAP_AROUND];
 
   const navigate = useCallback(
     (delta: number, hideOrShowHistoryOnNegative = false) => {
@@ -71,7 +75,10 @@ export const useAutocompleteKeypressCallback = (
       const { action, keypress, context: shellContext } = notification;
       logger.debug("Handling keypress", { notification, keypress, action });
 
-      setFigState({ ...figState, shellContext });
+      // Read before the write so the EXECUTE branch below keeps using the
+      // session id from *before* this keypress, as it always has.
+      const previousShellContext = useAutocompleteStore.getState().figState.shellContext;
+      setFigState((state) => ({ ...state, shellContext }));
 
       if (
         getSetting<boolean>(SETTINGS.ONLY_SHOW_ON_TAB) &&
@@ -123,7 +130,7 @@ export const useAutocompleteKeypressCallback = (
           insertTextForItem(selectedItem, true);
           break;
         case AutocompleteAction.EXECUTE:
-          Shell.insert("\n", undefined, figState.shellContext?.sessionId);
+          Shell.insert("\n", undefined, previousShellContext?.sessionId);
           break;
         case AutocompleteAction.HIDE_AUTOCOMPLETE:
           setVisibleState(Visibility.HIDDEN_UNTIL_SHOWN);
@@ -191,7 +198,6 @@ export const useAutocompleteKeypressCallback = (
       visibleState,
       setVisibleState,
       changeSize,
-      figState,
       setFigState,
     ],
   );

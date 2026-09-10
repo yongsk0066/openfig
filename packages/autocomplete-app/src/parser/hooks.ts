@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { shallow } from "zustand/shallow";
+import { useShallow } from "zustand/shallow";
 import { parseArguments } from "@fig/autocomplete-parser";
 import { useAutocompleteStore } from "../state";
 import { shellContextSelector } from "../state/generators";
@@ -32,7 +32,7 @@ export const useParseArgumentsEffect = (
   const command = useAutocompleteStore((state) => state.command);
   const onError = useAutocompleteStore((state) => state.error);
   const setVisibleState = useAutocompleteStore((state) => state.setVisibleState);
-  const context = useAutocompleteStore(shellContextSelector, shallow);
+  const context = useAutocompleteStore(useShallow(shellContextSelector));
 
   const oldCommand = usePrevious(command);
 

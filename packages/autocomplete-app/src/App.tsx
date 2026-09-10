@@ -17,6 +17,8 @@ import { useFigKeypress, useFigAutocomplete, useFigSettings, useFigClearCache } 
 
 import { getCommonSuggestionPrefix } from "./suggestions/helpers";
 
+import { useShallow } from "zustand/shallow";
+
 import { useAutocompleteStore } from "./state";
 import { Visibility } from "./state/types";
 import {
@@ -80,21 +82,44 @@ const getIconPath = (cwd: string): string => {
 };
 
 function App() {
+  // Selective subscriptions: a keystroke touches `figState`/`parserResult`
+  // wholesale, so subscribing to the whole store re-rendered `App` on every
+  // store write. `useShallow` narrows that to the values actually rendered.
   const {
     generatorStates,
     suggestions,
     selectedIndex,
     visibleState,
-    figState: { buffer, cwd, shellContext },
-    parserResult: { searchTerm, currentArg },
+    buffer,
+    cwd,
+    shellContext,
+    searchTerm,
+    currentArg,
     settings,
-    setSettings,
-    insertTextForItem,
-
     fuzzySearchEnabled,
-    setUserFuzzySearchEnabled,
-    setFigState,
-  } = useAutocompleteStore();
+  } = useAutocompleteStore(
+    useShallow((state) => ({
+      generatorStates: state.generatorStates,
+      suggestions: state.suggestions,
+      selectedIndex: state.selectedIndex,
+      visibleState: state.visibleState,
+      buffer: state.figState.buffer,
+      cwd: state.figState.cwd,
+      shellContext: state.figState.shellContext,
+      searchTerm: state.parserResult.searchTerm,
+      currentArg: state.parserResult.currentArg,
+      settings: state.settings,
+      fuzzySearchEnabled: state.fuzzySearchEnabled,
+    })),
+  );
+
+  // Actions never change identity, so each gets its own no-op subscription.
+  const setSettings = useAutocompleteStore((state) => state.setSettings);
+  const insertTextForItem = useAutocompleteStore((state) => state.insertTextForItem);
+  const setUserFuzzySearchEnabled = useAutocompleteStore(
+    (state) => state.setUserFuzzySearchEnabled,
+  );
+  const setFigState = useAutocompleteStore((state) => state.setFigState);
 
   const [systemTheme] = useSystemTheme();
   const [isShaking, shake] = useShake();

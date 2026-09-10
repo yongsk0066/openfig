@@ -785,9 +785,9 @@ fn main() {
 
     logger::stdio_debug_log(format!("{Q_LOG_LEVEL}={}", fig_log::get_log_level()));
 
-    if !state::get_bool_or("qterm.enabled", true) {
+    if !state::get_bool_or("figterm.enabled", true) {
         println!("[NOTE] qterm is disabled. Autocomplete will not work.");
-        logger::stdio_debug_log("qterm is disabled. `qterm.enabled` == false");
+        logger::stdio_debug_log("figterm is disabled. `figterm.enabled` == false");
         return;
     }
 

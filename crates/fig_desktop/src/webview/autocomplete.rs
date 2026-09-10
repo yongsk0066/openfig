@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use tracing::error;
 use url::Url;
 
-pub static RESOURCE_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("qcliresource://localhost").unwrap());
+pub static RESOURCE_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("figresource://localhost").unwrap());
 
 pub fn url() -> Url {
     if let Ok(autocomplete_url) = std::env::var("AUTOCOMPLETE_URL") {

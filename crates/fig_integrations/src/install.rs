@@ -118,14 +118,17 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
 /// Removes everything the desktop app left on the machine: the launch agent, the defaults
 /// domain, the data directory and the app bundle itself.
 async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
-    use fig_util::consts::APP_BUNDLE_ID;
+    use fig_util::consts::{
+        APP_BUNDLE_ID,
+        LAUNCH_AGENT_PREFIX,
+    };
     use tokio::fs;
     use tracing::warn;
 
     // Remove launch agents
     if let Ok(home) = directories::home_dir() {
         let launch_agents = home.join("Library").join("LaunchAgents");
-        remove_in_dir_with_prefix_unless(&launch_agents, "com.amazon.codewhisperer.", |p| p.contains("daemon")).await;
+        remove_in_dir_with_prefix_unless(&launch_agents, LAUNCH_AGENT_PREFIX, |p| p.contains("daemon")).await;
     } else {
         warn!("Could not find home directory");
     }

@@ -42,7 +42,7 @@ impl Scope for Autocomplete {
     const PATH: &'static str = "autocomplete";
 }
 
-/// handle `qcliresource://localhost/`
+/// handle `figresource://localhost/`
 pub async fn handle<S: Scope>(
     ctx: Arc<Context>,
     request: Request<Vec<u8>>,

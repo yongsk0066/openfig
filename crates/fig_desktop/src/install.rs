@@ -54,6 +54,7 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
         APP_BUNDLE_ID,
         APP_PROCESS_NAME,
         CLI_BINARY_NAME,
+        LAUNCH_AGENT_LABEL,
         PTY_BINARY_NAME,
     };
     use fig_util::launchd_plist::{
@@ -130,7 +131,7 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
 
     if let Some(bundle_path) = get_bundle_path() {
         let exe = bundle_path.join("Contents").join("MacOS").join(APP_PROCESS_NAME);
-        let startup_launch_agent = LaunchdPlist::new("com.amazon.codewhisperer.launcher")
+        let startup_launch_agent = LaunchdPlist::new(LAUNCH_AGENT_LABEL)
             .program_arguments([&exe.to_string_lossy(), "--is-startup", "--no-dashboard"])
             .associated_bundle_identifiers([APP_BUNDLE_ID])
             .run_at_load(true);

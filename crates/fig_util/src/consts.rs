@@ -20,6 +20,15 @@ pub const DATA_DIR_NAME: &str = env!("FIG_BRAND_DATA_DIR_NAME");
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = env!("FIG_BRAND_BACKUP_DIR_NAME");
 
+/// Label of the LaunchAgent that starts the desktop app at login.
+///
+/// Derived from [`APP_BUNDLE_ID`] so a bundle id change moves the plist with it; the
+/// uninstaller sweeps `~/Library/LaunchAgents` by the `{APP_BUNDLE_ID}.` prefix.
+pub const LAUNCH_AGENT_LABEL: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".launcher");
+
+/// Prefix the uninstaller uses to find every LaunchAgent this app wrote.
+pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
+
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"

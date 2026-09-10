@@ -132,7 +132,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
         to_source.push(assign_shell_variable(shell, "SHOULD_QTERM_LAUNCH", status, false));
     }
 
-    if let Some(path) = fig_settings::settings::get_string_opt("qterm.path") {
+    if let Some(path) = fig_settings::settings::get_string_opt("figterm.path") {
         to_source.push(assign_shell_variable(shell, "Q_TERM_PATH", path, false));
     }
 

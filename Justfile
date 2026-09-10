@@ -38,8 +38,8 @@ deps:
     xcrun --sdk macosx --show-sdk-path
     command -v codesign plutil jq rsync perl
 
-# ~/.local/bin is dropped from PATH because autocomplete-tools calls `q`/`cw`/`fig settings`
-# on every compile and this machine still has the Kiro CLI links there.
+# ~/.local/bin is dropped from PATH because autocomplete-tools shells out to a CLI of the
+# same name on every compile and this machine still has another vendor's links there.
 # Completion specs: <specs_src>/src/**/*.ts -> build/specs (index.json + <name>.js)
 specs:
     cd "{{specs_src}}" && pnpm install --frozen-lockfile --ignore-scripts
@@ -91,9 +91,9 @@ sign:
 # app_bundle_path() falls back to /Applications, not ~/Applications, so the bundle goes there.
 # The first `open` registers it with LaunchServices; the app then re-creates the ~/.local/bin
 # links and the "<shell> (<PTY_BIN>)" copies itself (crates/fig_desktop/src/install.rs). It also
-# writes a LaunchAgent, but the label there is still the hardcoded
-# "com.amazon.codewhisperer.launcher" (install.rs:279) until the 6단계 branding flip derives it
-# from BUNDLE_ID. A pre-existing regular file at a ~/.local/bin target (another vendor's CLI,
+# writes a LaunchAgent labelled "$BUNDLE_ID.launcher" (fig_util::LAUNCH_AGENT_LABEL); making it
+# conditional on app.launchOnStartup is 8단계. A pre-existing regular file at a ~/.local/bin
+# target (another vendor's CLI,
 # not one of our symlinks) is moved aside instead of being clobbered.
 # Install into /Applications and run for the first time
 install:

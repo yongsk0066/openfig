@@ -656,10 +656,10 @@ pub fn build_dashboard(
         })
         .with_devtools(true)
         .with_asynchronous_custom_protocol(
-            "qcliresource".into(),
+            "figresource".into(),
             utils::wrap_custom_protocol(
                 Arc::clone(&ctx),
-                "qcliresource::Dashboard",
+                "figresource::Dashboard",
                 DashboardId,
                 resource::handle::<resource::Dashboard>,
             ),
@@ -733,10 +733,10 @@ pub fn build_autocomplete(
             utils::wrap_custom_protocol(Arc::clone(&ctx), "spec", AutocompleteId, spec::handle),
         )
         .with_asynchronous_custom_protocol(
-            "qcliresource".into(),
+            "figresource".into(),
             utils::wrap_custom_protocol(
                 Arc::clone(&ctx),
-                "qcliresource::Autocomplete",
+                "figresource::Autocomplete",
                 AutocompleteId,
                 resource::handle::<resource::Autocomplete>,
             ),

@@ -46,7 +46,6 @@ use nix::sys::stat::{
     Mode,
     umask,
 };
-use portable_pty::unix::close_random_fds;
 use portable_pty::{
     Child,
     PtySize,
@@ -215,6 +214,36 @@ impl SlavePty for UnixSlavePty {
             .stdout(self.fd.as_stdio()?)
             .stderr(self.fd.as_stdio()?);
 
+        // Snapshot the descriptors we may have leaked into the child *here*, in the parent.
+        // Enumerating them after `fork` is what `portable_pty::unix::close_random_fds` does, and
+        // that is the one async-signal-safety violation in this `pre_exec` closure: it calls
+        // `read_dir("/dev/fd")` and builds `String`s and a `Vec`, all of which allocate. This
+        // process is multi-threaded at that point (r2d2's pool workers and tracing-appender's
+        // writer are running before the fork, and tokio's runtime starts right after), so a
+        // thread holding the allocator lock at `fork` leaves the child with a locked allocator and
+        // nobody to unlock it — the child hangs between `fork` and `exec` and the user gets a
+        // shell that never starts. See docs/13-unsafe-review.md #22.
+        //
+        // Iterating a pre-built `Vec` in the child allocates nothing, and the closure is only ever
+        // *called* in the child (never dropped: `exec` replaces the image, and the error path
+        // `_exit`s), so the `Vec`'s destructor never runs there either. Walking
+        // `3..sysconf(_SC_OPEN_MAX)` instead is not viable: `OPEN_MAX` is 1,048,576 on macOS, so
+        // that would add a million `close` syscalls to every shell launch.
+        //
+        // This is also strictly more conservative than `close_random_fds`: descriptors created by
+        // `Command::spawn` after this point — notably the CLOEXEC pipe std uses to report `exec`
+        // failures back to the parent — are not in the snapshot and stay open.
+        let inherited_fds: Vec<RawFd> = match std::fs::read_dir("/dev/fd") {
+            Ok(dir) => dir
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok()?.parse::<RawFd>().ok())
+                .filter(|fd| *fd > 2)
+                .collect(),
+            Err(err) => {
+                tracing::warn!(%err, "Failed to enumerate /dev/fd; not closing inherited descriptors");
+                Vec::new()
+            },
+        };
+
         let pre_exec_fn = move || {
             // Clean up a few things before we exec the program
             // Clear out any potentially problematic signal
@@ -271,7 +300,17 @@ impl SlavePty for UnixSlavePty {
                 }
             }
 
-            close_random_fds();
+            for &fd in &inherited_fds {
+                // SAFETY:
+                // Operation: `libc::close`.
+                // Contract (POSIX `close(2)`): none beyond passing an `int`; an invalid or
+                // already-closed descriptor is reported as `EBADF`, not undefined behaviour.
+                // Evidence: `close(2)` is on the POSIX async-signal-safe list, and the loop reads
+                // a `Vec` that was built in the parent, so nothing here allocates.
+                // Postcondition: the descriptor is closed in this child only; the parent's copy is
+                // unaffected.
+                unsafe { libc::close(fd) };
+            }
 
             if let Some(mode) = configured_mask {
                 umask(mode);
@@ -293,15 +332,11 @@ impl SlavePty for UnixSlavePty {
         // - `signal(signo, SigHandler::SigDfl)`: `sigaction(2)`, async-signal-safe.
         // - `nix::unistd::setsid()`: `setsid(2)`, async-signal-safe.
         // - `libc::ioctl(0, TIOCSCTTY, 0)`: a bare syscall, async-signal-safe.
-        // - `portable_pty::unix::close_random_fds()`: **VIOLATES the contract.** Its portable-pty 0.8.1
-        //   implementation calls `std::fs::read_dir("/dev/fd")`, converts each entry's `OsString` file name
-        //   into a `String` and pushes the parsed fds onto a `Vec` before closing anything.
-        //   `opendir`/`readdir`, `String` and `Vec` all allocate, and `malloc` is not async-signal-safe.
-        //   The parent here is multi-threaded (tokio is running), so if another thread holds the allocator
-        //   lock at `fork`, the child inherits a locked allocator with no thread left to release it and
-        //   deadlocks between `fork` and `exec` — a hung shell, not a crash. See docs/13-unsafe-review.md
-        //   #22. The fix is an allocation-free loop (`for fd in 3..sysconf(_SC_OPEN_MAX) { libc::close(fd);
-        //   }`) or pre-computing the descriptor list in the parent before `pre_exec` runs.
+        // - `for &fd in &inherited_fds { libc::close(fd) }`: `close(2)` is async-signal-safe and the
+        //   descriptor list was built in the parent (see the comment above the snapshot), so the loop
+        //   allocates nothing. This replaces `portable_pty::unix::close_random_fds()`, which violated the
+        //   contract: it calls `std::fs::read_dir("/dev/fd")` and builds `String`s and a `Vec` *in the
+        //   child*, and `malloc` is not async-signal-safe.
         // - `umask(mode)`: `umask(2)`, async-signal-safe.
         // - Error construction on the failure paths: `io::Error::last_os_error()` and the `Errno ->
         //   io::Error` conversion both build from a raw OS error code and do not allocate. `?` on the `nix`
@@ -311,9 +346,15 @@ impl SlavePty for UnixSlavePty {
         // - Nothing in the closure logs, panics, or takes a lock.
         // Postcondition: on `Err`, `std::process::Command` reports the error to the parent over
         // its CLOEXEC pipe and `_exit`s the child; the parent's `spawn()` returns that error.
-        // Note this is the *parent* obligation: the parent here is multi-threaded (tokio is
-        // already running), which is exactly why the async-signal-safety analysis above cannot
-        // be skipped.
+        // - The closure also captures `inherited_fds: Vec<RawFd>`. It is only ever *called* in the child,
+        //   never dropped there (`exec` replaces the image; the error path `_exit`s), so `Vec::drop` —
+        //   which would call `free` — is unreachable in the child.
+        // Note this is the *parent* obligation, and the parent is multi-threaded at the fork. Contrary
+        // to what docs/13-unsafe-review.md #21/#22 say, tokio is *not* what makes it multi-threaded:
+        // `Runtime::build()` runs after this fork. The threads that do exist are r2d2's connection-pool
+        // workers (3, forced by the `state::get_bool_or` read in `main`) and tracing-appender's writer
+        // (1, from `initialize_logging`), both started before `figterm_main` spawns the shell. The
+        // conclusion is unchanged: this analysis cannot be skipped.
         unsafe { cmd.pre_exec(pre_exec_fn) };
 
         let mut child = cmd.spawn()?;

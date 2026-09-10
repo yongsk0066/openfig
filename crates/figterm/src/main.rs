@@ -437,12 +437,14 @@ fn launch_shell(command: Option<&[String]>) -> Result<()> {
         // Evidence available: `launch_shell` runs on the main thread on the `figterm_main`
         // failure path, after `runtime.block_on` returned and the `Runtime` was dropped
         // (tokio's `Drop` shuts down and joins its worker threads).
-        // Missing premise: `figterm_main` also does a bare `std::thread::spawn(move ||
-        // child_tx.send(child.wait()))`. That thread is detached and is *not* joined before
-        // `figterm_main` returns, so it can still be alive here. It does not itself touch the
-        // environment, but "no other thread reads or writes the environment" quantifies over
-        // everything that thread transitively calls, including libc paths that read `environ`.
-        // Nothing in this frame establishes that.
+        // Missing premise: at least three other threads can still be alive here, and none of them
+        // is joined. (a) `figterm_main`'s bare `std::thread::spawn(move ||
+        // child_tx.send(child.wait()))`, which is detached. (b) r2d2's connection-pool workers (3,
+        // started by the very first `fig_settings::state` read in `main`) plus its 30 s reaper.
+        // (c) tracing-appender's writer thread, started by `initialize_logging`. None of them
+        // touches the environment directly, but "no other thread reads or writes the environment"
+        // quantifies over everything they transitively call, including libc paths that read
+        // `environ`. Nothing in this frame establishes that.
         // Postcondition (intended): the child inherits the modified environment through the
         // `execvp` on the next lines, which is why this cannot simply be replaced by
         // `Command::envs`.
@@ -468,17 +470,20 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         Err(_) => uuid::Uuid::new_v4().simple().to_string(),
     };
 
-    // SAFETY:
+    // SAFETY: UNPROVEN — the premise recorded here previously was false; see
+    // docs/13-unsafe-review.md #21, which needs the same correction.
     // Operation: `std::env::set_var`, unsafe since edition 2024.
     // Contract (std): safe in a single-threaded program; otherwise the caller must ensure no
     // other thread reads or writes the environment concurrently.
-    // Evidence: the process is still single-threaded at this point. Everything executed before
-    // this line is `Cli::parse`, `fig_settings::state`/`settings` accessors (plain file reads,
-    // no thread spawns), `logger::stdio_debug_log`, and `uuid::Uuid::new_v4`. The first
-    // `std::thread::spawn` and the tokio `runtime::Builder::new_multi_thread()` both appear
-    // later in this same function, after `open_pty` and `spawn_command`.
-    // Postcondition: `QTERM_SESSION_ID` is visible to every thread spawned afterwards and to
-    // the shell spawned into the pty.
+    // Evidence available: no *tokio* thread exists yet — `runtime::Builder::new_multi_thread()`
+    // and the detached `child.wait()` thread both appear later in this function.
+    // Missing premise: the process is nevertheless **not** single-threaded. `main`'s
+    // `state::get_bool_or("figterm.enabled", …)` opens the sqlite state store, and
+    // `fig_settings::sqlite` builds an r2d2 pool whose `ScheduledThreadPool::with_name(.., 3)`
+    // starts three worker threads before this line is reached. They do not touch `environ`
+    // themselves, but the contract quantifies over everything they transitively call.
+    // Postcondition (intended): `QTERM_SESSION_ID` is visible to every thread spawned afterwards
+    // and to the shell spawned into the pty.
     unsafe {
         std::env::set_var(QTERM_SESSION_ID, &session_id);
     }

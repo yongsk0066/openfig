@@ -82,8 +82,29 @@ pub fn fig_data_dir() -> Result<PathBuf> {
 ///
 /// See: <https://man7.org/linux/man-pages/man3/confstr.3.html>
 fn macos_tempdir() -> Result<PathBuf> {
+    // SAFETY:
+    // Operation: the `libc::confstr` FFI call, sizing probe.
+    // Contract (POSIX `confstr(name, buf, len)`): when `len` is 0, `buf` may be NULL and the
+    // function only returns the buffer size required, including the terminating NUL; it writes
+    // nothing. It returns 0 if `name` is invalid.
+    // Evidence: `len` is the literal 0, which is exactly the case in which a NULL `buf` is
+    // permitted; `_CS_DARWIN_USER_TEMP_DIR` is a Darwin-defined `name`.
+    // Postcondition: `len` is the required byte count including the NUL, or 0 on failure.
     let len = unsafe { libc::confstr(libc::_CS_DARWIN_USER_TEMP_DIR, std::ptr::null::<i8>().cast_mut(), 0) };
     let mut buf: Vec<u8> = vec![0; len];
+    // SAFETY:
+    // Operation: the `libc::confstr` FFI call, fetch.
+    // Contract (POSIX): `buf` must be writable for `len` bytes; the function writes at most
+    // `len` bytes including a NUL, truncating if the value does not fit.
+    // Evidence: `buf` is a `Vec<u8>` of exactly `len` zeroed bytes, so `buf.as_mut_ptr()` is
+    // non-null and aligned (alignment 1) and writable for `buf.len()` bytes — the same value
+    // passed as the size. `Vec` is not reallocated between the two lines.
+    // Note on the `len == 0` case: `vec![0; 0]` has a dangling-but-aligned non-null pointer and
+    // `buf.len()` is 0, which POSIX permits (write nothing); the subsequent
+    // `CString::from_vec_with_nul(vec![])` then returns `Err`, so the failure surfaces as an
+    // error rather than UB.
+    // Robustness note: this second return value is discarded, so a truncated or failed fetch is
+    // only detected indirectly by `from_vec_with_nul`.
     unsafe { libc::confstr(libc::_CS_DARWIN_USER_TEMP_DIR, buf.as_mut_ptr().cast(), buf.len()) };
     let c_string = std::ffi::CString::from_vec_with_nul(buf)?;
     let str = c_string.into_string()?;

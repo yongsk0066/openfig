@@ -101,8 +101,28 @@ impl Env {
     ///
     /// # Safety
     ///
-    /// See [std::env::set_var] for the safety requirements.
+    /// When `self` is a real environment, the caller must ensure that no other thread reads or
+    /// writes the process environment concurrently with this call, exactly as [`std::env::set_var`]
+    /// requires: std mutates the global `environ` array without synchronisation, so a concurrent
+    /// `getenv` may observe a dangling pointer.
+    ///
+    /// When `self` is a fake environment the call touches only a `Mutex`-protected `HashMap` and
+    /// has no preconditions at all; the obligation is nevertheless stated unconditionally,
+    /// because the caller of an `unsafe fn` cannot in general know which variant it holds. See
+    /// [`crate::ContextBuilder::with_env_var`] for a caller that *can* prove the fake case.
+    ///
+    /// # Panics
+    ///
+    /// The fake branch panics if `key` or `value` is not valid UTF-8. That is a logic error,
+    /// not a safety one.
     pub unsafe fn set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+        // SAFETY:
+        // Operation: `std::env::set_var` in the `Inner::Real` arm. The `Inner::Fake` arm
+        // performs no unsafe operation; it is inside this block only because the block wraps
+        // the whole `match`.
+        // Contract (std): single-threaded, or no concurrent environment access.
+        // Evidence: this function's own `# Safety` precondition, restated unchanged and passed
+        // straight through to std. Nothing between accepting it and the call can invalidate it.
         unsafe {
             use inner::Inner;
             match &self.0 {

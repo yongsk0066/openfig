@@ -301,12 +301,47 @@ impl CommandBuilder {
             return Ok(shell.into());
         }
 
+        // SAFETY:
+        // Operation: the `libc::getpwuid(libc::getuid())` FFI calls.
+        // Contract (POSIX): `getuid(2)` cannot fail and has no preconditions. `getpwuid(3)`
+        // takes a `uid_t` and returns a pointer into a *static* area that "may be overwritten
+        // by a subsequent call to getpwent(), getpwnam(), or getpwuid()", or NULL if no entry
+        // matches. It is explicitly **not thread-safe**.
+        // Evidence:
+        // - No preconditions to discharge: both calls take integers by value.
+        // - Non-nullness of the result is *checked*, not assumed, by the `ent.is_null()` branch immediately
+        //   below, which falls back to a literal default.
+        // Missing premise (UNPROVEN): nothing serialises this against another thread calling
+        // `getpwuid`/`getpwnam`. `CommandBuilder::get_shell`/`get_home_dir` are reached from
+        // `build_shell_command`, which figterm calls once before spawning threads and again on
+        // the `launch_shell` fallback path, where a detached `child.wait()` thread may still be
+        // alive. No other workspace code calls the `getpw*` family, so the risk is bounded by
+        // the C library's own internals. `getpwuid_r` would discharge this.
+        // See docs/13-unsafe-review.md #23.
+        // Postcondition: `ent` borrows the static area; it must not be used after any further
+        // `getpw*` call. It is not — the only use is the `CStr` read below.
         let ent = unsafe { libc::getpwuid(libc::getuid()) };
         if ent.is_null() {
             Ok("/bin/sh".into())
         } else {
             use std::ffi::CStr;
             use std::str;
+            // SAFETY:
+            // Operations: the `(*ent)` raw-pointer field projection and `CStr::from_ptr`.
+            // Contract of `CStr::from_ptr(ptr)` (std): `ptr` must be non-null and point to a
+            // NUL-terminated C string whose whole extent is a live allocation that is not
+            // mutated for the chosen (unbounded) lifetime.
+            // Evidence:
+            // - `ent` is non-null: LOCAL FACT from the `if ent.is_null()` branch above; nothing between the
+            //   check and here calls any `getpw*` function or otherwise writes to `ent`.
+            // - The projection reads a `*mut c_char` field out of the `passwd` struct in the static area, which
+            //   is initialized because `getpwuid` returned non-NULL.
+            // - POSIX requires `pw_shell`/`pw_dir` to be NUL-terminated strings for a valid entry. TCB premise:
+            //   they are non-NULL — POSIX does not state this in so many words, and a NULL here would be a null
+            //   deref. Darwin's `getpwuid` always populates both.
+            // - Temporal scope: `CStr::from_ptr` yields an unbounded lifetime, but it is consumed by
+            //   `to_str().map(str::to_owned)` in the same expression, which copies the bytes before any later
+            //   `getpw*` call could overwrite the static area.
             let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
             shell.to_str().map(str::to_owned).context("failed to resolve shell")
         }
@@ -317,12 +352,47 @@ impl CommandBuilder {
             return Ok(home_dir.into());
         }
 
+        // SAFETY:
+        // Operation: the `libc::getpwuid(libc::getuid())` FFI calls.
+        // Contract (POSIX): `getuid(2)` cannot fail and has no preconditions. `getpwuid(3)`
+        // takes a `uid_t` and returns a pointer into a *static* area that "may be overwritten
+        // by a subsequent call to getpwent(), getpwnam(), or getpwuid()", or NULL if no entry
+        // matches. It is explicitly **not thread-safe**.
+        // Evidence:
+        // - No preconditions to discharge: both calls take integers by value.
+        // - Non-nullness of the result is *checked*, not assumed, by the `ent.is_null()` branch immediately
+        //   below, which falls back to a literal default.
+        // Missing premise (UNPROVEN): nothing serialises this against another thread calling
+        // `getpwuid`/`getpwnam`. `CommandBuilder::get_shell`/`get_home_dir` are reached from
+        // `build_shell_command`, which figterm calls once before spawning threads and again on
+        // the `launch_shell` fallback path, where a detached `child.wait()` thread may still be
+        // alive. No other workspace code calls the `getpw*` family, so the risk is bounded by
+        // the C library's own internals. `getpwuid_r` would discharge this.
+        // See docs/13-unsafe-review.md #23.
+        // Postcondition: `ent` borrows the static area; it must not be used after any further
+        // `getpw*` call. It is not — the only use is the `CStr` read below.
         let ent = unsafe { libc::getpwuid(libc::getuid()) };
         if ent.is_null() {
             Ok("/".into())
         } else {
             use std::ffi::CStr;
             use std::str;
+            // SAFETY:
+            // Operations: the `(*ent)` raw-pointer field projection and `CStr::from_ptr`.
+            // Contract of `CStr::from_ptr(ptr)` (std): `ptr` must be non-null and point to a
+            // NUL-terminated C string whose whole extent is a live allocation that is not
+            // mutated for the chosen (unbounded) lifetime.
+            // Evidence:
+            // - `ent` is non-null: LOCAL FACT from the `if ent.is_null()` branch above; nothing between the
+            //   check and here calls any `getpw*` function or otherwise writes to `ent`.
+            // - The projection reads a `*mut c_char` field out of the `passwd` struct in the static area, which
+            //   is initialized because `getpwuid` returned non-NULL.
+            // - POSIX requires `pw_shell`/`pw_dir` to be NUL-terminated strings for a valid entry. TCB premise:
+            //   they are non-NULL — POSIX does not state this in so many words, and a NULL here would be a null
+            //   deref. Darwin's `getpwuid` always populates both.
+            // - Temporal scope: `CStr::from_ptr` yields an unbounded lifetime, but it is consumed by
+            //   `to_str().map(str::to_owned)` in the same expression, which copies the bytes before any later
+            //   `getpw*` call could overwrite the static area.
             let home = unsafe { CStr::from_ptr((*ent).pw_dir) };
             home.to_str().map(str::to_owned).context("failed to resolve home dir")
         }

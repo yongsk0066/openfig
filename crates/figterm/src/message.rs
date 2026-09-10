@@ -106,8 +106,21 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
             Ok(())
         };
 
-        // SAFETY: this closure is run after forking the process and only affects the
-        // child. setsid is async-signal-safe.
+        // SAFETY:
+        // Operation: `std::os::unix::process::CommandExt::pre_exec`, an unsafe fn.
+        // Contract (std): the closure runs in the child between `fork` and `exec`, so it may
+        // only call async-signal-safe functions — the parent may be multi-threaded and hold
+        // locks (notably the allocator's) that were taken by threads which do not exist in the
+        // child.
+        // Evidence, operation by operation inside `pre_exec_fn`:
+        // - `nix::unistd::setsid()` is `setsid(2)`, which POSIX lists as async-signal-safe.
+        // - The `?` on its `Result` converts `nix::Errno` into `io::Error` via
+        //   `io::Error::from_raw_os_error`, which stores an integer and does not allocate.
+        // - The closure captures nothing (`||`), so no destructor and no heap access is reachable through
+        //   captures, and it cannot panic.
+        // Postcondition: the child leaves its parent's session, i.e. it loses the controlling
+        // terminal — which is the point of the call. On `Err`, `Command` reports the error to
+        // the parent and `_exit`s the child.
         unsafe { cmd.pre_exec(pre_exec_fn) };
     }
 

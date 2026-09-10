@@ -138,6 +138,18 @@ impl ContextBuilder {
     pub fn with_env_var(mut self, key: &str, value: &str) -> Self {
         self.env = match self.env {
             Some(env) if !env.is_real() => {
+                // SAFETY:
+                // Operation: `Env::set_var`, an unsafe fn.
+                // Contract (see its `# Safety`): no concurrent environment access — but only
+                // for a *real* environment; the fake branch mutates a `Mutex<HashMap>` and has
+                // no precondition.
+                // Evidence: the `if !env.is_real()` guard on this match arm is a LOCAL FACT
+                // establishing that `env`'s `Inner` is `Fake`. `Env` is not `Clone`-into-real
+                // and has no interior mutability that could flip the variant, so the fact still
+                // holds at the call. `std::env::set_var` is therefore not reached at all and
+                // the process environment is untouched.
+                // This is the case the `# Safety` section of `Env::set_var` calls out as
+                // provable by the caller.
                 unsafe { env.set_var(key, value) };
                 Some(env)
             },

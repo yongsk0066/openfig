@@ -350,6 +350,25 @@ fn launch_shell(command: Option<&[String]>) -> Result<()> {
         .map(|arg| CString::new(arg.to_string_lossy().as_ref()).expect("Failed to convert arg to CString"))
         .collect();
     for (key, val) in cmd.get_envs() {
+        // SAFETY: UNPROVEN — see docs/13-unsafe-review.md #24.
+        // Operations: `std::env::set_var` / `std::env::remove_var`, unsafe since edition 2024.
+        // Contract (std): "this function is safe to call in single-threaded programs... in
+        // multi-threaded programs, the caller must ensure that no other thread reads or writes
+        // the environment concurrently", because the implementation mutates the global
+        // `environ` array without synchronisation and POSIX `getenv` may return a pointer into
+        // it.
+        // Evidence available: `launch_shell` runs on the main thread on the `figterm_main`
+        // failure path, after `runtime.block_on` returned and the `Runtime` was dropped
+        // (tokio's `Drop` shuts down and joins its worker threads).
+        // Missing premise: `figterm_main` also does a bare `std::thread::spawn(move ||
+        // child_tx.send(child.wait()))`. That thread is detached and is *not* joined before
+        // `figterm_main` returns, so it can still be alive here. It does not itself touch the
+        // environment, but "no other thread reads or writes the environment" quantifies over
+        // everything that thread transitively calls, including libc paths that read `environ`.
+        // Nothing in this frame establishes that.
+        // Postcondition (intended): the child inherits the modified environment through the
+        // `execvp` on the next lines, which is why this cannot simply be replaced by
+        // `Command::envs`.
         unsafe {
             match val {
                 Some(value) => env::set_var(key, value),
@@ -372,6 +391,17 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         Err(_) => uuid::Uuid::new_v4().simple().to_string(),
     };
 
+    // SAFETY:
+    // Operation: `std::env::set_var`, unsafe since edition 2024.
+    // Contract (std): safe in a single-threaded program; otherwise the caller must ensure no
+    // other thread reads or writes the environment concurrently.
+    // Evidence: the process is still single-threaded at this point. Everything executed before
+    // this line is `Cli::parse`, `fig_settings::state`/`settings` accessors (plain file reads,
+    // no thread spawns), `logger::stdio_debug_log`, and `uuid::Uuid::new_v4`. The first
+    // `std::thread::spawn` and the tokio `runtime::Builder::new_multi_thread()` both appear
+    // later in this same function, after `open_pty` and `spawn_command`.
+    // Postcondition: `QTERM_SESSION_ID` is visible to every thread spawned afterwards and to
+    // the shell spawned into the pty.
     unsafe {
         std::env::set_var(QTERM_SESSION_ID, &session_id);
     }

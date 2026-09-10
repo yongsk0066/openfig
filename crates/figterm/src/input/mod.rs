@@ -1315,6 +1315,23 @@ impl InputParser {
             Err(err) => {
                 let (valid, _after_valid) = bytes.split_at(err.valid_up_to());
                 if !valid.is_empty() {
+                    // SAFETY:
+                    // Operation: `std::str::from_utf8_unchecked(valid)`.
+                    // Contract (std): "the bytes passed in must be valid UTF-8".
+                    // Evidence:
+                    // - `valid` is `bytes[..err.valid_up_to()]`, produced by `split_at` on the line above. std
+                    //   documents `Utf8Error::valid_up_to` as "the index in the given string up to which valid UTF-8
+                    //   was verified... `from_utf8(&input [..index])` would return `Ok(_)`". That is exactly this
+                    //   slice.
+                    // - `bytes` is an immutable `&[u8]` borrowed for this function; nothing between the `from_utf8`
+                    //   call that produced `err` and this line can mutate it or change its length, so
+                    //   `err.valid_up_to()` is still a valid split point.
+                    // - The `!valid.is_empty()` guard is a logic guard, not a safety one: the empty slice is also valid
+                    //   UTF-8.
+                    // Postcondition: `s` is a well-formed `&str` borrowing the same bytes; no
+                    // ownership or initialization state changes.
+                    // (`from_utf8(valid).unwrap()` would be equivalent and checked; the
+                    // unchecked form is kept because this runs on every keystroke byte.)
                     let s = unsafe { std::str::from_utf8_unchecked(valid) };
                     let (c, len) = Self::first_char_and_len(s);
                     Some((c, len))

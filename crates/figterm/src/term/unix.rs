@@ -136,15 +136,56 @@ impl Write for TtyWriteHandle {
     }
 }
 
-/// SAFETY: the [FileDescriptor] is already guaranteed to have an owned file descriptor by
-/// its contract, so we just borrow it with a lifetime which make the borrow safe.
+/// Borrow a `filedescriptor::FileDescriptor` as a `std::os::fd::BorrowedFd`.
+///
+/// # Safety-usable invariant
+///
+/// The returned `BorrowedFd<'_>` borrows `fd`, so it cannot outlive the owner. This function is
+/// safe and places no obligation on its callers.
+///
+/// (The previous `/// SAFETY:` doc comment was in the wrong place: on a safe `fn`, a `SAFETY`
+/// heading reads as a caller obligation. The proof belongs inside, next to the unsafe
+/// operation, and the caller-facing statement is the invariant above.)
 fn borrow_fd(fd: &FileDescriptor) -> BorrowedFd<'_> {
+    // SAFETY:
+    // Operation: `BorrowedFd::borrow_raw(fd.as_raw_fd())`.
+    // Contract (std): the resource must remain open for the lifetime of the returned
+    // `BorrowedFd`, and the value must not be `-1`.
+    // Evidence:
+    // - `FileDescriptor` is an RAII owner (filedescriptor 0.8): it holds an open descriptor from
+    //   construction until `Drop`, so `as_raw_fd()` is open and non-negative here. TYPE FACT, not an
+    //   assumption about callers.
+    // - Temporal scope: the elided output lifetime is tied to `&FileDescriptor`, so the borrow checker
+    //   forbids the returned `BorrowedFd` from outliving the owner. This is what turns the std
+    //   contract's temporal clause into a compiler-enforced fact.
     unsafe { BorrowedFd::borrow_raw(fd.as_raw_fd()) }
 }
 
 impl UnixTty for TtyWriteHandle {
     fn get_size(&mut self) -> Result<winsize> {
+        // SAFETY:
+        // Operation: `mem::zeroed::<winsize>()`.
+        // Contract (std `mem::zeroed`): "it is undefined behavior if this is used to create an
+        // invalid value" — the all-zero bit pattern must be a valid value of `T`.
+        // Evidence: `libc::winsize` is `#[repr(C)]` with four `c_ushort` fields
+        // (`ws_row`, `ws_col`, `ws_xpixel`, `ws_ypixel`). Every bit pattern is a valid `u16`
+        // (Rust Reference, integer validity), and a `repr(C)` struct of valid fields with
+        // zeroed padding is valid, so zero is a valid `winsize`.
+        // Postcondition: `size` is fully initialized before the `&mut size` below, so the
+        // `ioctl` never sees uninitialized storage even if it writes nothing.
         let mut size: winsize = unsafe { mem::zeroed() };
+        // SAFETY:
+        // Operation: the `libc::ioctl` variadic FFI call.
+        // Contract (POSIX/Darwin): `fd` open; the variadic argument must match `request`.
+        // `TIOCGWINSZ` expects `struct winsize *` and writes through it.
+        // Evidence:
+        // - `self.fd: FileDescriptor` is an RAII owner borrowed for `&mut self`, so the descriptor is open
+        //   for this call.
+        // - `&mut size` is a unique reference to a live, initialized `winsize` local; it is non-null,
+        //   aligned and valid for writes of `size_of::<winsize>()` bytes, and no other reference to `size`
+        //   is live across the call.
+        // Postcondition: on a `0` return the kernel has overwritten `size`; on a non-zero
+        // return `size` keeps its zeroed value, which the `bail!` discards.
         if unsafe { libc::ioctl(self.fd.as_raw_fd(), libc::TIOCGWINSZ as _, &mut size) } != 0 {
             bail!("failed to ioctl(TIOCGWINSZ): {}", IoError::last_os_error());
         }
@@ -152,6 +193,15 @@ impl UnixTty for TtyWriteHandle {
     }
 
     fn set_size(&mut self, size: winsize) -> Result<()> {
+        // SAFETY:
+        // Operation: the `libc::ioctl` variadic FFI call.
+        // Contract (POSIX/Darwin): `fd` open; `TIOCSWINSZ` expects a readable
+        // `const struct winsize *`.
+        // Evidence:
+        // - `self.fd` is an open RAII-owned descriptor borrowed for `&mut self`.
+        // - `&size as *const _` points at the by-value `winsize` parameter, a live and fully initialized
+        //   local, non-null and aligned, readable for the whole call.
+        // Postcondition: the kernel copies the struct; `size` may be dropped afterwards.
         if unsafe { libc::ioctl(self.fd.as_raw_fd(), libc::TIOCSWINSZ as _, &size as *const _) } != 0 {
             bail!("failed to ioctl(TIOCSWINSZ): {:?}", IoError::last_os_error());
         }

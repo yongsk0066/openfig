@@ -1,14 +1,11 @@
 pub mod directories;
-pub mod manifest;
 mod open;
-pub mod process_info;
 mod shell;
 pub mod terminal;
 
 pub mod consts;
 pub mod launchd_plist;
 
-use std::cmp::Ordering;
 use std::path::{
     Path,
     PathBuf,
@@ -19,7 +16,15 @@ pub use open::{
     open_url,
     open_url_async,
 };
-pub use process_info::get_parent_process_exe;
+
+/// The executable of this process's parent, skipping `toolbox-exec`.
+///
+/// A thin wrapper over [`fig_os_shim::process_info::get_parent_process_exe`], which is now the
+/// only implementation: `fig_util` used to carry a near-duplicate `process_info` module (178
+/// lines, its own `Pid`/`PidExt`) that could not be faked in tests.
+pub fn get_parent_process_exe() -> Option<PathBuf> {
+    fig_os_shim::process_info::get_parent_process_exe(&fig_os_shim::Context::new())
+}
 use rand::RngExt;
 pub use shell::Shell;
 pub use terminal::Terminal;
@@ -93,43 +98,9 @@ pub fn app_bundle_path() -> PathBuf {
     app_bundle_path_opt().unwrap_or_else(|| Path::new(consts::system_paths::APPLICATIONS_DIR).join(APP_BUNDLE_NAME))
 }
 
-pub fn partitioned_compare(lhs: &str, rhs: &str, by: char) -> Ordering {
-    let sides = lhs
-        .split(by)
-        .filter(|x| !x.is_empty())
-        .zip(rhs.split(by).filter(|x| !x.is_empty()));
-
-    for (lhs, rhs) in sides {
-        match if lhs.chars().all(|x| x.is_numeric()) && rhs.chars().all(|x| x.is_numeric()) {
-            // perform a numerical comparison
-            let lhs: u64 = lhs.parse().unwrap();
-            let rhs: u64 = rhs.parse().unwrap();
-            lhs.cmp(&rhs)
-        } else {
-            // perform a lexical comparison
-            lhs.cmp(rhs)
-        } {
-            Ordering::Equal => (),
-            s => return s,
-        }
-    }
-
-    lhs.len().cmp(&rhs.len())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
-
     use super::*;
-
-    #[test]
-    fn test_partitioned_compare() {
-        assert_eq!(partitioned_compare("1.2.3", "1.2.3", '.'), Ordering::Equal);
-        assert_eq!(partitioned_compare("1.2.3", "1.2.2", '.'), Ordering::Greater);
-        assert_eq!(partitioned_compare("4-a-b", "4-a-c", '-'), Ordering::Less);
-        assert_eq!(partitioned_compare("0?0?0", "0?0", '?'), Ordering::Greater);
-    }
 
     #[test]
     fn test_gen_hex_string() {

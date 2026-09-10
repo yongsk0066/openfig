@@ -68,10 +68,6 @@ use fig_util::env_var::{
     Q_TERM,
     QTERM_SESSION_ID,
 };
-use fig_util::process_info::{
-    Pid,
-    PidExt,
-};
 use fig_util::{
     PRODUCT_NAME,
     PTY_BINARY_NAME,
@@ -640,7 +636,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     let (child_tx, mut child_rx) = oneshot::channel();
     std::thread::spawn(move || child_tx.send(child.wait()));
 
-    info!("Pid: {}", Pid::current());
+    info!("Pid: {}", std::process::id());
     info!("Pty name: {pty_name}");
 
     // Single-threaded on purpose: figterm is one `select!` loop plus a handful of I/O tasks, and

@@ -21,7 +21,6 @@ fig_os_shim.workspace = true
 hex.workspace = true
 indoc.workspace = true
 libc.workspace = true
-nix.workspace = true
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSWorkspace"] }
 objc2-foundation = { workspace = true, features = ["NSURL"] }

@@ -221,13 +221,6 @@ pub fn resources_path_ctx<Ctx: EnvProvider>(_ctx: &Ctx) -> Result<PathBuf> {
     resources_path()
 }
 
-/// The path to the fig install manifest
-///
-/// - MacOS: "/Applications/{app_name}.app/Contents/Resources/manifest.json"
-fn manifest_path() -> Result<PathBuf> {
-    Ok(resources_path()?.join("manifest.json"))
-}
-
 /// The path to the fig settings file
 ///
 /// - MacOS: `$HOME/Library/Application Support/{data_dir}/settings.json`
@@ -236,14 +229,11 @@ pub fn settings_path() -> Result<PathBuf> {
 }
 
 utf8_dir!(home_dir);
-utf8_dir!(home_local_bin);
 utf8_dir!(fig_data_dir);
 utf8_dir!(sockets_dir);
 utf8_dir!(figterm_socket_path, session_id: impl Display);
-utf8_dir!(manifest_path);
 utf8_dir!(backups_dir);
 utf8_dir!(logs_dir);
-utf8_dir!(settings_path);
 
 #[cfg(test)]
 mod tests {
@@ -261,7 +251,6 @@ mod tests {
         assert!(local_remote_socket_path().is_ok());
         assert!(figterm_socket_path("test").is_ok());
         assert!(resources_path().is_ok());
-        assert!(manifest_path().is_ok());
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());

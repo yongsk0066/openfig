@@ -16,10 +16,10 @@ use serde::{
 use tokio::process::Command;
 
 use crate::env_var::Q_ZDOTDIR;
-use crate::process_info::get_parent_process_exe;
 use crate::{
     Error,
     directories,
+    get_parent_process_exe,
 };
 
 /// All supported shells

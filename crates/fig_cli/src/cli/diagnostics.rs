@@ -131,7 +131,6 @@ use fig_os_shim::{
     PlatformProvider,
 };
 use fig_util::consts::build::HASH;
-use fig_util::manifest::manifest;
 use fig_util::{
     Shell,
     Terminal,
@@ -166,6 +165,11 @@ fn is_false(value: &bool) -> bool {
     !value
 }
 
+/// The only field the deleted `fig_util::manifest` module ever produced for anyone: 231 lines of
+/// `Manifest`/`ManagedBy`/`TargetTriple`/`Channel` deserialisation whose one caller read this
+/// single hard-coded constant (`manifest()` never read a file — it returned a literal).
+const BUILD_VARIANT: &str = "full";
+
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct BuildDetails {
@@ -189,7 +193,7 @@ impl BuildDetails {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             hash: HASH,
             date,
-            variant: manifest().variant.to_string(),
+            variant: BUILD_VARIANT.to_owned(),
         }
     }
 }
@@ -301,17 +305,11 @@ pub struct CurrentEnvironment {
 
 impl CurrentEnvironment {
     async fn new() -> CurrentEnvironment {
-        use fig_util::process_info::{
-            Pid,
-            PidExt,
-        };
         let ctx = Context::new();
 
         let username = format!("/{}", whoami::username().unwrap_or_else(|_| "unknown".into()));
 
-        let shell_path = Pid::current()
-            .parent()
-            .and_then(|pid| pid.exe())
+        let shell_path = fig_os_shim::process_info::get_parent_process_exe(&ctx)
             .map(|p| p.to_string_lossy().replace(&username, "/USER"));
         let shell_version = Shell::current_shell_version().await.map(|(_, v)| v).ok();
 

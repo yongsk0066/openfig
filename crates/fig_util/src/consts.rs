@@ -31,9 +31,6 @@ pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
 
 /// Build time env vars
 pub mod build {
-    /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
-    pub(crate) const TARGET_TRIPLE: Option<&str> = option_env!("FIG_BUILD_TARGET_TRIPLE");
-
     /// A git full sha hash of the current build
     pub const HASH: Option<&str> = option_env!("FIG_BUILD_HASH");
 

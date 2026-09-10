@@ -21,6 +21,7 @@ use sysinfo::{
     CpuRefreshKind,
     MemoryRefreshKind,
     RefreshKind,
+    System,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -90,7 +91,7 @@ pub struct SystemInfo {
 
 impl SystemInfo {
     fn new() -> SystemInfo {
-        let system = sysinfo::System::new_with_specifics(
+        let system = System::new_with_specifics(
             RefreshKind::nothing()
                 .with_cpu(CpuRefreshKind::everything())
                 .with_memory(MemoryRefreshKind::everything()),
@@ -99,7 +100,7 @@ impl SystemInfo {
         let mut hardware_info = SystemInfo {
             os: os_version(),
             chip: None,
-            total_cores: system.physical_core_count(),
+            total_cores: System::physical_core_count(),
             memory: Some(format!("{:0.2} GB", system.total_memory() as f32 / 2.0_f32.powi(30))),
         };
 

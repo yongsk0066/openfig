@@ -577,7 +577,9 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         let mut key_interceptor = KeyInterceptor::new();
         key_interceptor.load_key_intercepts()?;
 
+        // Only armed while an insertion lock is outstanding — see the `select!` arm below.
         let mut edit_buffer_interval = tokio::time::interval(Duration::from_millis(16));
+        edit_buffer_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         let mut first_time = true;
 
@@ -862,10 +864,13 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                     }
                     Ok(())
                 }
-                // Check if to send the edit buffer because of timeout
-                _ = edit_buffer_interval.tick() => {
-                    let send_eb = INSERTION_LOCKED_AT.read_ignore_poison().is_some();
-                    if send_eb && can_send_edit_buffer(&term)
+                // Re-send the edit buffer once an insertion lock expires. The guard is what keeps
+                // this cheap: a disabled `select!` branch is never polled, so no timer is
+                // registered and the task is not woken at all. Unguarded, this interval woke every
+                // figterm on the machine 62.5 times a second forever, and the body then took a
+                // lock and immediately discarded the tick.
+                _ = edit_buffer_interval.tick(), if INSERTION_LOCKED_AT.read_ignore_poison().is_some() => {
+                    if can_send_edit_buffer(&term)
                         && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                             warn!(%err, "Failed to send edit buffer");
                         }

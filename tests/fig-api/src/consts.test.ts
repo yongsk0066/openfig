@@ -32,7 +32,8 @@ describe("constants", () => {
 
   it("version", () => {
     const workspaceToml = fs.readFileSync(__dirname + "/../../../Cargo.toml", "utf8");
-    const version = workspaceToml.match(/version = "([^"]+)"/)?.[1];
+    // Anchored: an unanchored `version = "..."` matches the `rust-version` line above it.
+    const version = workspaceToml.match(/^version = "([^"]+)"/m)?.[1];
     expect(version).toBeTruthy();
     expect(window.fig.constants?.version).toBe(version);
   });

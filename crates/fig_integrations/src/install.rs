@@ -18,6 +18,7 @@ use fig_util::{
     directories,
 };
 
+use crate::backup::backup_file;
 use crate::error::{
     Error,
     Result,
@@ -37,15 +38,30 @@ bitflags::bitflags! {
     }
 }
 
-pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Result<()> {
-    let shell_integration_result = {
-        for shell in [Shell::Bash, Shell::Zsh] {
-            for integration in shell.get_shell_integrations(ctx.env())? {
-                integration.uninstall().await?;
-            }
+/// Removes the integration blocks from the user's rc files.
+///
+/// Each rc file is copied into the timestamped backup directory first: `uninstall` rewrites the
+/// file whether or not anything was found to remove (it also trims trailing whitespace and
+/// normalises the final newline), so it is destructive even in the no-op case.
+async fn uninstall_shell_integrations(env: &Env) -> Result<()> {
+    let backup_dir = directories::utc_backup_dir()?;
+    for shell in [Shell::Bash, Shell::Zsh] {
+        for integration in shell.get_shell_integrations(env)? {
+            let path = integration.path();
+            backup_file(&path, Some(&backup_dir))?;
+            integration.uninstall().await?;
         }
-        Ok(())
-    };
+    }
+    Ok(())
+}
+
+pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Result<()> {
+    // This used to run unconditionally, so `q _ uninstall --binary` stripped the shell
+    // integrations out of the user's rc files as a side effect — and `internal/mod.rs` calls
+    // `uninstall` twice (once for BINARY, once for the rest), so it happened twice per run.
+    if components.contains(InstallComponents::SHELL_INTEGRATIONS) {
+        uninstall_shell_integrations(ctx.env()).await?;
+    }
 
     if components.contains(InstallComponents::BINARY) {
         let remove_binary = |path: PathBuf| async move {
@@ -86,7 +102,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
         }
     }
 
-    shell_integration_result
+    Ok(())
 }
 
 pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
@@ -183,6 +199,45 @@ async fn remove_in_dir_with_prefix_unless(dir: &std::path::Path, prefix: &str, u
                 fs::remove_file(entry.path()).await.ok();
                 fs::remove_dir_all(entry.path()).await.ok();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fig_os_shim::ContextBuilder;
+
+    use super::*;
+
+    /// `uninstall` used to strip the integration blocks out of the user's rc files no matter which
+    /// components were asked for, so `q _ uninstall --binary` rewrote `.zshrc`/`.bashrc` as a side
+    /// effect — twice, because `internal/mod.rs` calls `uninstall` once for `BINARY` and once for
+    /// the remaining components.
+    ///
+    /// `InstallComponents::empty()` is used deliberately: it is the only combination that touches
+    /// nothing outside the fake `$HOME`, since `BINARY` removes real files from `~/.local/bin` and
+    /// the shell integrations delete real files from the data directory.
+    #[tokio::test]
+    async fn uninstall_leaves_rc_files_alone_without_the_shell_integrations_flag() {
+        let home = tempfile::tempdir().unwrap();
+        let rc_files = [".zshrc", ".zprofile", ".bashrc", ".bash_profile", ".profile"];
+        let contents = "# my shell config\nexport PATH=\"$HOME/bin:$PATH\"\n\n\n";
+        for name in rc_files {
+            std::fs::write(home.path().join(name), contents).unwrap();
+        }
+
+        let ctx = ContextBuilder::new()
+            .with_env_var("HOME", home.path().to_str().unwrap())
+            .build();
+
+        uninstall(InstallComponents::empty(), ctx).await.unwrap();
+
+        for name in rc_files {
+            assert_eq!(
+                std::fs::read_to_string(home.path().join(name)).unwrap(),
+                contents,
+                "{name} was modified by an uninstall that did not ask for SHELL_INTEGRATIONS"
+            );
         }
     }
 }

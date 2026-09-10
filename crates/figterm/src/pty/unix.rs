@@ -3,6 +3,10 @@ use std::io::{
     Read,
     Write,
 };
+use std::os::fd::{
+    BorrowedFd,
+    IntoRawFd,
+};
 use std::os::unix::io::{
     AsRawFd,
     FromRawFd,
@@ -74,6 +78,9 @@ struct UnixAsyncMasterPty {
 
 /// Helper function to set the close-on-exec flag for a raw descriptor
 fn cloexec(fd: RawFd) -> Result<()> {
+    // SAFETY: the caller owns `fd` and keeps it alive past this call; nix 0.30
+    // takes an `AsFd` here where it used to take a `RawFd`.
+    let fd = unsafe { BorrowedFd::borrow_raw(fd) };
     let flags = fcntl(fd, FcntlArg::F_GETFD)?;
     fcntl(
         fd,
@@ -110,12 +117,12 @@ pub fn open_pty(pty_size: &PtySize) -> Result<PtyPair> {
         ws_xpixel: pty_size.pixel_width,
         ws_ypixel: pty_size.pixel_height,
     };
-    unsafe { ioctl_tiocswinsz(slave_pty, &winsize) }?;
+    unsafe { ioctl_tiocswinsz(slave_pty.as_raw_fd(), &winsize) }?;
 
     let master = UnixMasterPty { fd: master_pty };
     let slave = UnixSlavePty {
         name: pty_name,
-        fd: unsafe { FileDescriptor::from_raw_fd(slave_pty) },
+        fd: unsafe { FileDescriptor::from_raw_fd(slave_pty.into_raw_fd()) },
     };
 
     // Ensure that these descriptors will get closed when we execute

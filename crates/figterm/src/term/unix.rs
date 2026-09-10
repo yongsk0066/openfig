@@ -6,7 +6,10 @@ use std::io::{
     stdout,
 };
 use std::mem;
-use std::os::fd::BorrowedFd;
+use std::os::fd::{
+    AsFd,
+    BorrowedFd,
+};
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{
     AtomicBool,
@@ -199,7 +202,7 @@ impl UnixTerminal {
         Self::new_with(&stdin(), &stdout())
     }
 
-    pub fn new_with<A: AsRawFd, B: AsRawFd>(read: &A, write: &B) -> Result<UnixTerminal> {
+    pub fn new_with<A: AsRawFd + AsFd, B: AsRawFd + AsFd>(read: &A, write: &B) -> Result<UnixTerminal> {
         if !read.is_tty() || !write.is_tty() {
             anyhow::bail!("stdin and stdout must both be tty handles");
         }

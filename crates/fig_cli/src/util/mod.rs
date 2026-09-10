@@ -183,7 +183,7 @@ pub fn match_regex(regex: impl AsRef<str>, input: impl AsRef<str>) -> Option<Str
     )
 }
 
-pub fn choose(prompt: impl Display, options: &[impl ToString]) -> Result<Option<usize>> {
+pub fn choose(prompt: impl Display, options: &[impl Display]) -> Result<Option<usize>> {
     if options.is_empty() {
         bail!("no options passed to choose")
     }

@@ -2,7 +2,7 @@
 //! something is a terminal teletype or not.
 //! This module defines the IsTty trait and the is_tty method to
 //! return true if the item represents a terminal.
-use std::os::unix::io::AsRawFd;
+use std::os::fd::AsFd;
 
 /// Adds the is_tty method to types that might represent a terminal
 pub trait IsTty {
@@ -13,11 +13,10 @@ pub trait IsTty {
 
 /// On unix, the `isatty()` library function returns true if a file
 /// descriptor is a terminal.  Let's implement `IsTty` for anything
-/// that has an associated raw file descriptor.
-impl<S: AsRawFd> IsTty for S {
+/// that has an associated file descriptor.
+impl<S: AsFd> IsTty for S {
     fn is_tty(&self) -> bool {
-        let fd = self.as_raw_fd();
-        nix::unistd::isatty(fd).unwrap_or_default()
+        nix::unistd::isatty(self.as_fd()).unwrap_or_default()
     }
 }
 

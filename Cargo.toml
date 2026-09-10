@@ -21,12 +21,12 @@ version = "1.19.7"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-anstream = "0.6.13"
+anstream = "1.0.0"
 anyhow = "1.0.98"
 appkit-nsworkspace-bindings = { path = "crates/macos-utils/appkit-nsworkspace-bindings" }
 assert_cmd = "2.0.17" # This version is required for musl builds to succeed
 async-trait = "0.1.87"
-base64 = "0.22.1"
+base64 = "0.23.1"
 block2 = "0.5.1"
 bytes = "1.10.1"
 bitflags = { version = "2.9.0", features = ["serde"] }
@@ -39,9 +39,9 @@ color-print = "0.3.5"
 core-foundation = "0.10.0"
 core-foundation-sys = "0.8.7"
 core-graphics = "0.24.0"
-crossterm = { version = "0.28.1", features = ["event-stream", "events"] }
+crossterm = { version = "0.29.0", features = ["event-stream", "events"] }
 dashmap = "6.0.1"
-dirs = "5.0.0"
+dirs = "7.0.0"
 eyre = "0.6.8"
 fig_desktop_api = { path = "crates/fig_desktop_api" }
 fig_diagnostic = { path = "crates/fig_diagnostic" }
@@ -54,7 +54,7 @@ fig_remote_ipc = { path = "crates/fig_remote_ipc" }
 fig_settings = { path = "crates/fig_settings" }
 fig_util = { path = "crates/fig_util" }
 flate2 = "1.1.1"
-flume = "0.11.0"
+flume = "0.12.0"
 futures = "0.3.26"
 glob = "0.3.2"
 globset = "0.4.16"
@@ -64,7 +64,7 @@ indoc = "2.0.6"
 insta = "1.43.1"
 libc = "0.2.172"
 mimalloc = "0.1.46"
-nix = { version = "0.29.0", features = [
+nix = { version = "0.31.3", features = [
   "feature",
   "fs",
   "ioctl",
@@ -92,10 +92,10 @@ shell-color = "1.0.0"
 semver = { version = "1.0.26", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.140"
-shlex = "1.3.0"
+shlex = "2.0.1"
 similar = "2.7.0"
 spinners = "4.1.0"
-strum = { version = "0.27.1", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = "0.33.1"
 thiserror = "2.0.12"
 tempfile = "3.18.0"
@@ -107,15 +107,15 @@ time = { version = "0.3.39", features = [
   "serde",
 ] }
 tokio = { version = "1.47.1", features = ["full"] }
-toml = "0.8.12"
+toml = "1.1.5"
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "parking_lot", "time"] }
 unicode-width = "0.2.0"
 url = "2.5.4"
 uuid = { version = "1.15.1", features = ["v4", "serde"] }
 walkdir = "2.5.0"
-which = "6.0.3"
-whoami = "1.6.0"
+which = "8.0.6"
+whoami = "2.1.3"
 
 [workspace.lints.rust]
 future_incompatible = "warn"

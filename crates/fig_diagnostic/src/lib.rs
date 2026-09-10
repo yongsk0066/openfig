@@ -146,7 +146,7 @@ impl EnvVarDiagnostic {
             })
             .map(|(key, value)| {
                 // sanitize username from values
-                let username = format!("/{}", whoami::username());
+                let username = format!("/{}", whoami::username().unwrap_or_else(|_| "unknown".into()));
                 (key, value.replace(&username, "/USER"))
             })
             .collect();
@@ -181,7 +181,7 @@ impl CurrentEnvironment {
         };
         let ctx = Context::new();
 
-        let username = format!("/{}", whoami::username());
+        let username = format!("/{}", whoami::username().unwrap_or_else(|_| "unknown".into()));
 
         let shell_path = Pid::current()
             .parent()

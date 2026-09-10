@@ -16,7 +16,7 @@ async-trait.workspace = true
 fig_ipc.workspace = true
 fig_proto.workspace = true
 fig_util.workspace = true
-flume = "0.11.0"
+flume.workspace = true
 parking_lot = { workspace = true, features = ["serde"] }
 serde.workspace = true
 tokio.workspace = true

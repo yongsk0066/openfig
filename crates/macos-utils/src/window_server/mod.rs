@@ -173,6 +173,9 @@ impl std::fmt::Debug for WindowServer {
 pub struct WindowServerInner {
     observers: DashMap<ApplicationSpecifier, AXObserver<AccessibilityCallbackData>, fnv::FnvBuildHasher>,
     sender: Sender<WindowServerEvent>,
+    /// Captured once at construction so the ObjC selectors never depend on a runtime
+    /// thread-local; see the note in `register`.
+    handle: tokio::runtime::Handle,
     /// The bundle id of the process we are running in, so the app never observes its own
     /// autocomplete window.
     own_bundle_id: &'static str,
@@ -505,6 +508,21 @@ impl ObserverClass {
     }
 }
 
+/// The observer keys to drop when `bundle_id` reports a termination: every tracked instance of
+/// that bundle id whose pid no longer resolves to a running application.
+///
+/// Split out of `did_terminate_application` so it can be tested — `observers` holds live
+/// `AXObserver`s, which cannot be fabricated without a real accessibility session.
+fn keys_to_deregister(
+    keys: impl IntoIterator<Item = ApplicationSpecifier>,
+    bundle_id: &str,
+    is_running: impl Fn(pid_t) -> bool,
+) -> Vec<ApplicationSpecifier> {
+    keys.into_iter()
+        .filter(|key| key.bundle_id == bundle_id && !is_running(key.pid))
+        .collect()
+}
+
 impl WindowServerInner {
     /// Allocate the pinned inner state and the Objective-C observer that points at it.
     ///
@@ -514,12 +532,13 @@ impl WindowServerInner {
     /// `WindowServerInner`. The alias is only sound because callers keep to this rule:
     ///
     /// - `WindowServer::new` is the only caller. It calls `inner.init()` once, *before* storing the
-    ///   box in the private `WindowServer::_inner` field, and after that nothing ever borrows
-    ///   `_inner` again (the field name is `_inner` for exactly that reason).
-    /// - Every later `&mut WindowServerInner` is created inside an `ObserverClass` selector from
+    ///   box in the private `WindowServer::_inner` field.
+    /// - The one other borrow of `_inner` is `WindowServer::reregister_all`, which runs on the
+    ///   same (main) thread, from inside the tao event loop's `PlatformBoundEvent` dispatch.
+    /// - Every other `&mut WindowServerInner` is created inside an `ObserverClass` selector from
     ///   the raw ivar, and those selectors are delivered serially by the main run loop.
-    /// - `init()` performs no run-loop turn (`register_all` only calls AppKit accessors and
-    ///   `tokio::spawn`), so no selector can fire while that first `&mut` is live.
+    /// - `register_all` performs no run-loop turn (it only calls AppKit accessors and
+    ///   `Handle::spawn`), so no selector can fire while either of those `&mut`s is live.
     ///
     /// Consequently at most one `&mut WindowServerInner` exists at any program point.
     fn new_with_observer(
@@ -530,6 +549,9 @@ impl WindowServerInner {
         let mut pin = Box::pin(Self {
             observers: Default::default(),
             sender,
+            // Panics outside a runtime — loudly, at construction, instead of aborting later
+            // inside an Objective-C callback.
+            handle: tokio::runtime::Handle::current(),
             own_bundle_id,
             xterm_bundle_ids,
         });
@@ -596,6 +618,27 @@ impl WindowServerInner {
             bundle_id: bundle_id.clone(),
         };
 
+        if bundle_id == self.own_bundle_id || BLOCKED_BUNDLE_IDS.contains(&bundle_id.as_str()) {
+            debug!("Ignoring bundle id {:?}", bundle_id);
+            return;
+        }
+
+        if ns_app.activationPolicy() == NSApplicationActivationPolicy::Prohibited {
+            debug!("Ignoring application by activation policy");
+            return;
+        }
+
+        // Re-registering an already-tracked app is pure waste: an `AXObserverCreate`, eight
+        // `AXObserverAddNotification`s and two run-loop source swaps per app activation, and
+        // since `AXObserver::drop` releases neither the observer nor its subscriptions
+        // (docs/13-unsafe-review.md #2) every one of those leaked. The activation branch below
+        // still runs, because that is what the notification is actually for.
+        let already_registered = self.observers.contains_key(&key);
+        if already_registered && !from_activation {
+            debug!("app {} is already registered", key.bundle_id);
+            return;
+        }
+
         // SAFETY:
         // Operation: the `AXUIElementCreateApplication` FFI call.
         // Contract (HIServices): takes a `pid_t` and returns a `+1` `AXUIElementRef` (Create
@@ -610,27 +653,16 @@ impl WindowServerInner {
         // leak. See docs/13-unsafe-review.md #6.
         let ax_ref = AXUIElementCreateApplication(pid);
 
-        if bundle_id == self.own_bundle_id || BLOCKED_BUNDLE_IDS.contains(&bundle_id.as_str()) {
-            debug!("Ignoring bundle id {:?}", bundle_id);
-            return;
-        }
-
-        if ns_app.activationPolicy() == NSApplicationActivationPolicy::Prohibited {
-            debug!("Ignoring application by activation policy");
-            return;
-        }
-
-        if self.observers.contains_key(&key) {
-            debug!("app {} is already registered", key.bundle_id);
-            self.deregister(&key.bundle_id)
-        }
-
         if from_activation {
             // In Swift had 0.25s delay before this...?
             let elem = UIElement::from(ax_ref);
             let sender = self.sender.clone();
             let app = key.clone();
-            tokio::spawn(async move {
+            // A stored `Handle`, not `tokio::spawn`: this runs inside an `objc2 define_class!`
+            // selector, where a panic is an `abort`. `tokio::spawn` relies on a runtime
+            // thread-local that happens to be set today only because `event_loop.run()` is
+            // called from inside `#[tokio::main]`'s future.
+            self.handle.spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
                 if let Ok(window) = elem.focused_window()
                     && let Err(e) = sender.send(WindowServerEvent::FocusChanged { window, app })
@@ -638,6 +670,11 @@ impl WindowServerInner {
                     warn!("Error sending focus changed event: {e:?}");
                 };
             });
+        }
+
+        if already_registered {
+            debug!("app {} is already registered", key.bundle_id);
+            return;
         }
 
         if self.xterm_bundle_ids.contains(&key.bundle_id.as_str()) {
@@ -688,8 +725,13 @@ impl WindowServerInner {
         warn!("Error setting up tracking for '{bundle_id:?}'");
     }
 
-    fn deregister(&mut self, bundle_id: &str) {
-        self.observers.retain(|key, _| bundle_id != key.bundle_id);
+    /// Drop the observer for exactly one `(pid, bundle_id)`.
+    ///
+    /// The old `deregister(bundle_id)` matched on the bundle id alone even though the map is
+    /// keyed by `(pid, bundle_id)`, so terminating one of two instances of the same app — two
+    /// VS Code profiles, say — silently took the other one's observer with it.
+    fn deregister_one(&mut self, key: &ApplicationSpecifier) {
+        self.observers.remove(key);
     }
 
     fn register_all(&mut self) {
@@ -811,15 +853,21 @@ impl WindowServerHandler for WindowServerInner {
             {
                 trace!("Terminated application - {bundle_id:?}");
 
-                let apps = NSWorkspace::sharedWorkspace().runningApplications();
+                // The notification's `NSRunningApplication` is already dead, and Apple
+                // documents `processIdentifier` as -1 once that is the case, so the terminated
+                // instance cannot be identified by pid. Ask instead which of the pids we track
+                // for that bundle id are still alive — one lookup per tracked instance, rather
+                // than re-enumerating all ~143 running applications and allocating a `String`
+                // per app, which is what this used to do on every quit.
+                let stale = keys_to_deregister(
+                    self.observers.iter().map(|entry| entry.key().clone()),
+                    &bundle_id,
+                    |pid| NSRunningApplication::runningApplicationWithProcessIdentifier(pid).is_some(),
+                );
 
-                let has_running = apps
-                    .iter()
-                    .any(|running| app_bundle_id(&running).map(|id| id == bundle_id).unwrap_or(false));
-
-                if !has_running {
-                    trace!("Deregistering app {bundle_id:?} since no other instances are running");
-                    self.deregister(bundle_id.as_str());
+                for key in stale {
+                    trace!("Deregistering {:?} (pid {})", key.bundle_id, key.pid);
+                    self.deregister_one(&key);
                 }
             }
         }
@@ -963,5 +1011,52 @@ unsafe extern "C" fn application_ax_callback(
         && let Err(e) = cb_data.sender.send(event)
     {
         warn!("Error sending focus changed event: {e:?}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(pid: pid_t, bundle_id: &str) -> ApplicationSpecifier {
+        ApplicationSpecifier {
+            pid,
+            bundle_id: bundle_id.to_owned(),
+        }
+    }
+
+    /// Two instances of the same app: quitting one must not deregister the other. The old
+    /// `deregister(bundle_id)` matched on the bundle id alone and took both.
+    #[test]
+    fn only_the_terminated_instance_is_deregistered() {
+        let tracked = vec![key(1, "com.microsoft.VSCode"), key(2, "com.microsoft.VSCode")];
+
+        let stale = keys_to_deregister(tracked.clone(), "com.microsoft.VSCode", |pid| pid == 2);
+
+        assert_eq!(stale, vec![key(1, "com.microsoft.VSCode")]);
+
+        let mut remaining = tracked;
+        remaining.retain(|k| !stale.contains(k));
+        assert_eq!(remaining, vec![key(2, "com.microsoft.VSCode")]);
+    }
+
+    /// The last instance going away takes its observer with it.
+    #[test]
+    fn the_last_instance_is_deregistered() {
+        let tracked = vec![key(1, "com.apple.Terminal")];
+        assert_eq!(keys_to_deregister(tracked, "com.apple.Terminal", |_| false), vec![key(
+            1,
+            "com.apple.Terminal"
+        )]);
+    }
+
+    /// Other applications are never touched, however they are keyed.
+    #[test]
+    fn other_bundle_ids_are_untouched() {
+        let tracked = vec![key(1, "com.apple.Terminal"), key(2, "com.googlecode.iterm2")];
+        assert_eq!(keys_to_deregister(tracked, "com.apple.Terminal", |_| false), vec![key(
+            1,
+            "com.apple.Terminal"
+        )]);
     }
 }

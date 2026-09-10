@@ -43,7 +43,7 @@ bitflags.workspace = true
 fig_os_shim.workspace = true
 serde.workspace = true
 serde_yaml = "0.9"
-shell-color.workspace = true
+shell_color.workspace = true
 tracing.workspace = true
 unicode-width.workspace = true
 vte = { version = "0.15.0", default-features = false }

@@ -8,10 +8,9 @@ publish.workspace = true
 version.workspace = true
 license.workspace = true
 
+# Deliberately empty: replacing `shell-color` with this crate is what removes ~30 crates from
+# the graph, so nothing may be added here without a very good reason.
 [dependencies]
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-old_shell_color = { package = "shell-color", version = "1.0.1" }

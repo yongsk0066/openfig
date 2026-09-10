@@ -11,11 +11,6 @@ ignore = [
   # paste 1.0.15 is unmaintained but has no replacement and no known defect;
   # fig_desktop, fig_util and alacritty_terminal all use it directly.
   "RUSTSEC-2024-0436",
-  # proc-macro-error2 is unmaintained. It is transitive only, behind
-  # shell-color -> nu-color-config -> nu-protocol -> nu-derive-value, which
-  # 10-execution-plan.md 7단계 lists as out of scope (replacing shell-color is
-  # its own task).
-  "RUSTSEC-2026-0173",
 ]
 
 [licenses]

@@ -28,11 +28,11 @@ function App() {
   const [listening, setListening] = useState<string | null>(null);
 
   return (
-    <StoreContext.Provider value={store}>
-      <ListenerContext.Provider value={{ listening, setListening }}>
+    <StoreContext value={store}>
+      <ListenerContext value={{ listening, setListening }}>
         <AppLoading />
-      </ListenerContext.Provider>
-    </StoreContext.Provider>
+      </ListenerContext>
+    </StoreContext>
   );
 }
 

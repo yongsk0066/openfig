@@ -1,15 +1,15 @@
 import { cn } from "@/lib/utils";
-import React, { forwardRef, useState } from "react";
+import React, { useState } from "react";
 
-type TerminalTabProps = React.HTMLAttributes<HTMLDivElement>;
+type TerminalTabProps = React.ComponentProps<"div">;
 
-const TerminalTab = forwardRef<HTMLDivElement, TerminalTabProps>(({ children, ...props }, ref) => {
+function TerminalTab({ children, ref, ...props }: TerminalTabProps) {
   return (
     <div ref={ref} {...props}>
       {children}
     </div>
   );
-});
+}
 
 interface TerminalProps {
   title?: string;

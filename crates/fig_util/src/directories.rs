@@ -347,42 +347,42 @@ mod tests {
 
     #[test]
     fn snapshot_fig_data_dir() {
-        assert_directory!(fig_data_dir(), @"$HOME/Library/Application Support/amazon-q");
+        assert_directory!(fig_data_dir(), @"$HOME/Library/Application Support/fig");
     }
 
     #[test]
     fn snapshot_sockets_dir() {
-        assert_directory!(sockets_dir(), @"$TMPDIR/cwrun");
+        assert_directory!(sockets_dir(), @"$TMPDIR/figrun");
     }
 
     #[test]
     fn snapshot_themes_dir() {
-        assert_directory!(themes_dir(&Context::new()), @"/Applications/Amazon Q.app/Contents/Resources/themes");
+        assert_directory!(themes_dir(&Context::new()), @"/Applications/Fig.app/Contents/Resources/themes");
     }
 
     #[test]
     fn snapshot_backups_dir() {
-        assert_directory!(backups_dir(), @"$HOME/.amazon-q.dotfiles.bak");
+        assert_directory!(backups_dir(), @"$HOME/.fig.dotfiles.bak");
     }
 
     #[test]
     fn snapshot_fig_socket_path() {
-        assert_directory!(desktop_socket_path(), @"$TMPDIR/cwrun/desktop.sock");
+        assert_directory!(desktop_socket_path(), @"$TMPDIR/figrun/desktop.sock");
     }
 
     #[test]
     fn snapshot_local_remote_socket_path() {
-        assert_directory!(local_remote_socket_path(), @"$TMPDIR/cwrun/remote.sock");
+        assert_directory!(local_remote_socket_path(), @"$TMPDIR/figrun/remote.sock");
     }
 
     #[test]
     fn snapshot_figterm_socket_path() {
-        assert_directory!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/cwrun/t/$SESSION_ID.sock");
+        assert_directory!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/figrun/t/$SESSION_ID.sock");
     }
 
     #[test]
     fn snapshot_settings_path() {
-        assert_directory!(settings_path(), @"$HOME/Library/Application Support/amazon-q/settings.json");
+        assert_directory!(settings_path(), @"$HOME/Library/Application Support/fig/settings.json");
     }
 
     #[test]

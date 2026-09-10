@@ -56,7 +56,7 @@ pub fn xterm_bundle_ids() -> &'static [&'static str] {
 /// Checks if the current process is inside of one of the pseudoterminals listed under
 /// [`SPECIAL_TERMINALS`], returning the terminal if true.
 pub fn in_special_terminal(ctx: &Context) -> Option<Terminal> {
-    Terminal::from_process_info(ctx, &SPECIAL_TERMINALS.to_vec())
+    Terminal::from_process_info(ctx, SPECIAL_TERMINALS)
 }
 
 /// All supported terminals
@@ -150,12 +150,12 @@ impl Terminal {
             _ => (),
         };
 
-        Self::from_process_info(ctx, &MACOS_TERMINALS.to_vec())
+        Self::from_process_info(ctx, MACOS_TERMINALS)
     }
 
     /// Attempts to return the suspected terminal emulator for the current process according to the
     /// process hierarchy. Only the list provided in `terminals` will be searched for.
-    fn from_process_info(ctx: &Context, terminals: &Vec<Terminal>) -> Option<Self> {
+    fn from_process_info(ctx: &Context, terminals: &[Terminal]) -> Option<Self> {
         let mut option_pid = Some(Box::new(ctx.process_info().current_pid()));
         let (mut curr_depth, max_depth) = (0, 5);
         while curr_depth < max_depth {
@@ -187,7 +187,7 @@ impl Terminal {
     /// the value from /proc/pid/cmdline except with null bytes replaced with space.
     ///
     /// Only the list provided in `terminals` will be searched for.
-    fn try_from_cmdline(cmdline: &str, terminals: &Vec<Terminal>) -> Option<Self> {
+    fn try_from_cmdline(cmdline: &str, terminals: &[Terminal]) -> Option<Self> {
         // Default logic that checks the final path element of the first argument.
         let first_arg_name = cmdline
             .split(' ')
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_from_process_info() {
-        Terminal::from_process_info(&Context::new(), &MACOS_TERMINALS.to_vec());
+        Terminal::from_process_info(&Context::new(), MACOS_TERMINALS);
     }
 
     #[test]

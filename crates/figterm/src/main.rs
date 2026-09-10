@@ -223,8 +223,17 @@ fn main_loop_channel() -> (flume::Sender<MainLoopEvent>, flume::Receiver<MainLoo
     flume::unbounded()
 }
 
+/// The terminal emulator figterm is running inside.
+///
+/// Resolving this walks five levels of the process tree with a syscall at each step (plus building
+/// a fresh `Env`), and it was being redone for *every* hook — i.e. on every keystroke. The answer
+/// cannot change for the life of the process: figterm is `exec`ed by the shell the emulator
+/// started, and neither `__CFBundleIdentifier`/`TERM_PROGRAM` nor our ancestry moves afterwards.
+static PARENT_TERMINAL: LazyLock<Option<String>> =
+    LazyLock::new(|| FigTerminal::parent_terminal(&Context::new()).map(|s| s.to_string()));
+
 fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
-    let terminal = FigTerminal::parent_terminal(&Context::new()).map(|s| s.to_string());
+    let terminal = PARENT_TERMINAL.clone();
 
     local::ShellContext {
         pid: shell_state.local_context.pid,

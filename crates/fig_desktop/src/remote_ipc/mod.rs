@@ -38,6 +38,7 @@ use crate::event::{
     WindowEvent,
 };
 use crate::platform::PlatformBoundEvent;
+use crate::webview::WindowId;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::{
     AUTOCOMPLETE_ID,
@@ -60,13 +61,19 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         session_id: Uuid,
         figterm_state: &Arc<FigtermState>,
     ) -> Result<Option<clientbound::response::Response>> {
+        // Clone before taking the session lock. `clone_from` inside the closure held the
+        // `FairMutex` for the whole copy (13 KB per keystroke before F-01) while
+        // `request/window.rs`'s `most_recent()` contended for it.
+        let text = hook.text.clone();
+        let cursor = hook.cursor;
+        let terminal_cursor_coordinates = hook.terminal_cursor_coordinates;
+        let context = hook.context.clone();
+
         figterm_state.with_update(session_id, |session| {
-            session.edit_buffer.text.clone_from(&hook.text);
-            session.edit_buffer.cursor.clone_from(&hook.cursor);
-            session
-                .terminal_cursor_coordinates
-                .clone_from(&hook.terminal_cursor_coordinates);
-            session.context.clone_from(&hook.context);
+            session.edit_buffer.text = text;
+            session.edit_buffer.cursor = cursor;
+            session.terminal_cursor_coordinates = terminal_cursor_coordinates;
+            session.context = context;
         });
 
         let utf16_cursor_position = hook
@@ -74,20 +81,37 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             .get(..hook.cursor as usize)
             .map(|s| s.encode_utf16().count() as i32);
 
-        for sub in self.notifications_state.subscriptions.iter() {
-            let message_id = match sub.get(&NotificationType::NotifyOnEditbuffferChange) {
-                Some(id) => *id,
-                None => continue,
+        // Collect the subscribers before emitting: the loop sends events, and holding DashMap
+        // shard guards across that is needless.
+        let subscribers: Vec<(WindowId, i64)> = self
+            .notifications_state
+            .subscriptions
+            .iter()
+            .filter_map(|sub| {
+                sub.get(&NotificationType::NotifyOnEditbuffferChange)
+                    .map(|message_id| (sub.key().clone(), *message_id))
+            })
+            .collect();
+
+        // One payload copy for the whole fan-out instead of a full `hook.clone()` per window;
+        // the last subscriber (in practice the only one) takes it by value.
+        let mut payload = (hook.context.clone(), hook.text.clone());
+        let mut subscribers = subscribers.into_iter().peekable();
+
+        while let Some((window_id, message_id)) = subscribers.next() {
+            let (context, buffer) = if subscribers.peek().is_some() {
+                payload.clone()
+            } else {
+                std::mem::take(&mut payload)
             };
 
-            let hook = hook.clone();
             let message = ServerOriginatedMessage {
                 id: Some(message_id),
                 submessage: Some(ServerOriginatedSubMessage::Notification(Notification {
                     r#type: Some(fig_proto::fig::notification::Type::EditBufferNotification(
                         EditBufferChangedNotification {
-                            context: hook.context,
-                            buffer: Some(hook.text),
+                            context,
+                            buffer: Some(buffer),
                             cursor: utf16_cursor_position,
                             session_id: Some(session_id.into()),
                         },
@@ -101,7 +125,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             debug!(%message_id, "Sending edit buffer change notification to webview");
 
             self.proxy.send_event(Event::WindowEvent {
-                window_id: sub.key().clone(),
+                window_id,
                 window_event: WindowEvent::Emit {
                     event_name: EmitEventName::Notification,
                     payload: BASE64_STANDARD.encode(encoded).into(),

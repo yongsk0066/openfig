@@ -10,6 +10,21 @@ allowBuilds:
   core-js: false
   esbuild: false
 
+# Transitive dev-only advisories (`pnpm audit`): ts-morph's minimatch chain and
+# vite's yaml. Both are same-major patch bumps; minimatch >=10.2.6 also pulls a
+# patched brace-expansion.
+overrides:
+  minimatch: ^10.2.6
+  yaml: ^2.9.0
+
+# Refuse versions published less than a day ago; the window in which a
+# compromised release is usually caught and unpublished.
+minimumReleaseAge: 1440
+
+# `pnpm add` records new versions in the catalog instead of scattering them
+# across package.json files.
+catalogMode: strict
+
 # Single versions for shared tooling; packages reference them as "catalog:".
 catalog:
   "typescript": 7.0.2

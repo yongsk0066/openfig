@@ -689,8 +689,11 @@ impl PlatformStateImpl {
                 Ok(())
             },
             PlatformBoundEvent::EditBufferChanged => {
+                // `debug!`, to match `CaretPositionUpdateRequested` below, which calls the exact
+                // same function. Without accessibility permission this fires once per keystroke,
+                // and at `error!` it drowned out every real error in the log.
                 if let Err(err) = self.refresh_window_position() {
-                    error!(%err, "Failed to refresh window position");
+                    debug!(%err, "Failed to refresh window position");
                 }
                 Ok(())
             },
@@ -698,32 +701,36 @@ impl PlatformStateImpl {
                 let current_terminal = Terminal::from_bundle_id(window.bundle_id.clone());
                 let level = window.get_level();
 
-                if level == Some(0) {
-                    let enabled_proxy = self.proxy.clone();
-                    tokio::spawn(async move {
-                        let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
-                            fig_settings::settings::get_bool_or(
-                                format!("integrations.{}.disabled", terminal.internal_id()),
-                                false,
-                            )
-                        });
-
-                        let terminal_cursor_backing_installed = current_terminal.is_some();
-
-                        let is_enabled = !is_terminal_disabled
-                            && terminal_cursor_backing_installed
-                            && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
-                            && accessibility_is_enabled();
-
-                        enabled_proxy.send_event_or_log(Event::WindowEvent {
-                            window_id: AUTOCOMPLETE_ID,
-                            window_event: WindowEvent::SetEnabled(is_enabled),
-                        });
+                // Neither of these depends on the window level. `get_level()` returns `None`
+                // whenever `CGWindowListCopyWindowInfo` has nothing for the window — an iTerm2
+                // hotkey window (level != 0), a fullscreen transition, a failed
+                // `_AXUIElementGetWindow` — and gating them on `Some(0)` left `focused_window`
+                // permanently `None` there, so the autocomplete window never moved again and
+                // every keystroke failed in `refresh_window_position`. Only the level *sync*
+                // below cares about the level.
+                let enabled_proxy = self.proxy.clone();
+                tokio::spawn(async move {
+                    let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
+                        fig_settings::settings::get_bool_or(
+                            format!("integrations.{}.disabled", terminal.internal_id()),
+                            false,
+                        )
                     });
 
-                    let mut focused = self.focused_window.lock().unwrap();
-                    focused.replace(window);
-                }
+                    let terminal_cursor_backing_installed = current_terminal.is_some();
+
+                    let is_enabled = !is_terminal_disabled
+                        && terminal_cursor_backing_installed
+                        && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
+                        && accessibility_is_enabled();
+
+                    enabled_proxy.send_event_or_log(Event::WindowEvent {
+                        window_id: AUTOCOMPLETE_ID,
+                        window_event: WindowEvent::SetEnabled(is_enabled),
+                    });
+                });
+
+                self.focused_window.lock().unwrap().replace(window);
 
                 if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
                     let ns_window = window.window.ns_window().cast::<Object>();

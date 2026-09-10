@@ -1,25 +1,97 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "envMode": "strict",
+  "globalDependencies": [
+    "pnpm-workspace.yaml",
+    "packages/config/base.json",
+    "packages/config/dom.json"
+  ],
+  "globalEnv": [
+    "NODE_ENV"
+  ],
+  "boundaries": {
+    "tags": {
+      "app": {
+        "dependents": {
+          "deny": [
+            "app",
+            "lib",
+            "proto",
+            "test"
+          ]
+        }
+      },
+      "lib": {
+        "dependencies": {
+          "deny": [
+            "app",
+            "test"
+          ]
+        }
+      },
+      "proto": {
+        "dependencies": {
+          "deny": [
+            "app",
+            "lib",
+            "proto",
+            "test"
+          ]
+        }
+      },
+      "test": {
+        "dependents": {
+          "deny": [
+            "app",
+            "lib",
+            "proto",
+            "test"
+          ]
+        }
+      }
+    }
+  },
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md"
+      ],
+      "env": [
+        "VITE_*",
+        "PORT",
+        "npm_package_version"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md"
+      ]
+    },
+    "codegen": {
+      "dependsOn": [
+        "^codegen"
+      ],
+      "cache": false
     },
     "clean": {
       "cache": false
     },
     "dev": {
       "cache": false,
-      "persistent": true
-    },
-    "typecheck": {
-      "dependsOn": ["^build"]
-    },
-    "codegen": {
-      "dependsOn": ["^codegen"],
-      "outputs": ["src/requests.ts"],
-      "cache": false
+      "persistent": true,
+      "env": [
+        "VITE_*",
+        "PORT"
+      ]
     }
   }
 }

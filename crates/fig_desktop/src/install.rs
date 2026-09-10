@@ -15,6 +15,19 @@ pub async fn run_install() {
     }
 }
 
+/// Run `launchctl` without blocking the caller's thread.
+///
+/// `run_install` is awaited from `main` before the event loop starts, so a synchronous
+/// `Command::status()` here delays window creation by however long launchctl takes.
+/// Failures are expected (`load` on an already-loaded agent errors) and only logged.
+async fn launchctl<'a>(args: impl IntoIterator<Item = &'a str>) {
+    let mut command = tokio::process::Command::new("launchctl");
+    command.args(args);
+    if let Err(err) = command.status().await {
+        tracing::debug!(%err, "launchctl failed");
+    }
+}
+
 /// Symlink, and overwrite if it already exists and is invalid or not a symlink
 async fn symlink(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> Result<(), std::io::Error> {
     use std::io::ErrorKind;
@@ -105,7 +118,11 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
                         }
                     }
 
-                    if let Err(err) = tokio::fs::remove_file(&pty_shell_cpy).await {
+                    // On a first install there is nothing to remove; ENOENT here is the normal
+                    // path, not an error worth two ERROR lines in every fresh log.
+                    if let Err(err) = tokio::fs::remove_file(&pty_shell_cpy).await
+                        && err.kind() != std::io::ErrorKind::NotFound
+                    {
                         error!(%err, "Failed to remove {PTY_BINARY_NAME} shell {shell:?} copy");
                     }
                     if let Err(err) = tokio::fs::copy(&pty_path, &pty_shell_cpy).await {
@@ -134,15 +151,21 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
             .program_arguments([&exe.to_string_lossy(), "--is-startup", "--no-dashboard"])
             .associated_bundle_identifiers([APP_BUNDLE_ID])
             .run_at_load(true);
-
-        create_launch_agent(&startup_launch_agent)?;
-
         let path = startup_launch_agent.get_file_path()?;
-        std::process::Command::new("launchctl")
-            .arg("load")
-            .arg(&path)
-            .status()
-            .ok();
+
+        // The plist used to be written unconditionally, so turning `app.launchOnStartup` off
+        // still spawned the app at login just to have `main.rs:106` exit immediately.
+        if fig_settings::settings::get_bool_or("app.launchOnStartup", true) {
+            create_launch_agent(&startup_launch_agent)?;
+            launchctl(["load", path.as_str()]).await;
+        } else if path.exists() {
+            launchctl(["unload", path.as_str()]).await;
+            if let Err(err) = tokio::fs::remove_file(&path).await
+                && err.kind() != std::io::ErrorKind::NotFound
+            {
+                error!(%err, "Failed to remove the login launch agent");
+            }
+        }
     }
 
     // Init the shell directory

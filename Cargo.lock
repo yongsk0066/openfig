@@ -1565,7 +1565,6 @@ dependencies = [
  "bytes",
  "fig_proto",
  "fig_util",
- "nix 0.31.3",
  "pin-project-lite",
  "tempfile",
  "thiserror 2.0.20",

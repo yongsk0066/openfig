@@ -14,8 +14,6 @@ pub enum Error {
     Dir(#[from] fig_util::directories::DirectoryError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Nix(#[from] nix::Error),
 }
 
 #[derive(Debug, Error)]

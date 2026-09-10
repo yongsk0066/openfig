@@ -15,6 +15,9 @@ use tokio::io::{
 use crate::BufferedReader;
 use crate::error::RecvError;
 
+/// Spare capacity ensured before every `read_buf` call.
+const READ_CHUNK: usize = 8192;
+
 #[async_trait]
 pub trait RecvMessage {
     async fn recv_message<R>(&mut self) -> Result<Option<R>, RecvError>
@@ -42,6 +45,10 @@ where
                 },
                 // If the message is incomplete, read more into the buffer
                 Err(fig_proto::FigMessageParseError::Incomplete(_, _)) => {
+                    // `read_buf` only fills the buffer's spare capacity, and `BytesMut`'s default
+                    // growth hands out 64 bytes at a time — without this a 13 KB message needs
+                    // nine `read` syscalls instead of two.
+                    self.buffer.reserve(READ_CHUNK);
                     let bytes = self.inner.read_buf(&mut self.buffer).await?;
 
                     // If the buffer is empty, we've reached EOF

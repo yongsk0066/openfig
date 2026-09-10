@@ -388,9 +388,16 @@ impl Terminal for UnixTerminal {
 
 impl Drop for UnixTerminal {
     fn drop(&mut self) {
-        self.write.flush().unwrap();
-        self.write
-            .set_termios(&self.saved_termios, SetAttributeWhen::Now)
-            .expect("failed to restore original termios state");
+        // Restore the terminal *first*. The flush can fail (EIO once the pty is gone, EPIPE, a
+        // full buffer), and it used to run first and panic, leaving the user's terminal stuck in
+        // raw mode with no echo — a shell that has to be recovered with a blind `stty sane`.
+        // Panicking in a `Drop` is also an abort during unwinding.
+        if let Err(err) = self.write.set_termios(&self.saved_termios, SetAttributeWhen::Now) {
+            warn!(%err, "Failed to restore the original termios state");
+        }
+
+        if let Err(err) = self.write.flush() {
+            warn!(%err, "Failed to flush the terminal on shutdown");
+        }
     }
 }

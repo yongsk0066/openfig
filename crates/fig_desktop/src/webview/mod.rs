@@ -155,6 +155,15 @@ pub struct ApiState {
     pub intercept_state: Arc<InterceptState>,
     pub notifications_state: Arc<WebviewNotificationsState>,
     pub proxy: Box<dyn EventSender>,
+    /// Serialises `positionWindowRequest`s.
+    ///
+    /// `wrap_custom_protocol` spawns a task per request, so without this every
+    /// `positionWindow` call — including the `dryRun` probes the app fires while it decides
+    /// whether the description pane fits — runs concurrently. The dead `window.ipc.postMessage`
+    /// path used to funnel exactly these through a single task; nothing replaced that when
+    /// `api://` took over, and `tokio`'s mutex hands the lock out in wait order, so this
+    /// restores the same one-at-a-time behaviour.
+    pub position_window: tokio::sync::Mutex<()>,
 }
 
 /// The last global standing: `platform/macos.rs`'s `application_should_handle_reopen` IMP is an
@@ -193,6 +202,7 @@ impl WebviewManager {
             intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
             proxy: Box::new(proxy),
+            position_window: Default::default(),
         });
 
         Self {

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use bytes::Bytes;
+use fig_desktop_api::handler::ClientOriginatedSubMessage;
 use fig_proto::fig::ClientOriginatedMessage;
 use fig_proto::prost::Message;
 use fig_settings::{
@@ -53,6 +54,13 @@ pub async fn handle(
     }
 
     let client_message = ClientOriginatedMessage::decode(Bytes::from(request.into_body()))?;
+
+    // See `ApiState::position_window`.
+    let _sequence = match client_message.submessage {
+        Some(ClientOriginatedSubMessage::PositionWindowRequest(_)) => Some(state.position_window.lock().await),
+        _ => None,
+    };
+
     let server_message = fig_desktop_api::handler::api_request(
         EventHandler::default(),
         Context {
@@ -112,6 +120,7 @@ mod tests {
             intercept_state: Default::default(),
             notifications_state: Arc::new(WebviewNotificationsState::default()),
             proxy: Box::new(NoEventLoop),
+            position_window: Default::default(),
         })
     }
 

@@ -8,7 +8,7 @@ publish.workspace = true
 version.workspace = true
 license.workspace = true
 
-# Deliberately empty: replacing `shell-color` with this crate is what removes ~30 crates from
+# Deliberately empty: replacing `shell-color` with this crate is what removes 62 crates from
 # the graph, so nothing may be added here without a very good reason.
 [dependencies]
 

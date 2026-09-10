@@ -28,7 +28,6 @@ pub enum Event {
     ControlFlow(ControlFlow),
     SetTrayVisible(bool),
 
-    ReloadCredentials,
     ReloadAccessibility,
     ReloadTray {
         is_logged_in: bool,

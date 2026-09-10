@@ -10,8 +10,6 @@ use fig_proto::local::{
     DevtoolsCommand,
     DumpStateCommand,
     DumpStateResponse,
-    InputMethodAction,
-    InputMethodCommand,
     LogLevelCommand,
     LogLevelResponse,
     LoginCommand,
@@ -106,13 +104,6 @@ pub async fn bundle_metadata_command() -> Result<BundleMetadataResponse> {
         }) => Ok(resp),
         _ => Err(RecvError::InvalidMessageType.into()),
     }
-}
-
-pub async fn input_method_command(action: InputMethodAction) -> Result<()> {
-    let command = command::Command::InputMethod(InputMethodCommand {
-        actions: Some(action.into()),
-    });
-    send_command_to_socket(command).await
 }
 
 pub async fn prompt_accessibility_command() -> Result<()> {

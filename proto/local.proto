@@ -30,7 +30,6 @@ message Command {
     ResetCacheCommand reset_cache = 112;
     DebugModeCommand debug_mode = 113;
     PromptAccessibilityCommand prompt_accessibility = 114;
-    InputMethodCommand input_method = 115;
     OpenBrowserCommand open_browser = 117;
     // A request to set the desktops's log level
     LogLevelCommand log_level = 118;
@@ -51,9 +50,7 @@ message Hook {
     PromptHook prompt = 102;
     PreExecHook pre_exec = 103;
     PostExecHook post_exec = 104;
-    KeyboardFocusChangedHook keyboard_focus_changed = 105;
     TmuxPaneChangedHook tmux_pane_changed = 106;
-    OpenedSSHConnectionHook opened_ssh_connection = 107;
     CallbackHook callback = 108;
     IntegrationReadyHook integration_ready = 109;
     HideHook hide = 110;
@@ -108,7 +105,6 @@ enum UiElement {
   UI_ELEMENT_MENU_BAR = 0;
   UI_ELEMENT_SETTINGS = 1;
   UI_ELEMENT_MISSION_CONTROL = 2;
-  UI_ELEMENT_INPUT_METHOD_PROMPT = 3;
 }
 
 message OpenUiElementCommand {
@@ -121,22 +117,6 @@ message ResetCacheCommand {}
 message DebugModeCommand {
   optional bool set_debug_mode = 1; // Set debug mode to true or false
   optional bool toggle_debug_mode = 2; // Toggle debug mode
-}
-
-// Note: enum values must be unique
-enum InputMethodAction {
-  INPUT_METHOD_ACTION_INSTALL = 0;
-  INPUT_METHOD_ACTION_UNINSTALL = 1;
-  INPUT_METHOD_ACTION_ENABLE = 2;
-  INPUT_METHOD_ACTION_DISABLE = 3;
-  INPUT_METHOD_ACTION_SELECT = 4;
-  INPUT_METHOD_ACTION_DESELECT = 5;
-  INPUT_METHOD_ACTION_REGISTER = 6;
-  INPUT_METHOD_ACTION_STATUS_OF = 7;
-}
-
-message InputMethodCommand {
-  optional InputMethodAction actions = 1;
 }
 
 message PromptAccessibilityCommand {}
@@ -217,21 +197,8 @@ message PostExecHook {
   optional int32 exit_code = 3; // the exit code of the command
 }
 
-message KeyboardFocusChangedHook {
-  string app_identifier = 1;
-  string focused_session_id = 2; // a unique identifier associated with the pane
-  // or tab that is currently focused
-}
-
 message TmuxPaneChangedHook {
   int32 pane_identifier = 1;
-}
-
-message OpenedSSHConnectionHook {
-  fig_common.ShellContext context = 1;
-
-  string control_path = 2;
-  string remote_hostname = 3;
 }
 
 message CallbackHook {

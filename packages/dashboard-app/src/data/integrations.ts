@@ -22,14 +22,6 @@ const integrationOptions = [
         inverted: true,
       },
       {
-        id: "integrations.vscode.disabled",
-        title: "VS Code Terminal",
-        description: `Add ${PRODUCT_NAME} to VS Code's built-in terminal`,
-        type: "boolean",
-        default: false,
-        inverted: true,
-      },
-      {
         id: "integrations.iterm.disabled",
         title: "iTerm 2",
         description: `Add ${PRODUCT_NAME} to iTerm 2`,

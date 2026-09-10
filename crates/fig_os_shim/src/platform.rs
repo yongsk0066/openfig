@@ -8,49 +8,20 @@ use crate::Shim;
 #[non_exhaustive]
 pub enum Os {
     Mac,
-    Linux,
-    Windows,
 }
 
 impl Os {
     pub fn current() -> Self {
-        #[cfg(target_os = "macos")]
-        {
-            return Self::Mac;
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            return Self::Linux;
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            return Self::Windows;
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-        {
-            compile_error!("unsupported platform");
-        }
-
-        // This line should never be reached due to the compile_error above,
-        // but it's needed to satisfy the compiler
-        #[allow(unreachable_code)]
-        {
-            panic!("unsupported platform");
-        }
+        Self::Mac
     }
 
     pub fn all() -> &'static [Self] {
-        &[Self::Mac, Self::Linux, Self::Windows]
+        &[Self::Mac]
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Mac => "macos",
-            Self::Linux => "linux",
-            Self::Windows => "windows",
         }
     }
 }

@@ -13,12 +13,10 @@ import { NotificationResponse, _subscribe } from "./notifications.js";
 export type Component =
   | "dotfiles"
   | "ibus"
-  | "inputMethod"
   | "accessibility"
   | "desktopEntry"
   | "autostartEntry"
-  | "gnomeExtension"
-  | "ssh";
+  | "gnomeExtension";
 
 function componentToProto(component: Component) {
   switch (component) {
@@ -28,10 +26,6 @@ function componentToProto(component: Component) {
       return InstallComponent.IBUS;
     case "accessibility":
       return InstallComponent.ACCESSIBILITY;
-    case "inputMethod":
-      return InstallComponent.INPUT_METHOD;
-    case "ssh":
-      return InstallComponent.SSH;
     case "desktopEntry":
       return InstallComponent.DESKTOP_ENTRY;
     case "autostartEntry":

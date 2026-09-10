@@ -22,10 +22,6 @@ export default function OnboardingModal() {
   const [dotfilesCheck, refreshDotfiles] = useStatusCheck("dotfiles");
   const [accessibilityCheck, refreshAccessibility] =
     useStatusCheck("accessibility");
-  const [_desktopEntryCheck, refreshDesktopEntry] =
-    useStatusCheck("desktopEntry");
-  const [_gnomeExtensionCheck, refreshGnomeExtension] =
-    useStatusCheck("gnomeExtension");
   const refreshLocalState = useRefreshLocalState();
   const platformInfo = usePlatformInfo();
 
@@ -38,14 +34,7 @@ export default function OnboardingModal() {
   useEffect(() => {
     refreshAccessibility();
     refreshDotfiles();
-    refreshDesktopEntry();
-    refreshGnomeExtension();
-  }, [
-    refreshAccessibility,
-    refreshDotfiles,
-    refreshDesktopEntry,
-    refreshGnomeExtension,
-  ]);
+  }, [refreshAccessibility, refreshDotfiles]);
 
   function nextStep() {
     if (migrationStarted && !migrationEnded) {
@@ -58,8 +47,6 @@ export default function OnboardingModal() {
   function finish() {
     refreshAccessibility();
     refreshDotfiles();
-    refreshDesktopEntry();
-    refreshGnomeExtension();
     Internal.sendOnboardingRequest({
       action: Fig.OnboardingAction.FINISH_ONBOARDING,
     })
@@ -81,10 +68,6 @@ export default function OnboardingModal() {
       setAccessibility(true);
       setStep(step + 1);
     }
-
-    if (check.id === "desktopEntry" || check.id === "gnomeExtension") {
-      setStep(step + 1);
-    }
   }
 
   if (
@@ -103,9 +86,7 @@ export default function OnboardingModal() {
   }
 
   if (
-    ["dotfiles", "accessibility", "gnomeExtension", "desktopEntry"].includes(
-      check.id,
-    )
+    ["dotfiles", "accessibility"].includes(check.id)
   ) {
     return <InstallModal check={check} skip={skipInstall} next={nextStep} />;
   }

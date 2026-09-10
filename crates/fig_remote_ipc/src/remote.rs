@@ -74,7 +74,6 @@ pub async fn start_remote_ipc(
             std::fs::create_dir_all(parent).context("Failed creating socket path")?;
         }
 
-        #[cfg(unix)]
         {
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
@@ -129,7 +128,7 @@ pub async fn handle_remote_ipc(
                     trace!(?message, "Received remote message");
                     if let Some(response) = match message.packet {
                         Some(hostbound::Packet::Handshake(handshake)) => {
-                            let result = if initialized {
+                            if initialized {
                                 // maybe they missed our response, but they should've been listening harder
                                 Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
                                     success: false,
@@ -185,28 +184,7 @@ pub async fn handle_remote_ipc(
                                 Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
                                     success: true,
                                 }))
-                            };
-
-                            if matches!(result, Some(clientbound::Packet::HandshakeResponse(HandshakeResponse { success: true }))) {
-                                if let Some(parent_id) = handshake.parent_id {
-                                    let inner = figterm_state.inner.lock();
-                                    let sessions = inner.linked_sessions.values();
-                                    for session in sessions {
-                                        if let Some(ref writer) = session.writer {
-                                            let notification = clientbound::Packet::NotifyChildSessionStarted(
-                                                clientbound::NotifyChildSessionStarted { parent_id: parent_id.clone() }
-                                            );
-                                            writer.send(
-                                                Clientbound {
-                                                    packet: Some(notification)
-                                                }
-                                            ).ok();
-                                        }
-                                    }
-                                }
                             }
-
-                            result
                         },
                         Some(hostbound::Packet::Request(hostbound::Request { request: Some(request), nonce })) => {
                             if matches!(

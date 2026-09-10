@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use cfg_if::cfg_if;
 use fig_integrations::install::InstallComponents;
 use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
@@ -37,24 +36,6 @@ use crate::{
     EventLoopProxy,
     EventLoopWindowTarget,
 };
-
-// macro_rules! icon {
-//     ($icon:literal) => {{
-//         #[cfg(target_os = "macos")]
-//         {
-//             Some(include_bytes!(concat!(
-//                 env!("TRAY_ICONS_PROCESSED"),
-//                 "/",
-//                 $icon,
-//                 ".png"
-//             )))
-//         }
-//         #[cfg(not(target_os = "macos"))]
-//         {
-//             None
-//         }
-//     }};
-// }
 
 const LOGIN_MENU_ID: &str = "onboarding";
 
@@ -149,15 +130,6 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     tokio::spawn(fig_telemetry::send_menu_bar_actioned(Some(menu_event.id().0.clone())));
 }
 
-#[allow(dead_code)]
-#[cfg(target_os = "linux")]
-fn load_icon(path: impl AsRef<std::path::Path>) -> Option<Icon> {
-    let image = image::open(path).ok()?.into_rgba8();
-    let (width, height) = image.dimensions();
-    let rgba = image.into_raw();
-    Icon::from_rgba(rgba, width, height).ok()
-}
-
 pub async fn build_tray(
     _event_loop_window_target: &EventLoopWindowTarget,
     _figterm_state: &FigtermState,
@@ -173,23 +145,9 @@ pub async fn build_tray(
 pub fn get_icon(is_logged_in: bool) -> Icon {
     let (icon_rgba, icon_width, icon_height) = {
         let bytes = if is_logged_in {
-            cfg_if! {
-                if #[cfg(target_os = "linux")] {
-                    include_bytes!("../icons/icon-monochrome-light.png").to_vec()
-                } else {
-                    include_bytes!("../icons/icon-monochrome.png").to_vec()
-                }
-            }
+            include_bytes!("../icons/icon-monochrome.png").to_vec()
         } else {
-            cfg_if! {
-                if #[cfg(target_os = "linux")] {
-                    // This is intentionally the same as when logged in since Linux tray icons
-                    // don't really seem to work that well when multiple choices are available.
-                    include_bytes!("../icons/icon-monochrome-light.png").to_vec()
-                } else {
-                    include_bytes!("../icons/not-logged-in.png").to_vec()
-                }
-            }
+            include_bytes!("../icons/not-logged-in.png").to_vec()
         };
         let image = image::load_from_memory(&bytes)
             .expect("Failed to open icon path")
@@ -364,7 +322,6 @@ fn menu(is_logged_in: bool) -> Vec<MenuElement> {
     // let developer = MenuElement::sub_menu("Developer", vec![
     //     MenuElement::entry(None, None, "Dashboard Devtools", "dashboard-devtools"),
     //     MenuElement::entry(None, None, "Autocomplete Devtools", "autocomplete-devtools"),
-    //     MenuElement::entry(None, None, "Companion Devtools", "companion-devtools"),
     // ]);
 
     let onboarded_completed = fig_settings::state::get_bool_or("desktop.completedOnboarding", false);

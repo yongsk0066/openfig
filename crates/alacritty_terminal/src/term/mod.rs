@@ -203,14 +203,10 @@ pub struct ShellState {
     pub preexec: bool,
     /// Position of start of cmd
     pub cmd_cursor: Option<Point>,
-    /// Fish suggestion color
-    pub fish_suggestion_color: Option<shell_color::SuggestionColor>,
     /// Zsh autosuggestion color
     pub zsh_autosuggestion_color: Option<shell_color::SuggestionColor>,
     /// Fig autosuggestion color
     pub fig_autosuggestion_color: Option<shell_color::SuggestionColor>,
-    /// Nu hint color
-    pub nu_hint_color: Option<shell_color::SuggestionColor>,
     /// Color support
     pub color_support: Option<shell_color::ColorSupport>,
     /// Command info
@@ -1459,12 +1455,10 @@ impl<T: EventListener> Handler for Term<T> {
                 let mut in_suggestion = false;
 
                 if let Some(suggestion_color) = match self.shell_state.get_context().shell.as_deref() {
-                    Some("fish") => Some(self.shell_state().fish_suggestion_color.as_ref()),
                     Some("zsh") => Some(match self.shell_state().fig_autosuggestion_color {
                         Some(ref color) => Some(color),
                         None => self.shell_state().zsh_autosuggestion_color.as_ref(),
                     }),
-                    Some("nu") => Some(self.shell_state().nu_hint_color.as_ref()),
                     _ => None,
                 }
                 .flatten()
@@ -1830,18 +1824,6 @@ impl<T: EventListener> Handler for Term<T> {
     }
 
     #[inline]
-    fn fish_suggestion_color(&mut self, color: &str) {
-        if self.shell_state.osc_lock {
-            return;
-        }
-        trace!("Fig fish suggestion color: {color:?}");
-
-        if let Some(color_support) = self.shell_state().color_support {
-            self.shell_state.fish_suggestion_color = shell_color::parse_suggestion_color_fish(color, color_support);
-        }
-    }
-
-    #[inline]
     fn zsh_suggestion_color(&mut self, color: &str) {
         if self.shell_state.osc_lock {
             return;
@@ -1869,15 +1851,6 @@ impl<T: EventListener> Handler for Term<T> {
                 color_support,
             ));
         }
-    }
-
-    #[inline]
-    fn nu_hint_color(&mut self, color: &str) {
-        if self.shell_state.osc_lock || color.is_empty() {
-            return;
-        }
-        trace!("Fig nu hint color: {color:?}");
-        self.shell_state.nu_hint_color = Some(shell_color::parse_hint_color_nu(color));
     }
 
     #[inline]

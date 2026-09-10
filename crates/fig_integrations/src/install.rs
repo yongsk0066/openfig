@@ -1,5 +1,5 @@
 //! Install and uninstall of the components the app manages: shell integrations, the
-//! binaries in `~/.local/bin`, the SSH integration, the input method and the desktop app.
+//! binaries in `~/.local/bin` and the desktop app.
 //!
 //! Moved here from the former installer crate (which also owned the self-update
 //! pipeline) so that the update machinery could be deleted.
@@ -21,13 +21,11 @@ use fig_util::{
     directories,
 };
 
-use crate::Integration;
 use crate::error::{
     Error,
     Result,
 };
 use crate::shell::ShellExt;
-use crate::ssh::SshIntegration;
 
 bitflags::bitflags! {
     /// The different components that can be installed.
@@ -37,31 +35,13 @@ bitflags::bitflags! {
         const SHELL_INTEGRATIONS    = 0b00000001;
         /// This handles the removal of the CLI and pty binaries as well as legacy copies
         const BINARY                = 0b00000010;
-        /// Removal of the ssh integration from the ~/.ssh/config file
-        const SSH                   = 0b00000100;
         const DESKTOP_APP           = 0b00001000;
-        const INPUT_METHOD          = 0b00010000;
-        const DESKTOP_ENTRY         = 0b00100000;
-        const GNOME_SHELL_EXTENSION = 0b01000000;
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl InstallComponents {
-    pub fn all_linux_minimal() -> Self {
-        Self::SHELL_INTEGRATIONS | Self::BINARY | Self::SSH
     }
 }
 
 pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Result<()> {
-    let ssh_result = if components.contains(InstallComponents::SSH) {
-        SshIntegration::new()?.uninstall().await
-    } else {
-        Ok(())
-    };
-
     let shell_integration_result = {
-        for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+        for shell in [Shell::Bash, Shell::Zsh] {
             for integration in shell.get_shell_integrations(ctx.env())? {
                 integration.uninstall().await?;
             }
@@ -102,21 +82,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
         }
     }
 
-    #[cfg(target_os = "macos")]
-    if components.contains(InstallComponents::INPUT_METHOD) {
-        use crate::input_method::{
-            InputMethod,
-            InputMethodError,
-        };
-
-        match InputMethod::default().uninstall().await {
-            Ok(_) | Err(Error::InputMethod(InputMethodError::CouldNotListInputSources)) => {},
-            Err(err) => return Err(err),
-        }
-    }
-
     if components.contains(InstallComponents::DESKTOP_APP) {
-        #[cfg(target_os = "macos")]
         uninstall_desktop(&ctx).await?;
         // Must be last -- this will kill the running desktop process if this is
         // called from the desktop app.
@@ -129,7 +95,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
         }
     }
 
-    shell_integration_result.and(ssh_result)
+    shell_integration_result
 }
 
 pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
@@ -155,22 +121,11 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
         }
     }
 
-    if components.contains(InstallComponents::SSH) {
-        SshIntegration::new()?.install().await?;
-    }
-
-    #[cfg(target_os = "macos")]
-    if components.contains(InstallComponents::INPUT_METHOD) {
-        use crate::input_method::InputMethod;
-        InputMethod::default().install().await?;
-    }
-
     Ok(())
 }
 
 /// Removes everything the desktop app left on the machine: the launch agent, the defaults
 /// domain, the data directory and the app bundle itself.
-#[cfg(target_os = "macos")]
 async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
     use fig_util::consts::APP_BUNDLE_ID;
     use tokio::fs;
@@ -246,7 +201,6 @@ async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 async fn remove_in_dir_with_prefix_unless(dir: &std::path::Path, prefix: &str, unless: impl Fn(&str) -> bool) {
     use tokio::fs;
 

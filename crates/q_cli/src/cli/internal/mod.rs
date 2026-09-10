@@ -1,7 +1,5 @@
-mod generate_ssh;
 mod inline_shell_completion;
 pub mod local_state;
-mod multiplexer;
 pub mod should_figterm_launch;
 
 use std::collections::HashSet;
@@ -34,23 +32,17 @@ use eyre::{
     bail,
 };
 use fig_integrations::install::InstallComponents;
-#[cfg(target_os = "macos")]
-use fig_integrations::input_method::InputMethod;
 use fig_ipc::local::send_hook_to_socket;
 use fig_ipc::{
     BufferedUnixStream,
     SendMessage,
     SendRecvMessage,
 };
-use fig_os_shim::{
-    Context as OsContext,
-    Os,
-};
+use fig_os_shim::Context as OsContext;
 use fig_proto::ReflectMessage;
 use fig_proto::figterm::figterm_request_message::Request as FigtermRequest;
 use fig_proto::figterm::{
     FigtermRequestMessage,
-    NotifySshSessionStartedRequest,
     UpdateShellContextRequest,
 };
 use fig_proto::hooks::{
@@ -59,16 +51,12 @@ use fig_proto::hooks::{
 };
 use fig_proto::local::EnvironmentVariable;
 use fig_proto::util::get_shell;
-use fig_util::directories::{
-    figterm_socket_path,
-    logs_dir,
-};
+use fig_util::directories::figterm_socket_path;
 use fig_util::env_var::QTERM_SESSION_ID;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
 };
-use multiplexer::MultiplexerArgs;
 use rand::distr::{
     Alphanumeric,
     SampleString,
@@ -92,10 +80,6 @@ use self::inline_shell_completion::{
     inline_shell_completion_accept,
 };
 use crate::cli::installation::install_cli;
-use crate::util::desktop::{
-    LaunchArgs,
-    launch_fig_desktop,
-};
 
 #[derive(Debug, Args, PartialEq, Eq)]
 #[command(group(
@@ -117,9 +101,6 @@ pub struct InstallArgs {
     /// Install only the shell integrations
     #[arg(long)]
     pub dotfiles: bool,
-    /// Prompt input method installation
-    #[arg(long)]
-    pub input_method: bool,
     /// Don't confirm automatic installation.
     #[arg(long)]
     pub no_confirm: bool,
@@ -133,13 +114,10 @@ pub struct InstallArgs {
 
 impl From<InstallArgs> for InstallComponents {
     fn from(args: InstallArgs) -> Self {
-        let InstallArgs {
-            dotfiles, input_method, ..
-        } = args;
-        if dotfiles || input_method {
+        let InstallArgs { dotfiles, .. } = args;
+        if dotfiles {
             let mut install_components = InstallComponents::empty();
             install_components.set(InstallComponents::SHELL_INTEGRATIONS, dotfiles);
-            install_components.set(InstallComponents::INPUT_METHOD, input_method);
             install_components
         } else {
             InstallComponents::all()
@@ -174,15 +152,9 @@ pub enum InternalSubcommand {
         /// Uninstall only the shell integrations
         #[arg(long)]
         dotfiles: bool,
-        /// Uninstall only the input method
-        #[arg(long)]
-        input_method: bool,
         /// Uninstall only the binary
         #[arg(long)]
         binary: bool,
-        /// Uninstall only the ssh integration
-        #[arg(long)]
-        ssh: bool,
     },
     GetShell,
     Hostname,
@@ -225,37 +197,10 @@ pub enum InternalSubcommand {
         recv: bool,
     },
     UninstallForAllUsers,
-    RemoveDataDir {
-        #[arg(long)]
-        force: bool,
-    },
     Uuidgen,
-    #[cfg(target_os = "linux")]
-    IbusBootstrap,
-    #[cfg(target_os = "linux")]
-    /// Checks for sandboxing
-    DetectSandbox,
-    /// Displays prompt to install remote shell integrations
-    SshLocalCommand {
-        remote_dest: String,
-        uuid: String,
-    },
-    /// \[Deprecated\] Displays prompt to install remote shell integrations.
-    PromptSsh {
-        remote_dest: String,
-    },
-    #[cfg(target_os = "macos")]
-    AttemptToFinishInputMethodInstallation {
-        bundle_path: Option<PathBuf>,
-    },
     DumpState {
         component: StateComponent,
     },
-    /// Generates an SSH configuration file
-    ///
-    /// This lets us bypass a bug in Include and vdollar_expand that causes environment variables to
-    /// be expanded, even in files that are only referenced in match blocks that resolve to false
-    GenerateSsh(generate_ssh::GenerateSshArgs),
     InlineShellCompletion {
         #[arg(long, allow_hyphen_values = true)]
         buffer: String,
@@ -266,8 +211,6 @@ pub enum InternalSubcommand {
         #[arg(long, allow_hyphen_values = true)]
         suggestion: String,
     },
-    #[command(alias = "mux")]
-    Multiplexer(MultiplexerArgs),
 }
 
 const BUFFER_SIZE: usize = 1024;
@@ -282,18 +225,11 @@ impl InternalSubcommand {
                 let global = args.global;
                 install_cli(args.into(), no_confirm, force, global).await
             },
-            InternalSubcommand::Uninstall {
-                dotfiles,
-                input_method,
-                binary,
-                ssh,
-            } => {
-                let components = if dotfiles || binary || ssh || input_method {
+            InternalSubcommand::Uninstall { dotfiles, binary } => {
+                let components = if dotfiles || binary {
                     let mut uninstall_components = InstallComponents::empty();
                     uninstall_components.set(InstallComponents::SHELL_INTEGRATIONS, dotfiles);
-                    uninstall_components.set(InstallComponents::INPUT_METHOD, input_method);
                     uninstall_components.set(InstallComponents::BINARY, binary);
-                    uninstall_components.set(InstallComponents::SSH, ssh);
                     uninstall_components
                 } else {
                     InstallComponents::all()
@@ -447,10 +383,6 @@ impl InternalSubcommand {
                 Ok(ExitCode::SUCCESS)
             },
             InternalSubcommand::UninstallForAllUsers => {
-                if !cfg!(target_os = "linux") {
-                    bail!("uninstall-for-all-users is only supported on Linux");
-                }
-
                 let out = Command::new("users").output().await?;
                 let users = String::from_utf8_lossy(&out.stdout);
 
@@ -542,7 +474,6 @@ impl InternalSubcommand {
 
                 Ok(ExitCode::SUCCESS)
             },
-            InternalSubcommand::RemoveDataDir { force } => remove_data_dir(ctx, force).await,
             InternalSubcommand::StreamFromSocket => {
                 let mut stdout = tokio::io::stdout();
                 let mut stdin = tokio::io::stdin();
@@ -550,7 +481,7 @@ impl InternalSubcommand {
                 let mut stdout_buf = BytesMut::with_capacity(1024);
                 let mut stream_buf = BytesMut::with_capacity(1024);
 
-                let socket = directories::remote_socket_path()?;
+                let socket = directories::local_remote_socket_path()?;
                 while let Ok(mut stream) = BufferedUnixStream::connect_timeout(&socket, Duration::from_secs(5)).await {
                     loop {
                         select! {
@@ -595,109 +526,6 @@ impl InternalSubcommand {
                 let _ = writeln!(stdout(), "{}", uuid::Uuid::new_v4());
                 Ok(ExitCode::SUCCESS)
             },
-            #[cfg(target_os = "linux")]
-            InternalSubcommand::IbusBootstrap => {
-                use std::ffi::OsString;
-
-                use sysinfo::{
-                    ProcessRefreshKind,
-                    RefreshKind,
-                };
-                use tokio::process::Command;
-
-                let system = tokio::task::block_in_place(|| {
-                    System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()))
-                });
-                let ibus_daemon = OsString::from("ibus-daemon");
-                if system.processes_by_name(&ibus_daemon).next().is_none() {
-                    info!("Launching 'ibus-daemon'");
-                    match Command::new("ibus-daemon").arg("-drxR").output().await {
-                        Ok(std::process::Output { status, stdout, stderr }) if !status.success() => {
-                            let stdout = String::from_utf8_lossy(&stdout);
-                            let stderr = String::from_utf8_lossy(&stderr);
-                            eyre::bail!(
-                                "Failed to run 'ibus-daemon -drxR': status={status:?} stdout={stdout:?} stderr={stderr:?}"
-                            );
-                        },
-                        Err(err) => eyre::bail!("Failed to run 'ibus-daemon -drxR': {err}"),
-                        Ok(_) => writeln!(stdout(), "ibus-daemon is now running").ok(),
-                    };
-                } else {
-                    writeln!(stdout(), "ibus-daemon is already running").ok();
-                }
-                Ok(ExitCode::SUCCESS)
-            },
-            #[cfg(target_os = "linux")]
-            InternalSubcommand::DetectSandbox => {
-                use fig_util::system_info::linux::SandboxKind;
-                let exit_code = match fig_util::system_info::linux::detect_sandbox() {
-                    SandboxKind::None => {
-                        println!("No sandbox detected");
-                        0
-                    },
-                    SandboxKind::Flatpak => {
-                        println!("You are in a Flatpak");
-                        1
-                    },
-                    SandboxKind::Snap => {
-                        println!("You are in a Snap");
-                        1
-                    },
-                    SandboxKind::Docker => {
-                        println!("You are in a Docker container");
-                        1
-                    },
-                    SandboxKind::Container(None) => {
-                        println!("You are in a generic container");
-                        1
-                    },
-                    SandboxKind::Container(Some(engine)) => {
-                        println!("You are in a {engine} container");
-                        1
-                    },
-                };
-                Ok(ExitCode::from(exit_code))
-            },
-            InternalSubcommand::PromptSsh { .. } => Ok(ExitCode::SUCCESS),
-            InternalSubcommand::SshLocalCommand { remote_dest, uuid } => {
-                // Ensure desktop app is running to avoid SSH errors on stdout when local side of
-                // RemoteForward isn't listening
-                launch_fig_desktop(LaunchArgs {
-                    wait_for_socket: true,
-                    open_dashboard: false,
-                    verbose: false,
-                })
-                .ok();
-
-                if let Ok(session_id) = std::env::var(QTERM_SESSION_ID) {
-                    let mut conn =
-                        BufferedUnixStream::connect(fig_util::directories::figterm_socket_path(&session_id)?).await?;
-                    conn.send_message(FigtermRequestMessage {
-                        request: Some(FigtermRequest::NotifySshSessionStarted(
-                            NotifySshSessionStartedRequest {
-                                uuid,
-                                remote_host: remote_dest,
-                            },
-                        )),
-                    })
-                    .await?;
-                };
-
-                Ok(ExitCode::SUCCESS)
-            },
-            #[cfg(target_os = "macos")]
-            InternalSubcommand::AttemptToFinishInputMethodInstallation { bundle_path } => {
-                match InputMethod::finish_input_method_installation(bundle_path) {
-                    Ok(_) => Ok(ExitCode::SUCCESS),
-                    Err(err) => {
-                        println!(
-                            "{}",
-                            serde_json::to_string(&err).expect("InputMethodError should be serializable")
-                        );
-                        Ok(ExitCode::FAILURE)
-                    },
-                }
-            },
             InternalSubcommand::DumpState { component } => {
                 use fig_proto::local::dump_state_command::Type as StateCommandType;
 
@@ -712,19 +540,9 @@ impl InternalSubcommand {
                 println!("{}", state.json);
                 Ok(ExitCode::SUCCESS)
             },
-            InternalSubcommand::GenerateSsh(args) => args.execute().await,
             InternalSubcommand::InlineShellCompletion { buffer } => Ok(inline_shell_completion(buffer).await),
             InternalSubcommand::InlineShellCompletionAccept { buffer, suggestion } => {
                 Ok(inline_shell_completion_accept(buffer, suggestion).await)
-            },
-            InternalSubcommand::Multiplexer(args) => match multiplexer::execute(args).await {
-                Ok(()) => Ok(ExitCode::SUCCESS),
-                Err(err) => {
-                    error!("{err}");
-                    let path = logs_dir()?.join("mux-crash.log");
-                    tokio::fs::write(path, format!("{err:?}")).await?;
-                    Err(err)
-                },
             },
         }
     }
@@ -770,31 +588,6 @@ pub async fn pre_cmd(alias: Option<String>) -> ExitCode {
     }
 }
 
-async fn remove_data_dir(ctx: Arc<OsContext>, force: bool) -> Result<ExitCode> {
-    if ctx.platform().os() != Os::Linux {
-        bail!("remove-data-dir is only supported on Linux");
-    }
-    if !force {
-        bail!("remove-data-dir is dangerous! If you meant to run this command, pass --force");
-    }
-
-    let data_dir = directories::fig_data_dir_ctx(&ctx)?;
-    match ctx.fs().remove_dir_all(&data_dir).await {
-        Ok(_) => (),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-        Err(err) => bail!("Failed to remove data dir: {:?}", err),
-    }
-
-    let webview_dir = directories::local_webview_data_dir(&ctx)?;
-    match ctx.fs().remove_dir_all(&webview_dir).await {
-        Ok(_) => (),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-        Err(err) => bail!("Failed to remove data dir: {:?}", err),
-    }
-
-    Ok(ExitCode::SUCCESS)
-}
-
 #[cfg(test)]
 mod tests {
     use clap::Parser;
@@ -827,39 +620,5 @@ mod tests {
                 }
             }
         );
-    }
-
-    #[tokio::test]
-    async fn test_remove_data_dir() {
-        assert!(
-            remove_data_dir(OsContext::builder().with_os(Os::Mac).build_fake(), true)
-                .await
-                .is_err(),
-            "should fail on Mac"
-        );
-
-        let ctx = OsContext::builder()
-            .with_os(Os::Linux)
-            .with_test_home()
-            .await
-            .unwrap()
-            .build_fake();
-
-        assert!(
-            remove_data_dir(Arc::clone(&ctx), false).await.is_err(),
-            "should error if force not true"
-        );
-        assert!(
-            remove_data_dir(Arc::clone(&ctx), true).await.is_ok(),
-            "should succeed if directory doesn't exist"
-        );
-
-        // Verify that data dir is created and deleted correctly.
-        let fs = ctx.fs();
-        let data_dir = directories::fig_data_dir_ctx(&ctx).unwrap();
-        fs.create_dir_all(&data_dir).await.unwrap();
-        assert!(fs.exists(&data_dir), "data dir exists prior");
-        assert!(remove_data_dir(Arc::clone(&ctx), true).await.is_ok());
-        assert!(!fs.exists(&data_dir), "data dir should be deleted");
     }
 }

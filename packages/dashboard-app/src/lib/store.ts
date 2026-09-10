@@ -19,9 +19,6 @@ export interface Data {
 
   accessibilityIsInstalled: boolean | undefined;
   dotfilesIsInstalled: boolean | undefined;
-  inputMethodIsInstalled: boolean | undefined;
-  desktopEntryIsInstalled: boolean | undefined;
-  gnomeExtensionIsInstalled: boolean | undefined;
 }
 
 export interface Actions {
@@ -33,9 +30,6 @@ export interface Actions {
   setAuthRequestId: (authRequestId: string | undefined) => void;
   refreshAccessibilityIsInstalled: () => Promise<void>;
   refreshDotfilesIsInstalled: () => Promise<void>;
-  refreshInputMethodIsInstalled: () => Promise<void>;
-  refreshDesktopEntryIsInstalled: () => Promise<void>;
-  refreshGnomeExtensionIsInstalled: () => Promise<void>;
 
   isLoading: () => boolean;
 }
@@ -51,9 +45,6 @@ export const createStore = () => {
     auth: undefined,
     accessibilityIsInstalled: undefined,
     dotfilesIsInstalled: undefined,
-    inputMethodIsInstalled: undefined,
-    desktopEntryIsInstalled: undefined,
-    gnomeExtensionIsInstalled: undefined,
     authRequestId: undefined,
     platformInfo: undefined,
     currAuthRequestId: () => {
@@ -78,19 +69,6 @@ export const createStore = () => {
     refreshDotfilesIsInstalled: async () => {
       const shellIsInstalled = await Install.isInstalled("dotfiles");
       set(() => ({ dotfilesIsInstalled: shellIsInstalled }));
-    },
-    refreshInputMethodIsInstalled: async () => {
-      const inputMethodIsInstalled = await Install.isInstalled("inputMethod");
-      set(() => ({ inputMethodIsInstalled }));
-    },
-    refreshDesktopEntryIsInstalled: async () => {
-      const desktopEntryIsInstalled = await Install.isInstalled("desktopEntry");
-      set(() => ({ desktopEntryIsInstalled }));
-    },
-    refreshGnomeExtensionIsInstalled: async () => {
-      const gnomeExtensionIsInstalled =
-        await Install.isInstalled("gnomeExtension");
-      set(() => ({ gnomeExtensionIsInstalled }));
     },
     refreshAuth: async () => {
       const auth = await Auth.status();
@@ -177,18 +155,6 @@ export const createStore = () => {
 
   Install.isInstalled("dotfiles").then((isInstalled) => {
     store.setState({ dotfilesIsInstalled: isInstalled });
-  });
-
-  Install.isInstalled("inputMethod").then((isInstalled) => {
-    store.setState({ inputMethodIsInstalled: isInstalled });
-  });
-
-  Install.isInstalled("desktopEntry").then((isInstalled) => {
-    store.setState({ desktopEntryIsInstalled: isInstalled });
-  });
-
-  Install.isInstalled("gnomeExtension").then((isInstalled) => {
-    store.setState({ gnomeExtensionIsInstalled: isInstalled });
   });
 
   Install.installStatus.subscribe("accessibility", (isInstalled) => {

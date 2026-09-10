@@ -1,19 +1,12 @@
 pub const APP_BUNDLE_ID: &str = "com.amazon.codewhisperer";
 pub const APP_BUNDLE_NAME: &str = "Amazon Q.app";
 
-#[cfg(target_os = "macos")]
 pub const APP_PROCESS_NAME: &str = "q_desktop";
-#[cfg(target_os = "linux")]
-pub const APP_PROCESS_NAME: &str = "q-desktop";
-
-#[cfg(windows)]
-pub const APP_PROCESS_NAME: &str = "q_desktop.exe";
 
 /// The name configured under `"package.productName"` in the tauri.conf.json file.
 pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
 pub const CLI_BINARY_NAME: &str = "q";
-pub const CLI_BINARY_NAME_MINIMAL: &str = "q-minimal";
 pub const CHAT_BINARY_NAME: &str = "qchat";
 pub const PTY_BINARY_NAME: &str = "qterm";
 
@@ -26,10 +19,7 @@ pub const PRODUCT_NAME: &str = "Amazon Q";
 pub const RUNTIME_DIR_NAME: &str = "cwrun";
 
 /// Data directory name used in paths like ~/.local/share/{DATA_DIR_NAME}
-#[cfg(unix)]
 pub const DATA_DIR_NAME: &str = "amazon-q";
-#[cfg(windows)]
-pub const DATA_DIR_NAME: &str = "AmazonQ";
 
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = ".amazon-q.dotfiles.bak";
@@ -45,8 +35,6 @@ pub mod url {
     pub const USER_MANUAL: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line.html";
     pub const AUTOCOMPLETE_WIKI: &str =
         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html";
-    pub const AUTOCOMPLETE_SSH_WIKI: &str =
-        "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete-ssh.html";
     pub const CHAT_WIKI: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-chat.html";
     pub const TRANSLATE_WIKI: &str =
         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-conversation.html";
@@ -67,9 +55,6 @@ pub mod build {
     /// The datetime in rfc3339 format of the current build
     pub const DATETIME: Option<&str> = option_env!("AMAZON_Q_BUILD_DATETIME");
 
-    /// If `fish` tests should be skipped
-    pub const SKIP_FISH_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_FISH_TESTS").is_some();
-
     /// If `shellcheck` tests should be skipped
     pub const SKIP_SHELLCHECK_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_SHELLCHECK_TESTS").is_some();
 }
@@ -78,18 +63,7 @@ pub mod build {
 pub mod macos {
     pub const BUNDLE_CONTENTS_MACOS_PATH: &str = "Contents/MacOS";
     pub const BUNDLE_CONTENTS_RESOURCE_PATH: &str = "Contents/Resources";
-    pub const BUNDLE_CONTENTS_HELPERS_PATH: &str = "Contents/Helpers";
     pub const BUNDLE_CONTENTS_INFO_PLIST_PATH: &str = "Contents/Info.plist";
-}
-
-pub mod linux {
-    pub const DESKTOP_ENTRY_NAME: &str = "amazon-q.desktop";
-
-    /// Name of the deb package.
-    pub const PACKAGE_NAME: &str = "amazon-q";
-
-    /// The wm_class used for the application windows.
-    pub const DESKTOP_APP_WM_CLASS: &str = "Amazon-q";
 }
 
 pub mod env_var {
@@ -107,15 +81,6 @@ pub mod env_var {
     define_env_vars! {
         /// The UUID of the current parent qterm instance
         QTERM_SESSION_ID = "QTERM_SESSION_ID",
-
-        /// The current parent socket to connect to
-        Q_PARENT = "Q_PARENT",
-
-        /// Set the [`Q_PARENT`] parent socket to connect to
-        Q_SET_PARENT = "Q_SET_PARENT",
-
-        /// Guard for the [`Q_SET_PARENT`] check
-        Q_SET_PARENT_CHECK = "Q_SET_PARENT_CHECK",
 
         /// Set if qterm is running, contains the version
         Q_TERM = "Q_TERM",
@@ -136,10 +101,7 @@ pub mod env_var {
         Q_DEBUG_SHELL = "Q_DEBUG_SHELL",
 
         /// Indicates the user is using zsh autosuggestions which disables Inline
-        Q_USING_ZSH_AUTOSUGGESTIONS = "Q_USING_ZSH_AUTOSUGGESTIONS",
-
-        /// Overrides the path to the bundle metadata released with certain desktop builds.
-        Q_BUNDLE_METADATA_PATH = "Q_BUNDLE_METADATA_PATH"
+        Q_USING_ZSH_AUTOSUGGESTIONS = "Q_USING_ZSH_AUTOSUGGESTIONS"
     }
 }
 
@@ -160,11 +122,6 @@ mod tests {
 
     #[test]
     fn test_build_envs() {
-        if let Some(build_variant) = build::VARIANT {
-            println!("build_variant: {build_variant}");
-            assert!(["full", "minimal"].contains(&&*build_variant.to_ascii_lowercase()));
-        }
-
         if let Some(build_hash) = build::HASH {
             println!("build_hash: {build_hash}");
             assert!(!build_hash.is_empty());

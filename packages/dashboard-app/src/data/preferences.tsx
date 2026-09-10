@@ -20,7 +20,6 @@ const generalPreferences = [
       //     `Choose your preferred terminal for ${PRODUCT_NAME} to launch commands in.`,
       //   type: "select",
       //   options: [
-      //     "VS Code",
       //     "iTerm2",
       //     "Hyper",
       //     "Alacritty",

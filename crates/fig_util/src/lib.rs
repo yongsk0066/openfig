@@ -7,7 +7,6 @@ pub mod system_info;
 pub mod terminal;
 
 pub mod consts;
-#[cfg(target_os = "macos")]
 pub mod launchd_plist;
 
 use std::cmp::Ordering;
@@ -39,37 +38,16 @@ pub enum Error {
     Directory(#[from] crate::directories::DirectoryError),
     #[error("process has no parent")]
     NoParentProcess,
-    #[error("could not find the os hwid")]
-    HwidNotFound,
     #[error("the shell, `{0}`, isn't supported yet")]
     UnknownShell(String),
     #[error("missing environment variable `{0}`")]
     MissingEnv(&'static str),
-    #[error("unknown display server `{0}`")]
-    UnknownDisplayServer(String),
-    #[error("unknown desktop, checked environment variables: {0}")]
-    UnknownDesktop(UnknownDesktopErrContext),
     #[error(transparent)]
     StrUtf8Error(#[from] std::str::Utf8Error),
     #[error("Failed to parse shell {0} version")]
     ShellVersion(Shell),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-}
-
-#[derive(Debug, Clone)]
-pub struct UnknownDesktopErrContext {
-    xdg_current_desktop: String,
-    xdg_session_desktop: String,
-    gdm_session: String,
-}
-
-impl std::fmt::Display for UnknownDesktopErrContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "XDG_CURRENT_DESKTOP: `{}`, ", self.xdg_current_desktop)?;
-        write!(f, "XDG_SESSION_DESKTOP: `{}`, ", self.xdg_session_desktop)?;
-        write!(f, "GDMSESSION: `{}`", self.gdm_session)
-    }
 }
 
 /// Returns a random 64 character hex string
@@ -86,19 +64,6 @@ pub fn gen_hex_string() -> String {
     let mut buf = [0u8; 32];
     rand::rng().fill(&mut buf);
     hex::encode(buf)
-}
-
-pub fn search_xdg_data_dirs(ext: impl AsRef<std::path::Path>) -> Option<PathBuf> {
-    let ext = ext.as_ref();
-    if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
-        for base in xdg_data_dirs.split(':') {
-            let check = Path::new(base).join(ext);
-            if check.exists() {
-                return Some(check);
-            }
-        }
-    }
-    None
 }
 
 /// Returns the path to the original executable, not the symlink

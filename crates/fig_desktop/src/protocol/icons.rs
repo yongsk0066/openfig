@@ -1,28 +1,18 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::hash::Hash;
-use std::io::Cursor;
-use std::path::{
-    Path,
-    PathBuf,
-};
+use std::path::Path;
 use std::sync::{
     Arc,
     LazyLock,
 };
-use std::time::Duration;
 
-use anyhow::Result;
 use fig_os_shim::Context;
-use image::imageops::FilterType;
 use image::{
     GenericImage,
     GenericImageView,
-    ImageFormat,
     Rgba,
 };
-use moka::future::Cache;
 use percent_encoding::percent_decode_str;
 use tracing::{
     debug,
@@ -77,17 +67,6 @@ static ASSETS: LazyLock<HashMap<AssetSpecifier<'static>, Arc<Cow<'static, [u8]>>
 
 pub type ProcessedAsset = (Arc<Cow<'static, [u8]>>, AssetKind);
 
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-static ASSET_CACHE: LazyLock<Cache<PathBuf, ProcessedAsset>> = LazyLock::new(|| {
-    Cache::builder()
-        .weigher(|k: &PathBuf, v: &(Arc<Cow<'_, [u8]>>, AssetKind)| {
-            (k.as_os_str().len() + v.0.len()).try_into().unwrap_or(u32::MAX)
-        })
-        .time_to_live(Duration::from_secs(120))
-        .build()
-});
-
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub enum AssetKind {
     Png,
@@ -101,39 +80,6 @@ impl AssetKind {
             AssetKind::Svg => mime::IMAGE_SVG,
         }
     }
-}
-
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub async fn process_asset(path: PathBuf) -> Result<ProcessedAsset> {
-    if let Some(asset) = ASSET_CACHE.get(&path).await {
-        trace!("icon cache hit");
-        return Ok(asset);
-    }
-    trace!(?path, "cache miss processing asset");
-
-    let is_svg = path
-        .extension()
-        .and_then(OsStr::to_str)
-        .is_none_or(|ext| ext.to_lowercase() == "svg");
-
-    let built = if is_svg {
-        (Arc::new(tokio::fs::read(&path).await?.into()), AssetKind::Svg)
-    } else {
-        let path = path.clone();
-        tokio::task::spawn_blocking(move || {
-            let icon = image::open(path)?;
-            let icon = icon.resize(32, 32, FilterType::CatmullRom);
-            let mut cursor = Cursor::new(Vec::new());
-            icon.write_to(&mut cursor, ImageFormat::Png)?;
-            let buffer = cursor.into_inner();
-            anyhow::Ok((Arc::new(buffer.into()), AssetKind::Png))
-        })
-        .await??
-    };
-
-    ASSET_CACHE.insert(path, built.clone()).await;
-
-    Ok(built)
 }
 
 async fn resolve_asset(asset: &AssetSpecifier<'_>, fallback: Option<&str>) -> (Arc<Cow<'static, [u8]>>, AssetKind) {
@@ -221,17 +167,8 @@ pub async fn handle(
                 warn!(%err, "Failed to decode fig url");
             })?;
 
-            cfg_if::cfg_if! {
-                if #[cfg(windows)] {
-                    let path = transform_unix_to_windows_path(path);
-                    // TODO: we might want to shellexpand like we do below, but we need
-                    // context on what the home dir is
-                    let path_str = path.to_str().unwrap_or("");
-                } else {
-                    let path_str = shellexpand::tilde(&decoded_str);
-                    let path = Path::new(path_str.as_ref());
-                }
-            }
+            let path_str = shellexpand::tilde(&decoded_str);
+            let path = Path::new(path_str.as_ref());
 
             let fallback = match tokio::fs::metadata(path).await {
                 Ok(meta) => {
@@ -260,50 +197,5 @@ pub async fn handle(
     match res {
         Some(res) => Ok(res),
         None => Ok(build_default().await),
-    }
-}
-
-/// Translate a unix style path into a windows style path assuming root dir is the drive
-#[cfg_attr(not(windows), allow(dead_code))]
-fn transform_unix_to_windows_path(path: Cow<'_, str>) -> Cow<'_, Path> {
-    use std::path::Component;
-
-    let folder = path.ends_with('/') || path.ends_with('\\');
-
-    let path_components: Vec<_> = Path::new(path.as_ref()).components().collect();
-    match &path_components[..] {
-        [Component::RootDir, Component::Normal(drive), rest @ ..] => {
-            let mut root = std::ffi::OsString::from(drive);
-            root.push(":");
-
-            for component in rest {
-                root.push("\\");
-                root.push(component.as_os_str());
-            }
-
-            if folder {
-                root.push("/");
-            }
-
-            Cow::from(PathBuf::from(root))
-        },
-        _ => match path {
-            Cow::Borrowed(path) => Cow::Borrowed(Path::new(path)),
-            Cow::Owned(path) => Cow::Owned(PathBuf::from(path)),
-        },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unix_to_windows_path_transform() {
-        assert_eq!(
-            transform_unix_to_windows_path("/c/User/chay/Downloads".into()),
-            Path::new(r"c:\User\chay\Downloads")
-        );
-        assert_eq!(transform_unix_to_windows_path("/".into()), Path::new("/"));
     }
 }

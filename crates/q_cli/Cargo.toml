@@ -15,8 +15,6 @@ default = []
 wayland = ["arboard/wayland-data-control"]
 
 [dependencies]
-amzn-codewhisperer-client.workspace = true
-amzn-codewhisperer-streaming-client.workspace = true
 anstream.workspace = true
 appkit-nsworkspace-bindings.workspace = true
 arboard = { version = "3.5.0", default-features = false }
@@ -24,7 +22,6 @@ async-trait.workspace = true
 base64.workspace = true
 bitflags.workspace = true
 bytes.workspace = true
-cfg-if.workspace = true
 clap.workspace = true
 clap_complete = "4.5.46"
 clap_complete_fig = "4.4.0"
@@ -43,7 +40,6 @@ fig_ipc.workspace = true
 fig_log.workspace = true
 fig_os_shim.workspace = true
 fig_proto.workspace = true
-fig_remote_ipc.workspace = true
 fig_request.workspace = true
 fig_settings.workspace = true
 fig_telemetry.workspace = true
@@ -55,7 +51,12 @@ glob.workspace = true
 globset.workspace = true
 indicatif.workspace = true
 indoc.workspace = true
+macos-utils = { path = "../macos-utils" }
 mimalloc.workspace = true
+nix.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSRunningApplication"] }
+objc2-foundation.workspace = true
 owo-colors = "4.2.0"
 parking_lot.workspace = true
 rand.workspace = true
@@ -68,33 +69,15 @@ sysinfo.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 time.workspace = true
-tokio-tungstenite.workspace = true
-tokio-util.workspace = true
 tokio.workspace = true
-tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 unicode-width.workspace = true
 url.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 which.workspace = true
 whoami.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-macos-utils = { path = "../macos-utils" }
-objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSRunningApplication"] }
-objc2-foundation.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-dbus = { path = "../dbus" }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58.0", features = ["Win32_System_Threading"] }
-winapi = { version = "0.3", features = ["consoleapi"] }
 
 [dev-dependencies]
 assert_cmd.workspace = true

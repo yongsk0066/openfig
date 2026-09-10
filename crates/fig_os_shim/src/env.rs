@@ -159,13 +159,6 @@ impl Env {
         self.get_os("CI").is_some() || self.get_os("Q_CI").is_some()
     }
 
-    /// Whether or not the current executable is run from an AppImage.
-    ///
-    /// See: https://docs.appimage.org/packaging-guide/environment-variables.html
-    pub fn in_appimage(&self) -> bool {
-        self.get_os("APPIMAGE").is_some()
-    }
-
     // Q-specific environment variable methods
     pub fn q_fake_is_remote(&self) -> bool {
         self.get_os("Q_FAKE_IS_REMOTE").is_some()
@@ -189,10 +182,6 @@ impl Env {
 
     pub fn q_cli_client_application(&self) -> Result<String, VarError> {
         self.get("Q_CLI_CLIENT_APPLICATION")
-    }
-
-    pub fn q_parent(&self) -> Result<String, VarError> {
-        self.get("Q_PARENT")
     }
 
     pub fn q_term(&self) -> Result<String, VarError> {
@@ -233,10 +222,6 @@ impl Env {
 
     pub fn q_custom_cert(&self) -> Result<String, VarError> {
         self.get("Q_CUSTOM_CERT")
-    }
-
-    pub fn has_q_parent(&self) -> bool {
-        self.q_parent().is_ok()
     }
 }
 
@@ -289,9 +274,6 @@ mod tests {
         let env = Env::from_slice(&[("AWS_EXECUTION_ENV", "CLOUDSHELL\n")]);
         assert!(env.in_cloudshell());
         assert!(!env.in_ssh());
-
-        let env = Env::from_slice(&[("APPIMAGE", "/tmp/.mount-asdf/usr")]);
-        assert!(env.in_appimage());
     }
 
     #[test]

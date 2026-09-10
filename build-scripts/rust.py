@@ -1,7 +1,6 @@
 from functools import cache
 from os import environ
 import platform
-import shutil
 from typing import Dict, List, Optional
 from util import info, isDarwin, isLinux, isMusl, run_cmd_output, warn, Variant
 from datetime import datetime, timezone
@@ -26,14 +25,6 @@ def build_datetime() -> str:
     build_time = datetime.now(timezone.utc).isoformat()
     info("build_time =", build_time)
     return build_time
-
-
-@cache
-def skip_fish_tests() -> bool:
-    skip_fish_tests = shutil.which("fish") is None
-    if skip_fish_tests:
-        warn("Skipping fish tests")
-    return skip_fish_tests
 
 
 @cache
@@ -75,8 +66,6 @@ def rust_env(release: bool, variant: Optional[Variant] = None, linker=None) -> D
 
     # Test related env vars:
     env["Q_TELEMETRY_CLIENT_ID"] = "ffffffff-ffff-ffff-ffff-ffffffffffff"
-    if skip_fish_tests():
-        env["AMAZON_Q_BUILD_SKIP_FISH_TESTS"] = "1"
 
     return env
 

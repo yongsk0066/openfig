@@ -16,7 +16,6 @@ use fig_integrations::install::{
     install,
 };
 use fig_os_shim::Env;
-use fig_util::system_info::in_cloudshell;
 use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
@@ -29,7 +28,6 @@ use super::user::{
 };
 use crate::util::choose;
 
-#[cfg_attr(windows, allow(unused_variables))]
 pub async fn install_cli(
     install_components: InstallComponents,
     no_confirm: bool,
@@ -38,7 +36,6 @@ pub async fn install_cli(
 ) -> Result<ExitCode> {
     let env = Env::new();
 
-    #[cfg(unix)]
     {
         use nix::unistd::geteuid;
         if geteuid().is_root() && !global {
@@ -111,32 +108,7 @@ pub async fn install_cli(
         warn!("Global install is not supported for shell integrations");
     }
 
-    if install_components.contains(InstallComponents::INPUT_METHOD) && !no_confirm && !global {
-        cfg_if::cfg_if! {
-            if #[cfg(target_os = "macos")] {
-                if !dialoguer::console::user_attended() {
-                    eyre::bail!("You must run with --no-confirm if unattended");
-                }
-
-                println!();
-                println!("To enable support for some terminals like Kitty, Alacritty, and Wezterm,");
-                println!("you must enable our Input Method integration.");
-                println!();
-                println!("To enable the integration, select \"yes\" below and then click Ok in the popup.");
-                println!();
-
-                match choose("Do you want to enable support for input method backed terminals?", &["Yes", "No"])? {
-                    Some(0) => {
-                        install(InstallComponents::INPUT_METHOD, &env).await?;
-                    }
-                    Some(_) => {}
-                    None => bail!("No option selected"),
-                }
-            }
-        }
-    }
-
-    if !fig_auth::is_logged_in().await && !in_cloudshell() && !global {
+    if !fig_auth::is_logged_in().await && !global {
         if !no_confirm {
             if !dialoguer::console::user_attended() {
                 eyre::bail!("You must run with --no-confirm if unattended");

@@ -6,7 +6,6 @@ use std::io::{
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use cfg_if::cfg_if;
 use clap::ValueEnum;
 use fig_os_shim::Env;
 use fig_util::{
@@ -111,7 +110,6 @@ impl ShellExt for Shell {
         for file in match self {
             Shell::Bash => [".bashrc", ".bash_profile", ".bash_login", ".profile"].iter(),
             Shell::Zsh => [".zshrc", ".zprofile"].iter(),
-            Shell::Fish | Shell::Nu => [].iter(),
         } {
             for when in &When::all() {
                 let path = directories::fig_data_dir()?
@@ -169,22 +167,6 @@ impl ShellExt for Shell {
                     }) as Box<dyn ShellIntegration>
                 })
                 .collect(),
-            Shell::Fish => {
-                let fish_config_dir = config_dir.join("conf.d");
-                vec![
-                    Box::new(ShellScriptShellIntegration {
-                        when: When::Pre,
-                        shell: *self,
-                        path: fish_config_dir.join("00_fig_pre.fish"),
-                    }),
-                    Box::new(ShellScriptShellIntegration {
-                        when: When::Post,
-                        shell: *self,
-                        path: fish_config_dir.join("99_fig_post.fish"),
-                    }),
-                ]
-            },
-            Shell::Nu => vec![],
         };
 
         Ok(integrations)
@@ -192,8 +174,6 @@ impl ShellExt for Shell {
 
     fn get_fig_integration_source(&self, when: &When) -> String {
         let script = match (self, when) {
-            (Shell::Fish, When::Pre) => include_str!("scripts/pre.fish"),
-            (Shell::Fish, When::Post) => include_str!("scripts/post.fish"),
             (Shell::Zsh, When::Pre) => include_str!("scripts/pre.sh"),
             (Shell::Zsh, When::Post) => include_str!("scripts/post.zsh"),
             (Shell::Bash, When::Pre) => {
@@ -218,8 +198,6 @@ impl ShellExt for Shell {
                     include_str!("scripts/post.bash")
                 )
             },
-            (Shell::Nu, When::Pre) => include_str!("scripts/pre.nu"),
-            (Shell::Nu, When::Post) => include_str!("scripts/post.nu"),
         };
 
         script
@@ -280,7 +258,6 @@ impl ShellScriptShellIntegration {
         FileIntegration {
             path: self.path.clone(),
             contents: self.get_contents(),
-            #[cfg(unix)]
             mode: None,
         }
     }
@@ -289,45 +266,18 @@ impl ShellScriptShellIntegration {
         self.path.file_name().and_then(|s| s.to_str())
     }
 
-    #[allow(clippy::needless_return)]
     fn get_contents(&self) -> String {
         let Self { shell, when, path } = self;
         let rcfile = match path.file_name().and_then(|x| x.to_str()) {
             Some(name) => format!(" --rcfile {}", get_prefix(name)),
             None => "".into(),
         };
-        cfg_if!(
-            if #[cfg(target_os = "macos")] {
-                return match self.shell {
-                    // Check if ~/.local/bin/{CLI_BINARY_NAME} is executable before eval
-                    Shell::Bash | Shell::Zsh => format!("[ -x ~/.local/bin/{CLI_BINARY_NAME} ] && eval \"$(~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile})\""),
-                    Shell::Fish => format!("test -x ~/.local/bin/{CLI_BINARY_NAME}; and eval (~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile} | string split0)"),
-                    Shell::Nu => "".into(),
-                }
-            } else {
-                let add_to_path_line = match self.shell {
-                    Shell::Bash | Shell::Zsh => indoc::indoc! {r#"
-                        _Q_LOCAL_BIN="$HOME/.local/bin"
-                        [[ ":$PATH:" != *":$_Q_LOCAL_BIN:"* ]] && PATH="${PATH:+"$PATH:"}$_Q_LOCAL_BIN"
-                        unset _Q_LOCAL_BIN
-                    "#},
-                    Shell::Fish => "contains $HOME/.local/bin $PATH; or set -a PATH $HOME/.local/bin",
-                    Shell::Nu => "",
-                };
-
-                let source_line = match self.shell {
-                    Shell::Fish => format!("command -qv {CLI_BINARY_NAME}; and eval ({CLI_BINARY_NAME} init {shell} {when}{rcfile} | string split0)"),
-                    Shell::Bash | Shell::Zsh => {
-                        // Check that the current shell is bash
-                        let bash_pre = if self.shell.is_bash() { "[ -n \"$BASH_VERSION\" ] && " } else { "" };
-                        format!("{bash_pre}command -v {CLI_BINARY_NAME} >/dev/null 2>&1 && eval \"$({CLI_BINARY_NAME} init {shell} {when}{rcfile})\"")
-                    }
-                    Shell::Nu => "".into(),
-                };
-
-                return format!("{add_to_path_line}\n{source_line}\n");
-            }
-        );
+        match self.shell {
+            // Check if ~/.local/bin/{CLI_BINARY_NAME} is executable before eval
+            Shell::Bash | Shell::Zsh => format!(
+                "[ -x ~/.local/bin/{CLI_BINARY_NAME} ] && eval \"$(~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile})\""
+            ),
+        }
     }
 }
 
@@ -433,16 +383,10 @@ impl DotfileShellIntegration {
     fn legacy_regexes(&self, when: When) -> Result<RegexSet> {
         let shell = self.shell;
 
-        let eval_line = match shell {
-            Shell::Fish => format!("eval ({CLI_BINARY_NAME} init {shell} {when} | string split0)"),
-            _ => format!("eval \"$({CLI_BINARY_NAME} init {shell} {when})\""),
-        };
+        let eval_line = format!("eval \"$({CLI_BINARY_NAME} init {shell} {when})\"");
 
         let old_eval_source = match when {
-            When::Pre => match self.shell {
-                Shell::Fish => format!("set -Ua fish_user_paths $HOME/.local/bin\n{eval_line}"),
-                _ => format!("export PATH=\"${{PATH}}:${{HOME}}/.local/bin\"\n{eval_line}"),
-            },
+            When::Pre => format!("export PATH=\"${{PATH}}:${{HOME}}/.local/bin\"\n{eval_line}"),
             When::Post => eval_line,
         };
 
@@ -489,10 +433,7 @@ impl DotfileShellIntegration {
         let integration_path = self.script_integration(when)?.path;
         let path = format!("\"$HOME/{}\"", integration_path.strip_prefix(home)?.display());
 
-        match self.shell {
-            Shell::Fish => Ok(format!("if test -f {path}; . {path}; end")),
-            _ => Ok(format!("[[ -f {path} ]] && . {path}")),
-        }
+        Ok(format!("[[ -f {path} ]] && . {path}"))
     }
 
     fn legacy_source_text_3(&self, when: When) -> Result<String> {
@@ -503,10 +444,7 @@ impl DotfileShellIntegration {
             integration_path.strip_prefix(home)?.display()
         ));
 
-        match self.shell {
-            Shell::Fish => Ok(format!(r"test\s*\-f\s*{path};\s*and\s+builtin\s+source\s+{path}")),
-            _ => Ok(format!(r"\[\[\s*\-f\s*{path}\s*\]\]\s*&&\s*builtin\s+source\s*{path}")),
-        }
+        Ok(format!(r"\[\[\s*\-f\s*{path}\s*\]\]\s*&&\s*builtin\s+source\s*{path}"))
     }
 
     fn source_text(&self, when: When) -> Result<String> {
@@ -514,10 +452,7 @@ impl DotfileShellIntegration {
         let integration_path = self.script_integration(when)?.path;
         let path = format!("\"${{HOME}}/{}\"", integration_path.strip_prefix(home)?.display());
 
-        match self.shell {
-            Shell::Fish => Ok(format!("test -f {path}; and builtin source {path}")),
-            _ => Ok(format!("[[ -f {path} ]] && builtin source {path}")),
-        }
+        Ok(format!("[[ -f {path} ]] && builtin source {path}"))
     }
 
     fn source_regex(&self, when: When, constrain_position: bool) -> Result<Regex> {
@@ -918,35 +853,5 @@ mod test {
             "split with shebang and no linefeed"
         );
         assert_eq!(("", contents), split_shebang(without_shebang), "split with no shebang");
-    }
-
-    #[cfg(target_os = "linux")]
-    fn all_dotfile_shell_integrations() -> Vec<ShellScriptShellIntegration> {
-        Shell::all()
-            .iter()
-            .flat_map(|shell| shell.get_script_integrations().unwrap())
-            .collect()
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn dotfile_shell_integrations_snapshot() {
-        for integration in all_dotfile_shell_integrations() {
-            let integration_name = format!(
-                "{} {}",
-                integration.describe(),
-                integration.path.file_name().unwrap().to_str().unwrap()
-            )
-            .replace(' ', "_");
-            insta::assert_snapshot!(integration_name, integration.get_contents());
-        }
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn dotfile_shell_integrations_shellcheck() {
-        for integration in all_dotfile_shell_integrations() {
-            run_shellcheck(integration.get_contents());
-        }
     }
 }

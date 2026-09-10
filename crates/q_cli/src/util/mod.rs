@@ -1,6 +1,5 @@
 mod cli_context;
 pub mod desktop;
-pub mod pid_file;
 mod region_check;
 pub mod spinner;
 
@@ -23,7 +22,6 @@ use std::time::Duration;
 
 use anstream::println;
 use anstream::stream::IsTerminal;
-use cfg_if::cfg_if;
 pub use cli_context::CliContext;
 use crossterm::style::Stylize;
 use desktop::desktop_app_running;
@@ -108,61 +106,23 @@ where
 }
 
 pub fn app_path_from_bundle_id(bundle_id: impl AsRef<OsStr>) -> Option<String> {
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            let installed_apps = std::process::Command::new("mdfind")
-                .arg("kMDItemCFBundleIdentifier")
-                .arg("=")
-                .arg(bundle_id)
-                .output()
-                .ok()?;
+    let installed_apps = std::process::Command::new("mdfind")
+        .arg("kMDItemCFBundleIdentifier")
+        .arg("=")
+        .arg(bundle_id)
+        .output()
+        .ok()?;
 
-            let path = String::from_utf8_lossy(&installed_apps.stdout);
-            Some(path.trim().split('\n').next()?.into())
-        } else {
-            let _bundle_id = bundle_id;
-            None
-        }
-    }
+    let path = String::from_utf8_lossy(&installed_apps.stdout);
+    Some(path.trim().split('\n').next()?.into())
 }
 
-#[cfg(target_os = "linux")]
-pub fn qchat_path() -> Result<PathBuf> {
-    use fig_os_shim::Context;
-
-    let ctx = Context::new();
-    if let Some(path) = ctx.process_info().current_pid().exe() {
-        // This is required for deb installations.
-        if path.starts_with("/usr/bin") {
-            return Ok(PathBuf::from("/usr/bin").join(CHAT_BINARY_NAME));
-        }
-    }
-
-    if let Ok(local_bin_path) = home_local_bin() {
-        let local_bin_path = local_bin_path.join(CHAT_BINARY_NAME);
-        if local_bin_path.exists() {
-            return Ok(local_bin_path);
-        }
-    }
-
-    Ok(PathBuf::from(CHAT_BINARY_NAME))
-}
-
-#[cfg(target_os = "macos")]
 pub fn qchat_path() -> Result<PathBuf> {
     use macos_utils::bundle::get_bundle_path_for_executable;
 
     Ok(get_bundle_path_for_executable(CHAT_BINARY_NAME).unwrap_or(home_local_bin()?.join(CHAT_BINARY_NAME)))
 }
 pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
-    if fig_util::system_info::in_cloudshell() {
-        bail!("Restarting {PRODUCT_NAME} is not supported in CloudShell");
-    }
-
-    if fig_util::system_info::is_remote() {
-        bail!("Please restart {PRODUCT_NAME} from your host machine");
-    }
-
     if !desktop_app_running() {
         if verbose {
             println!("{PRODUCT_NAME} app is not running");
@@ -178,33 +138,20 @@ pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
         tokio::time::sleep(Duration::from_millis(500)).await;
         let second_try = quit_command().await;
         if second_try.is_err() {
-            cfg_if! {
-                if #[cfg(target_os = "linux")] {
-                    use fig_util::APP_PROCESS_NAME;
-                    if let Ok(output) = Command::new("killall").arg(APP_PROCESS_NAME).output() {
-                        if output.status.success() {
-                            return Ok(ExitCode::SUCCESS);
-                        }
+            if let Ok(info) = get_app_info() {
+                let pid = Regex::new(r"pid = (\S+)")
+                    .unwrap()
+                    .captures(&info)
+                    .and_then(|c| c.get(1));
+                if let Some(pid) = pid {
+                    let success = Command::new("kill")
+                        .arg("-KILL")
+                        .arg(pid.as_str())
+                        .status()
+                        .map(|res| res.success());
+                    if let Ok(true) = success {
+                        return Ok(ExitCode::SUCCESS);
                     }
-                } else if #[cfg(target_os = "macos")] {
-                    if let Ok(info) = get_app_info() {
-                        let pid = Regex::new(r"pid = (\S+)")
-                            .unwrap()
-                            .captures(&info)
-                            .and_then(|c| c.get(1));
-                        if let Some(pid) = pid {
-                            let success = Command::new("kill")
-                                .arg("-KILL")
-                                .arg(pid.as_str())
-                                .status()
-                                .map(|res| res.success());
-                            if let Ok(true) = success {
-                                return Ok(ExitCode::SUCCESS);
-                            }
-                        }
-                    }
-                } else if #[cfg(target_os = "windows")] {
-                    // TODO(chay): Add windows behavior here
                 }
             }
             if verbose {
@@ -331,7 +278,6 @@ pub async fn assert_logged_in() -> Result<(), Error> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 pub async fn is_brew_reinstall() -> bool {
     let regex = regex::bytes::Regex::new(r"brew(\.\w+)?\s+(upgrade|reinstall|install)").unwrap();
 
@@ -364,11 +310,7 @@ mod tests {
 
     #[test]
     fn exe_path() {
-        #[cfg(unix)]
         assert!(is_executable_in_path("cargo"));
-
-        #[cfg(windows)]
-        assert!(is_executable_in_path("cargo.exe"));
     }
 
     #[test]
@@ -389,14 +331,7 @@ mod tests {
 
         let app_process_name = OsString::from(APP_PROCESS_NAME);
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));
-        cfg_if! {
-            if #[cfg(windows)] {
-                let mut processes = system.processes_by_name(&app_process_name);
-                assert!(processes.next().is_some());
-            } else {
-                let mut processes = system.processes_by_exact_name(&app_process_name);
-                assert!(processes.next().is_some());
-            }
-        }
+        let mut processes = system.processes_by_exact_name(&app_process_name);
+        assert!(processes.next().is_some());
     }
 }

@@ -160,14 +160,7 @@ struct CwResponse {
 }
 
 async fn generate_response(question: &str, n: i32) -> Result<CwResponse> {
-    let os = match std::env::consts::OS {
-        "macos" => "macOS",
-        "linux" => fig_util::system_info::linux::get_os_release()
-            .and_then(|a| a.name.as_deref())
-            .unwrap_or("Linux"),
-        "windows" => "Windows",
-        other => other,
-    };
+    let os = "macOS";
 
     let prompt_comment = format!(
         "# A collection of {os} shell one-liners that can be run interactively, they all must only be one line and line up with the comment above them"
@@ -282,7 +275,6 @@ fn highlighter(s: &str) -> String {
         .into_owned()
 }
 
-#[cfg(unix)]
 fn clear_stdin() -> Result<()> {
     use std::io::Read;
     use std::os::fd::AsRawFd;
@@ -305,7 +297,6 @@ fn clear_stdin() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 fn change_blocking_fd(fd: std::os::unix::io::RawFd, is_blocking: bool) -> Result<()> {
     use nix::fcntl::*;
 
@@ -425,7 +416,6 @@ impl TranslateArgs {
 
                 // Prevents any buffered "enter" or "space" key presses from
                 // automatically executing the command.
-                #[cfg(unix)]
                 clear_stdin()?;
 
                 match &res.completions[..] {

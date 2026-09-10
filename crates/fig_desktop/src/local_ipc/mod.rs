@@ -111,7 +111,6 @@ pub async fn start_local_ipc(
             std::fs::create_dir_all(parent).context("Failed creating socket path")?;
         }
 
-        #[cfg(unix)]
         {
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
@@ -169,7 +168,6 @@ async fn handle_local_ipc<Ctx>(
                             Devtools,
                             Diagnostics,
                             DumpState,
-                            InputMethod,
                             ListTerminalIntegrations,
                             LogLevel,
                             Login,
@@ -202,8 +200,6 @@ async fn handle_local_ipc<Ctx>(
                                 &webview_notifications_state,
                                 &platform_state,
                             ),
-                            ConnectToIbus(_) => commands::connect_to_ibus(proxy.clone(), &platform_state).await,
-                            BundleMetadata(_) => commands::bundle_metadata(&ctx.context_arc()).await,
                             Devtools(command) => {
                                 let window_id = match command.window() {
                                     fig_proto::local::devtools_command::Window::DevtoolsAutocomplete => AUTOCOMPLETE_ID,
@@ -226,7 +222,8 @@ async fn handle_local_ipc<Ctx>(
                             | RestartSettingsListener(_)
                             | RunInstallScript(_)
                             | ResetCache(_)
-                            | InputMethod(_) => {
+                            | ConnectToIbus(_)
+                            | BundleMetadata(_) => {
                                 debug!(?command, "Unhandled command");
                                 Err(LocalResponse::Error {
                                     code: None,
@@ -279,8 +276,6 @@ async fn handle_local_ipc<Ctx>(
                     Init,
                     IntegrationReady,
                     InterceptedKey,
-                    KeyboardFocusChanged,
-                    OpenedSshConnection,
                     PostExec,
                     PreExec,
                     Prompt,
@@ -294,21 +289,11 @@ async fn handle_local_ipc<Ctx>(
                     Some(FocusedWindowData(request)) => {
                         hooks::focused_window_data(request, &platform_state, &proxy).await
                     },
-                    Some(KeyboardFocusChanged(_)) => hooks::focus_change(&proxy).await,
                     Some(Event(event)) => hooks::event(event, &proxy).await,
                     Some(ClearAutocompleteCache(event)) => hooks::clear_autocomplete_cache(event, &proxy).await,
                     Some(
-                        Init(_)
-                        | PostExec(_)
-                        | TmuxPaneChanged(_)
-                        | OpenedSshConnection(_)
-                        | Callback(_)
-                        | IntegrationReady(_)
-                        | Hide(_)
-                        | PreExec(_)
-                        | InterceptedKey(_)
-                        | EditBuffer(_)
-                        | Prompt(_),
+                        Init(_) | PostExec(_) | TmuxPaneChanged(_) | Callback(_) | IntegrationReady(_) | Hide(_)
+                        | PreExec(_) | InterceptedKey(_) | EditBuffer(_) | Prompt(_),
                     ) => {
                         warn!("received legacy hook `{}`", hook.descriptor().name());
                         Ok(())

@@ -33,18 +33,20 @@ default = []
 custom-protocol = []
 
 [dependencies]
+accessibility-sys = { path = "../macos-utils/accessibility-master/accessibility-sys", version = "0.1.3" }
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true
 camino.workspace = true
-cfg-if.workspace = true
 clap.workspace = true
+cocoa.workspace = true
+core-foundation.workspace = true
+core-graphics.workspace = true
 dashmap.workspace = true
-fig_api_client.workspace = true
 fig_auth.workspace = true
 fig_desktop_api.workspace = true
-fig_integrations = { workspace = true, features = ["dispatch"] }
+fig_integrations.workspace = true
 fig_ipc.workspace = true
 fig_log.workspace = true
 fig_os_shim.workspace = true
@@ -61,10 +63,17 @@ http.workspace = true
 image = "0.25.6"
 infer = "0.19.0"
 keyboard-types = "0.8.0"
+libc.workspace = true
+macos-utils = { path = "../macos-utils" }
 mime = "0.3.17"
 moka = { version = "0.12.1", features = ["future"] }
 muda = { version = "0.15.3", default-features = false }
+nix.workspace = true
 notify = "8.0.0"
+objc.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSApplication"] }
+objc2-foundation.workspace = true
 parking_lot = { workspace = true, features = ["serde"] }
 paste = "1.0.11"
 percent-encoding.workspace = true
@@ -76,6 +85,7 @@ serde.workspace = true
 serde_json.workspace = true
 shellexpand.workspace = true
 sysinfo.workspace = true
+system-configuration = "0.6.0"
 tao = { version = "0.31.1", features = ["serde"] }
 tempfile.workspace = true
 time.workspace = true
@@ -96,47 +106,6 @@ wry = { version = "0.48.1", default-features = false, features = [
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
-
-[target.'cfg(target_os = "windows")'.dependencies.windows]
-version = "0.58.0"
-features = [
-    "implement",
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_Networking_WinSock",
-    "Win32_Security",
-    "Win32_Storage_FileSystem",
-    "Win32_System_Com",
-    "Win32_System_Console",
-    "Win32_System_Ole",
-    "Win32_System_Threading",
-    "Win32_System_ProcessStatus",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Accessibility",
-]
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-dbus = { path = "../dbus" }
-freedesktop-icons = "0.2.2"
-gtk = "0.18"
-x11rb = "0.13.0"
-zbus = { path = "../zbus" }
-
-[target.'cfg(target_os="macos")'.dependencies]
-accessibility-sys = { path = "../macos-utils/accessibility-master/accessibility-sys", version = "0.1.3" }
-cocoa.workspace = true
-core-foundation.workspace = true
-core-graphics.workspace = true
-libc.workspace = true
-macos-utils = { path = "../macos-utils" }
-objc.workspace = true
-objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication"] }
-objc2-foundation.workspace = true
-system-configuration = "0.6.0"
 
 [build-dependencies]
 image = "0.25.6"

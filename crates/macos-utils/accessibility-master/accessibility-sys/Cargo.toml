@@ -9,7 +9,7 @@ repository = "https://github.com/eiz/accessibility"
 description = "Bindings for macOS Accessibility services"
 publish = false
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[dependencies]
 core-foundation-sys.workspace = true
 core-foundation.workspace = true
 core-graphics.workspace = true

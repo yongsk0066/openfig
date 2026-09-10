@@ -4,7 +4,6 @@ use anstream::println;
 use clap::{
     ArgGroup,
     Args,
-    Parser,
     Subcommand,
     ValueEnum,
 };
@@ -18,17 +17,11 @@ use fig_ipc::local::open_ui_element;
 use fig_os_shim::Os;
 use fig_proto::local::UiElement;
 use fig_settings::JsonStore;
-use fig_util::{
-    CLI_BINARY_NAME,
-    directories,
-    manifest,
-    system_info,
-};
+use fig_util::directories;
 use globset::Glob;
 use serde_json::json;
 
 use super::OutputFormat;
-use crate::cli::Cli;
 use crate::util::desktop::{
     LaunchArgs,
     launch_fig_desktop,
@@ -199,11 +192,6 @@ impl SettingsArgs {
                         return Err(eyre::eyre!(
                             "the argument '--delete' requires a <KEY>\n Usage: q settings --delete <KEY>"
                         ));
-                    }
-
-                    if manifest::is_minimal() || system_info::is_remote() {
-                        Cli::parse_from([CLI_BINARY_NAME, "settings", "--help"]);
-                        return Ok(ExitCode::SUCCESS);
                     }
 
                     launch_fig_desktop(LaunchArgs {

@@ -41,7 +41,6 @@ use crossterm::style::Stylize;
 use eyre::{
     Result,
     WrapErr,
-    bail,
 };
 use feed::Feed;
 use fig_auth::builder_id::{
@@ -63,10 +62,7 @@ use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
     directories,
-    manifest,
-    system_info,
 };
-use internal::InternalSubcommand;
 use serde::Serialize;
 use tokio::signal::ctrl_c;
 use tracing::{
@@ -309,7 +305,6 @@ impl Cli {
             log_file_path: match self.subcommand {
                 Some(CliRootCommands::Chat { .. }) => Some("chat.log".to_owned()),
                 Some(CliRootCommands::Translate(..)) => Some("translate.log".to_owned()),
-                Some(CliRootCommands::Internal(InternalSubcommand::Multiplexer(_))) => Some("mux.log".to_owned()),
                 _ => match fig_log::get_log_level_max() >= Level::DEBUG {
                     true => Some("cli.log".to_owned()),
                     false => None,
@@ -350,17 +345,17 @@ impl Cli {
                 CliRootCommands::Issue(args) => args.execute().await,
                 CliRootCommands::Completion(args) => args.execute(),
                 CliRootCommands::Internal(internal_subcommand) => internal_subcommand.execute().await,
-                CliRootCommands::Launch => launch_dashboard(false).await,
+                CliRootCommands::Launch => launch_dashboard().await,
                 CliRootCommands::Quit => crate::util::quit_fig(true).await,
                 CliRootCommands::Restart { .. } => {
                     app::restart_fig().await?;
-                    launch_dashboard(false).await
+                    launch_dashboard().await
                 },
                 CliRootCommands::Integrations(subcommand) => subcommand.execute().await,
                 CliRootCommands::Translate(args) => args.execute().await,
                 CliRootCommands::Telemetry(subcommand) => subcommand.execute().await,
                 CliRootCommands::Version { changelog } => Self::print_version(changelog),
-                CliRootCommands::Dashboard => launch_dashboard(false).await,
+                CliRootCommands::Dashboard => launch_dashboard().await,
                 CliRootCommands::Chat { args } => {
                     if args.iter().any(|arg| ["--help", "-h"].contains(&arg.as_str())) {
                         return Self::execute_chat("chat", Some(vec!["--help".to_owned()]), false).await;
@@ -561,16 +556,7 @@ impl Cli {
     }
 }
 
-async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
-    if manifest::is_minimal() || system_info::is_remote() {
-        if help_fallback {
-            Cli::command().print_help()?;
-            return Ok(ExitCode::SUCCESS);
-        } else {
-            bail!("Launching the dashboard is not supported in minimal mode");
-        }
-    }
-
+async fn launch_dashboard() -> Result<ExitCode> {
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
         open_dashboard: true,
@@ -593,6 +579,8 @@ async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
 
 #[cfg(test)]
 mod test {
+    use internal::InternalSubcommand;
+
     use super::*;
 
     #[test]
@@ -647,31 +635,8 @@ mod test {
         });
     }
 
-    /// This test validates that the internal input method installation command maintains the same
-    /// CLI facing definition
-    ///
-    /// If this changes, you must also change how it is called from within
-    /// fig_integrations::input_method
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn test_input_method_installation() {
-        use internal::InternalSubcommand;
-        assert_parse!(
-            [
-                "_",
-                "attempt-to-finish-input-method-installation",
-                "/path/to/bundle.app"
-            ],
-            CliRootCommands::Internal(InternalSubcommand::AttemptToFinishInputMethodInstallation {
-                bundle_path: Some(std::path::PathBuf::from("/path/to/bundle.app"))
-            })
-        );
-    }
-
     #[test]
     fn test_inline_shell_completion() {
-        use internal::InternalSubcommand;
-
         assert_parse!(
             ["_", "inline-shell-completion", "--buffer", ""],
             CliRootCommands::Internal(InternalSubcommand::InlineShellCompletion { buffer: "".to_string() })

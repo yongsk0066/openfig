@@ -31,7 +31,6 @@ use cocoa::base::{
 };
 use core_graphics::display::CGRect;
 use core_graphics::window::CGWindowID;
-use fig_integrations::input_method::InputMethod;
 use fig_proto::fig::{
     AccessibilityChangeNotification,
     Notification,
@@ -71,7 +70,6 @@ use objc::{
     sel_impl,
 };
 use objc2_foundation::{
-    NSDictionary,
     NSOperationQueue,
     ns_string,
 };
@@ -487,7 +485,6 @@ impl PlatformStateImpl {
                 let level = window.get_level();
 
                 if level == Some(0) {
-                    // Checking if IME is installed is async :(
                     let enabled_proxy = self.proxy.clone();
                     tokio::spawn(async move {
                         let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
@@ -497,18 +494,7 @@ impl PlatformStateImpl {
                             )
                         });
 
-                        let terminal_cursor_backing_installed = match current_terminal {
-                            Some(terminal) => {
-                                if terminal.supports_macos_input_method() {
-                                    let input_method: InputMethod = Default::default();
-                                    input_method.is_enabled().unwrap_or(false)
-                                        && input_method.enabled_for_terminal_instance(&terminal, window.pid)
-                                } else {
-                                    true
-                                }
-                            },
-                            None => false,
-                        };
+                        let terminal_cursor_backing_installed = current_terminal.is_some();
 
                         let is_enabled = !is_terminal_disabled
                             && terminal_cursor_backing_installed
@@ -677,57 +663,41 @@ impl PlatformStateImpl {
         let active_window = guard.as_mut().context("No active window")?;
         let current_terminal = Terminal::from_bundle_id(active_window.bundle_id());
 
-        let supports_ime = current_terminal
-            .clone()
-            .is_some_and(|t| t.supports_macos_input_method());
-
         let is_xterm = current_terminal.is_some_and(|t| t.is_xterm());
 
-        // let supports_accessibility = current_terminal
-        // .map(|t| t.supports_macos_accessibility())
-        // .unwrap_or(false);
-
-        if !is_xterm && supports_ime {
-            tracing::debug!("Sending notif com.amazon.codewhisperer.edit_buffer_updated");
-            NotificationCenter::distributed_center().post_notification(
-                ns_string!("com.amazon.codewhisperer.edit_buffer_updated"),
-                &NSDictionary::new(),
-            );
+        let caret = if is_xterm {
+            active_window
+                .get_x_term_cursor_elem()
+                .and_then(|c| c.frame().ok())
+                .map(Rect::from)
         } else {
-            let caret = if is_xterm {
-                active_window
-                    .get_x_term_cursor_elem()
-                    .and_then(|c| c.frame().ok())
-                    .map(Rect::from)
-            } else {
-                self.get_cursor_position()
-            };
+            self.get_cursor_position()
+        };
 
-            let caret = caret.context("Failed to get cursor position")?;
-            debug!("Sending caret update {:?}", caret);
+        let caret = caret.context("Failed to get cursor position")?;
+        debug!("Sending caret update {:?}", caret);
 
-            UNMANAGED
-                .event_sender
-                .read()
-                .unwrap()
-                .clone()
-                .unwrap()
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::UpdateWindowGeometry {
-                        position: Some(WindowPosition::RelativeToCaret {
-                            caret_position: caret.position,
-                            caret_size: caret.size,
-                            origin: Origin::TopLeft,
-                        }),
-                        size: None,
-                        anchor: None,
-                        tx: None,
-                        dry_run: false,
-                    },
-                })
-                .ok();
-        }
+        UNMANAGED
+            .event_sender
+            .read()
+            .unwrap()
+            .clone()
+            .unwrap()
+            .send_event(Event::WindowEvent {
+                window_id: AUTOCOMPLETE_ID,
+                window_event: WindowEvent::UpdateWindowGeometry {
+                    position: Some(WindowPosition::RelativeToCaret {
+                        caret_position: caret.position,
+                        caret_size: caret.size,
+                        origin: Origin::TopLeft,
+                    }),
+                    size: None,
+                    anchor: None,
+                    tx: None,
+                    dry_run: false,
+                },
+            })
+            .ok();
 
         Ok(())
     }

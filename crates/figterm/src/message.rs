@@ -51,7 +51,6 @@ use crate::{
     EXPECTED_BUFFER,
     INSERT_ON_NEW_CMD,
     INSERTION_LOCKED_AT,
-    MainLoopEvent,
     SHELL_ALIAS,
     SHELL_ENVIRONMENT_VARIABLES,
     inline,
@@ -81,15 +80,7 @@ fn working_directory(path: Option<&str>, shell_state: &ShellState) -> PathBuf {
                 .and_then(map_dir)
         })
         .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| {
-            cfg_if::cfg_if! {
-                if #[cfg(windows)] {
-                    PathBuf::from("C:\\")
-                } else if #[cfg(unix)] {
-                    PathBuf::from("/")
-                }
-            }
-        })
+        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Path>) -> Command {
@@ -110,12 +101,8 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
             .map_or_else(|_| Command::new(executable.as_ref()), Command::new)
     };
 
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(windows::Win32::System::Threading::DETACHED_PROCESS.0);
-
     cmd.current_dir(working_directory);
 
-    #[cfg(unix)]
     {
         let pre_exec_fn = || {
             // Remove controlling terminal.
@@ -153,7 +140,6 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
 /// Process the inner figterm request enum, shared between local and remote
 pub async fn process_figterm_request(
     figterm_request: FigtermRequest,
-    main_loop_tx: Sender<MainLoopEvent>,
     term: &Term<EventHandler>,
     pty_master: &mut Box<dyn AsyncMasterPty + Send + Sync>,
     key_interceptor: &mut KeyInterceptor,
@@ -254,7 +240,6 @@ pub async fn process_figterm_request(
 
             let response = FigtermResponse::Diagnostics(figterm::DiagnosticsResponse {
                 shell_context: Some(shell_state_to_context(term.shell_state())),
-                fish_suggestion_style: term.shell_state().fish_suggestion_color.as_ref().map(map_style),
                 zsh_autosuggestion_style: term.shell_state().zsh_autosuggestion_color.as_ref().map(map_style),
                 edit_buffer,
                 cursor_position,
@@ -276,15 +261,6 @@ pub async fn process_figterm_request(
             }
             Ok(None)
         },
-        FigtermRequest::NotifySshSessionStarted(notification) => {
-            main_loop_tx
-                .send(MainLoopEvent::PromptSSH {
-                    uuid: notification.uuid,
-                    remote_host: notification.remote_host,
-                })
-                .ok();
-            Ok(None)
-        },
         FigtermRequest::InlineShellCompletion(_) => anyhow::bail!("InlineShellCompletion is not supported over remote"),
         FigtermRequest::InlineShellCompletionAccept(_) => {
             anyhow::bail!("InlineShellCompletionAccept is not supported over remote")
@@ -300,7 +276,6 @@ pub async fn process_figterm_request(
 #[allow(clippy::too_many_arguments)]
 pub async fn process_figterm_message(
     figterm_request_message: FigtermRequestMessage,
-    main_loop_tx: Sender<MainLoopEvent>,
     response_tx: Sender<FigtermResponseMessage>,
     term: &Term<EventHandler>,
     history_sender: &HistorySender,
@@ -329,19 +304,17 @@ pub async fn process_figterm_message(
                 Err(err) => error!(%err, "Failed to parse telemetry event"),
             }
         },
-        Some(request) => {
-            match process_figterm_request(request, main_loop_tx, term, pty_master, key_interceptor).await {
-                Ok(Some(response)) => {
-                    let response_message = FigtermResponseMessage {
-                        response: Some(response),
-                    };
-                    if let Err(err) = response_tx.send_async(response_message).await {
-                        error!(%err, "Failed sending request response");
-                    }
-                },
-                Ok(None) => {},
-                Err(err) => error!(%err, "Failed to process figterm message"),
-            }
+        Some(request) => match process_figterm_request(request, term, pty_master, key_interceptor).await {
+            Ok(Some(response)) => {
+                let response_message = FigtermResponseMessage {
+                    response: Some(response),
+                };
+                if let Err(err) = response_tx.send_async(response_message).await {
+                    error!(%err, "Failed sending request response");
+                }
+            },
+            Ok(None) => {},
+            Err(err) => error!(%err, "Failed to process figterm message"),
         },
         None => warn!("Qterm message with no request"),
     }
@@ -374,7 +347,6 @@ async fn send_figterm_response_hostbound(
 
 pub async fn process_remote_message(
     clientbound_message: Clientbound,
-    main_loop_tx: Sender<MainLoopEvent>,
     response_tx: Sender<Hostbound>,
     term: &Term<EventHandler>,
     pty_master: &mut Box<dyn AsyncMasterPty + Send + Sync>,
@@ -398,14 +370,8 @@ pub async fn process_remote_message(
             match request.request {
                 Some(Request::InsertText(request)) => {
                     send_figterm_response_hostbound(
-                        process_figterm_request(
-                            FigtermRequest::InsertText(request),
-                            main_loop_tx,
-                            term,
-                            pty_master,
-                            key_interceptor,
-                        )
-                        .await?,
+                        process_figterm_request(FigtermRequest::InsertText(request), term, pty_master, key_interceptor)
+                            .await?,
                         nonce,
                         &response_tx,
                     )
@@ -413,14 +379,8 @@ pub async fn process_remote_message(
                 },
                 Some(Request::Intercept(request)) => {
                     send_figterm_response_hostbound(
-                        process_figterm_request(
-                            FigtermRequest::Intercept(request),
-                            main_loop_tx,
-                            term,
-                            pty_master,
-                            key_interceptor,
-                        )
-                        .await?,
+                        process_figterm_request(FigtermRequest::Intercept(request), term, pty_master, key_interceptor)
+                            .await?,
                         nonce,
                         &response_tx,
                     )
@@ -430,7 +390,6 @@ pub async fn process_remote_message(
                     send_figterm_response_hostbound(
                         process_figterm_request(
                             FigtermRequest::Diagnostics(request),
-                            main_loop_tx,
                             term,
                             pty_master,
                             key_interceptor,
@@ -445,7 +404,6 @@ pub async fn process_remote_message(
                     send_figterm_response_hostbound(
                         process_figterm_request(
                             FigtermRequest::InsertOnNewCmd(request),
-                            main_loop_tx,
                             term,
                             pty_master,
                             key_interceptor,

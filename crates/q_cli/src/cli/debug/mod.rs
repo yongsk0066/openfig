@@ -49,7 +49,6 @@ use fig_util::{
     Shell,
     directories,
 };
-use owo_colors::OwoColorize;
 use tempfile::{
     NamedTempFile,
     TempDir,
@@ -64,25 +63,6 @@ use crate::util::{
     glob_dir,
     quit_fig,
 };
-
-#[derive(Debug, ValueEnum, Clone, PartialEq, Eq)]
-pub enum Build {
-    Production,
-    #[value(alias = "staging")]
-    Beta,
-    #[value(hide = true, alias = "dev")]
-    Develop,
-}
-
-impl std::fmt::Display for Build {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Build::Production => f.write_str("production"),
-            Build::Beta => f.write_str("beta"),
-            Build::Develop => f.write_str("develop"),
-        }
-    }
-}
 
 #[derive(Debug, ValueEnum, Clone, PartialEq, Eq)]
 pub enum App {
@@ -114,57 +94,12 @@ pub enum AccessibilityAction {
     Status,
 }
 
-#[cfg(target_os = "macos")]
-use fig_integrations::{
-    Integration,
-    input_method::InputMethod,
-};
-
-#[cfg(target_os = "macos")]
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
-pub enum TISAction {
-    Enable,
-    Disable,
-    Select,
-    Deselect,
-}
-
-#[cfg(target_os = "macos")]
-use std::path::PathBuf;
-
 use super::diagnostics::get_diagnostics;
-
-#[cfg(target_os = "macos")]
-#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
-pub enum InputMethodDebugAction {
-    Install {
-        bundle_path: Option<PathBuf>,
-    },
-    Uninstall {
-        bundle_path: Option<PathBuf>,
-    },
-    List,
-    Status {
-        bundle_path: Option<PathBuf>,
-    },
-    Source {
-        bundle_identifier: String,
-        #[arg(value_enum)]
-        action: TISAction,
-    },
-}
 
 #[derive(Debug, PartialEq, Subcommand)]
 pub enum DebugSubcommand {
     /// Debug the app
     App,
-    /// Switch to another branch of a Fig.js app
-    Build {
-        #[arg(value_enum)]
-        app: App,
-        #[arg(value_enum)]
-        build: Option<Build>,
-    },
     /// Toggle/set autocomplete window debug mode
     AutocompleteWindow {
         #[arg(value_enum)]
@@ -176,18 +111,11 @@ pub enum DebugSubcommand {
         level: Option<String>,
         files: Vec<String>,
     },
-    /// Input method debugger
-    #[cfg(target_os = "macos")]
-    InputMethod {
-        #[command(subcommand)]
-        action: Option<InputMethodDebugAction>,
-    },
     /// Prompt accessibility
     PromptAccessibility,
     /// Sample desktop process
     Sample,
     /// Debug application codesigning
-    #[cfg(target_os = "macos")]
     VerifyCodesign,
     /// Accessibility
     Accessibility {
@@ -207,10 +135,6 @@ pub enum DebugSubcommand {
     Devtools {
         app: App,
     },
-    /// Lists installed IntelliJ variants
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    #[command(name = "list-intellij-variants")]
-    ListIntelliJVariants,
     /// Disables sourcing of user shell config and instead uses a minimal shell config
     Shell,
     /// Update the shell config permissions to have the correct owner and access rights
@@ -223,10 +147,6 @@ impl DebugSubcommand {
         let env = Env::new();
         match self {
             DebugSubcommand::App => {
-                if !cfg!(target_os = "macos") {
-                    bail!("app is only supported on macOS");
-                }
-
                 let app_info = get_app_info().unwrap_or_else(|_| "".into());
                 if app_info.is_empty() {
                     println!("{PRODUCT_NAME} is not currently running. Attempting to start...");
@@ -259,29 +179,6 @@ impl DebugSubcommand {
                 )
                 .spawn()?
                 .wait()?;
-            },
-            DebugSubcommand::Build { build, app } => match build {
-                Some(build) => {
-                    fig_settings::settings::set_value(format!("developer.{app}.build"), match build {
-                        Build::Production => serde_json::Value::Null,
-                        Build::Beta => "beta".into(),
-                        Build::Develop => "develop".into(),
-                    })?;
-                    println!(
-                        "{PRODUCT_NAME} will now use the {} build of {}",
-                        build.magenta(),
-                        app.magenta()
-                    );
-                },
-                None => {
-                    let current_build = fig_settings::settings::get_string_opt(format!("developer.{app}.build"));
-                    let current_build = match current_build.as_deref() {
-                        Some("staging" | "beta") => Build::Beta,
-                        Some("develop" | "dev") => Build::Develop,
-                        _ => Build::Production,
-                    };
-                    println!("{current_build}");
-                },
             },
             DebugSubcommand::AutocompleteWindow { mode } => {
                 let result = match mode {
@@ -356,119 +253,12 @@ impl DebugSubcommand {
                     .spawn()?
                     .wait()?;
             },
-            #[cfg(target_os = "macos")]
-            DebugSubcommand::InputMethod { action } => {
-                let action = match action {
-                    Some(action) => action,
-                    None => &InputMethodDebugAction::Status { bundle_path: None },
-                };
-
-                match action {
-                    InputMethodDebugAction::Install { bundle_path } => {
-                        let input_method = match bundle_path {
-                            Some(bundle_path) => {
-                                let bundle_path = if bundle_path.is_relative() {
-                                    let mut path = std::env::current_dir()?;
-                                    path.push(bundle_path);
-                                    path
-                                } else {
-                                    bundle_path.clone()
-                                };
-
-                                InputMethod { bundle_path }
-                            },
-                            None => InputMethod::default(),
-                        };
-
-                        input_method.install().await?;
-
-                        println!(
-                            "Successfully installed input method '{}'",
-                            input_method.bundle_id().unwrap()
-                        );
-                    },
-                    InputMethodDebugAction::Uninstall { bundle_path } => {
-                        let input_method = match bundle_path {
-                            Some(bundle_path) => {
-                                let bundle_path = if bundle_path.is_relative() {
-                                    let mut path = std::env::current_dir()?;
-                                    path.push(bundle_path);
-                                    path
-                                } else {
-                                    bundle_path.clone()
-                                };
-
-                                InputMethod { bundle_path }
-                            },
-                            None => InputMethod::default(),
-                        };
-
-                        input_method.uninstall().await?;
-
-                        println!(
-                            "Successfully uninstalled input method '{}'",
-                            input_method.bundle_id().unwrap()
-                        );
-                    },
-                    InputMethodDebugAction::List => match InputMethod::list_all_input_sources(None, true) {
-                        Some(sources) => sources.iter().for_each(|source| println!("{source:#?}")),
-                        None => return Err(eyre::eyre!("Could not load input sources")),
-                    },
-                    InputMethodDebugAction::Status { bundle_path } => {
-                        let input_method = match bundle_path {
-                            Some(bundle_path) => {
-                                let bundle_path = if bundle_path.is_relative() {
-                                    let mut path = std::env::current_dir()?;
-                                    path.push(bundle_path);
-                                    path
-                                } else {
-                                    bundle_path.clone()
-                                };
-
-                                InputMethod { bundle_path }
-                            },
-                            None => InputMethod::default(),
-                        };
-
-                        println!("Installed? {}", input_method.is_installed().await.is_ok());
-                        println!("{:#?}", input_method.input_source()?);
-                    },
-                    InputMethodDebugAction::Source {
-                        bundle_identifier,
-                        action,
-                    } => {
-                        return match InputMethod::list_input_sources_for_bundle_id(bundle_identifier.as_str()) {
-                            Some(sources) => {
-                                sources
-                                    .into_iter()
-                                    .map(|source| match action {
-                                        TISAction::Enable => source.enable(),
-                                        TISAction::Disable => source.disable(),
-                                        TISAction::Select => source.select(),
-                                        TISAction::Deselect => source.deselect(),
-                                    })
-                                    .collect::<Result<Vec<()>, fig_integrations::input_method::InputMethodError>>()?;
-                                Ok(ExitCode::SUCCESS)
-                            },
-                            None => return Err(eyre::eyre!("Could not find an input source with this identifier")),
-                        };
-                    },
-                }
-            },
             DebugSubcommand::PromptAccessibility => {
-                if !cfg!(target_os = "macos") {
-                    bail!("prompt-accessibility is only supported on macOS");
-                }
-
                 prompt_accessibility_command()
                     .await
                     .context("Could not prompt for accessibility permissions.")?;
             },
             DebugSubcommand::Sample => {
-                if !cfg!(target_os = "macos") {
-                    bail!("sample is only supported on macOS");
-                }
-
                 let output = Command::new("lsappinfo")
                     .args(["info", "-only", "-pid", "-app", APP_BUNDLE_ID])
                     .output()?;
@@ -499,7 +289,6 @@ impl DebugSubcommand {
                 println!("Please send this file to the development team");
                 println!("Or attach it to a Github issue (run '{}')", "fig issue".magenta());
             },
-            #[cfg(target_os = "macos")]
             DebugSubcommand::VerifyCodesign => {
                 Command::new("codesign")
                     .arg("-vvvv")
@@ -507,62 +296,50 @@ impl DebugSubcommand {
                     .spawn()?
                     .wait()?;
             },
-            DebugSubcommand::Accessibility { action } => {
-                if !cfg!(target_os = "macos") {
-                    bail!("accessibility is only supported on macOS");
-                }
+            DebugSubcommand::Accessibility { action } => match action {
+                Some(AccessibilityAction::Refresh) => {
+                    quit_fig(true).await?;
 
-                match action {
-                    Some(AccessibilityAction::Refresh) => {
-                        quit_fig(true).await?;
+                    Command::new("tccutil")
+                        .args(["reset", "Accessibility", APP_BUNDLE_ID])
+                        .spawn()?
+                        .wait()?;
 
-                        Command::new("tccutil")
-                            .args(["reset", "Accessibility", APP_BUNDLE_ID])
-                            .spawn()?
-                            .wait()?;
+                    launch_fig_desktop(LaunchArgs {
+                        wait_for_socket: true,
+                        open_dashboard: false,
+                        verbose: true,
+                    })?;
+                },
+                Some(AccessibilityAction::Reset) => {
+                    quit_fig(true).await?;
 
-                        launch_fig_desktop(LaunchArgs {
-                            wait_for_socket: true,
-                            open_dashboard: false,
-                            verbose: true,
-                        })?;
-                    },
-                    Some(AccessibilityAction::Reset) => {
-                        quit_fig(true).await?;
+                    Command::new("tccutil")
+                        .args(["reset", "Accessibility", APP_BUNDLE_ID])
+                        .spawn()?
+                        .wait()?;
+                },
+                Some(AccessibilityAction::Prompt) => {
+                    launch_fig_desktop(LaunchArgs {
+                        wait_for_socket: true,
+                        open_dashboard: false,
+                        verbose: true,
+                    })?;
 
-                        Command::new("tccutil")
-                            .args(["reset", "Accessibility", APP_BUNDLE_ID])
-                            .spawn()?
-                            .wait()?;
-                    },
-                    Some(AccessibilityAction::Prompt) => {
-                        launch_fig_desktop(LaunchArgs {
-                            wait_for_socket: true,
-                            open_dashboard: false,
-                            verbose: true,
-                        })?;
-
-                        prompt_accessibility_command()
-                            .await
-                            .context("Could not prompt for accessibility permissions.")?;
-                    },
-                    Some(AccessibilityAction::Open) => {
-                        Command::new("open")
-                            .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
-                            .spawn()?
-                            .wait()?;
-                    },
-                    Some(AccessibilityAction::Status) | None => {
-                        cfg_if::cfg_if! {
-                            if #[cfg(target_os = "macos")] {
-                                let diagnostic = get_diagnostics().await?;
-                                println!("Accessibility Enabled: {}", diagnostic.accessibility);
-                            } else {
-                                println!("Unable to get accessibility status on this platform");
-                            }
-                        }
-                    },
-                }
+                    prompt_accessibility_command()
+                        .await
+                        .context("Could not prompt for accessibility permissions.")?;
+                },
+                Some(AccessibilityAction::Open) => {
+                    Command::new("open")
+                        .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
+                        .spawn()?
+                        .wait()?;
+                },
+                Some(AccessibilityAction::Status) | None => {
+                    let diagnostic = get_diagnostics().await?;
+                    println!("Accessibility Enabled: {}", diagnostic.accessibility);
+                },
             },
             DebugSubcommand::KeyTester => {
                 println!("{} (use {} to quit)", "Testing Key Input".bold(), "ctrl-d".magenta());
@@ -728,14 +505,6 @@ impl DebugSubcommand {
                 .await
                 .context("Could not open devtools window")?;
             },
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            DebugSubcommand::ListIntelliJVariants => {
-                for integration in fig_integrations::intellij::variants_installed().await? {
-                    println!("{}", integration.variant.application_name());
-                    #[cfg(target_os = "macos")]
-                    println!("  - {:?}", integration.application_folder());
-                }
-            },
             DebugSubcommand::Shell => {
                 let mut profile = NamedTempFile::new()?;
                 let tmp_dir = TempDir::new()?;
@@ -763,16 +532,6 @@ impl DebugSubcommand {
                                 command.args(["zsh"]).env("ZDOTDIR", tmp_dir.path());
                                 command
                             },
-                            Shell::Fish => {
-                                command.args([
-                                    "fish",
-                                    "--no-config",
-                                    "-C",
-                                    &format!("{CLI_BINARY_NAME} init fish post | source"),
-                                ]);
-                                command
-                            },
-                            Shell::Nu => eyre::bail!("Unsupported shell for debug"),
                         };
 
                         println!("Starting {PRODUCT_NAME} debug shell");

@@ -20,6 +20,7 @@ use tracing::{
     debug,
     error,
     trace,
+    warn,
 };
 
 use crate::EventLoopProxy;
@@ -84,7 +85,7 @@ pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>
                     Ok(settings) => {
                         debug!("Settings file changed");
 
-                        notifications_state
+                        if let Err(err) = notifications_state
                             .broadcast_notification_all(
                                 &NotificationType::NotifyOnSettingsChange,
                                 fig_proto::fig::Notification {
@@ -97,7 +98,9 @@ pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>
                                 &proxy,
                             )
                             .await
-                            .unwrap();
+                        {
+                            warn!(%err, "Failed to broadcast settings change notification");
+                        }
 
                         json_map_diff(
                             &prev_settings,

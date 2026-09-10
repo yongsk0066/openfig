@@ -9,6 +9,7 @@ use muda::{
 
 use crate::event::{
     Event,
+    EventLoopProxyExt,
     WindowEvent,
 };
 use crate::{
@@ -102,30 +103,22 @@ pub fn menu_bar() -> Menu {
 
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &menu_event.id().0 {
-        menu_id if menu_id == DASHBOARD_QUIT => proxy
-            .send_event(Event::WindowEvent {
-                window_id: DASHBOARD_ID,
-                window_event: WindowEvent::Hide,
-            })
-            .unwrap(),
-        menu_id if menu_id == DASHBOARD_RELOAD => proxy
-            .send_event(Event::WindowEvent {
-                window_id: DASHBOARD_ID,
-                window_event: WindowEvent::Reload,
-            })
-            .unwrap(),
-        menu_id if menu_id == DASHBOARD_BACK => proxy
-            .send_event(Event::WindowEvent {
-                window_id: DASHBOARD_ID,
-                window_event: WindowEvent::NavigateBack,
-            })
-            .unwrap(),
-        menu_id if menu_id == DASHBOARD_FORWARD => proxy
-            .send_event(Event::WindowEvent {
-                window_id: DASHBOARD_ID,
-                window_event: WindowEvent::NavigateForward,
-            })
-            .unwrap(),
+        menu_id if menu_id == DASHBOARD_QUIT => proxy.send_event_or_log(Event::WindowEvent {
+            window_id: DASHBOARD_ID,
+            window_event: WindowEvent::Hide,
+        }),
+        menu_id if menu_id == DASHBOARD_RELOAD => proxy.send_event_or_log(Event::WindowEvent {
+            window_id: DASHBOARD_ID,
+            window_event: WindowEvent::Reload,
+        }),
+        menu_id if menu_id == DASHBOARD_BACK => proxy.send_event_or_log(Event::WindowEvent {
+            window_id: DASHBOARD_ID,
+            window_event: WindowEvent::NavigateBack,
+        }),
+        menu_id if menu_id == DASHBOARD_FORWARD => proxy.send_event_or_log(Event::WindowEvent {
+            window_id: DASHBOARD_ID,
+            window_event: WindowEvent::NavigateForward,
+        }),
         _ => (),
     }
 }

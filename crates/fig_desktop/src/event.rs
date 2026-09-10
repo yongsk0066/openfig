@@ -154,3 +154,22 @@ impl WindowEvent {
         )
     }
 }
+
+/// Fire an [`Event`] at the tao event loop from a place that cannot meaningfully handle the loop
+/// having exited.
+///
+/// The event loop only ever ends via `process::exit` (`local_ipc/commands.rs`, `tray.rs`), so an
+/// IPC message, tray click, menu accelerator or settings-watcher wake-up that arrives during
+/// shutdown races it by design. Unwrapping the send result turned that ordinary race into a
+/// panicking task; the event is simply dropped instead.
+pub trait EventLoopProxyExt {
+    fn send_event_or_log(&self, event: Event);
+}
+
+impl EventLoopProxyExt for crate::EventLoopProxy {
+    fn send_event_or_log(&self, event: Event) {
+        if let Err(tao::event_loop::EventLoopClosed(event)) = self.send_event(event) {
+            tracing::debug!(?event, "Dropped event: the event loop has exited");
+        }
+    }
+}

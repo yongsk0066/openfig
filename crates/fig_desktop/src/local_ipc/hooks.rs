@@ -12,6 +12,7 @@ use tao::dpi::{
 };
 
 use crate::event::{
+    EventLoopProxyExt,
     WindowEvent,
     WindowPosition,
 };
@@ -50,12 +51,10 @@ pub async fn caret_position(
 }
 
 pub async fn focus_change(proxy: &EventLoopProxy) -> Result<()> {
-    proxy
-        .send_event(Event::WindowEvent {
-            window_id: AUTOCOMPLETE_ID.clone(),
-            window_event: WindowEvent::Hide,
-        })
-        .unwrap();
+    proxy.send_event_or_log(Event::WindowEvent {
+        window_id: AUTOCOMPLETE_ID.clone(),
+        window_event: WindowEvent::Hide,
+    });
 
     Ok(())
 }
@@ -82,15 +81,13 @@ pub async fn event(hook: EventHook, proxy: &EventLoopProxy) -> Result<()> {
     };
 
     if hook.apps.is_empty() {
-        proxy.send_event(Event::WindowEventAll { window_event }).unwrap();
+        proxy.send_event_or_log(Event::WindowEventAll { window_event });
     } else {
         for app in hook.apps {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: WindowId(app.into()),
-                    window_event: window_event.clone(),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: WindowId(app.into()),
+                window_event: window_event.clone(),
+            });
         }
     }
 

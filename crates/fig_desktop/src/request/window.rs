@@ -78,7 +78,7 @@ pub async fn position_window(
             window_id,
             window_event: WindowEvent::Batch(events),
         })
-        .unwrap();
+        .map_err(|_err| "the event loop has exited")?;
 
     match rx.recv().await {
         Some(WindowGeometryResult { is_above, is_clipped }) => RequestResult::Ok(Box::new(
@@ -100,7 +100,7 @@ pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &Eve
                     window_id,
                     window_event: WindowEvent::Show,
                 })
-                .unwrap();
+                .map_err(|_err| "the event loop has exited")?;
         },
         FocusAction::ReturnFocus => return Err("ReturnFocus not implemented".into()),
     }
@@ -115,7 +115,7 @@ pub async fn drag(request: DragWindowRequest, window_id: WindowId, proxy: &Event
             window_id,
             window_event: WindowEvent::Drag,
         })
-        .unwrap();
+        .map_err(|_err| "the event loop has exited")?;
 
     RequestResult::success()
 }

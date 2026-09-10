@@ -23,6 +23,7 @@ use tray_icon::{
 
 use crate::event::{
     Event,
+    EventLoopProxyExt,
     WindowEvent,
 };
 use crate::{
@@ -35,58 +36,48 @@ use crate::{
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &*menu_event.id().0 {
         "dashboard-devtools" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID,
-                    window_event: WindowEvent::Devtools,
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID,
+                window_event: WindowEvent::Devtools,
+            });
         },
         "autocomplete-devtools" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::Devtools,
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: AUTOCOMPLETE_ID,
+                window_event: WindowEvent::Devtools,
+            });
         },
         "quit" => {
-            proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).unwrap();
+            proxy.send_event_or_log(Event::ControlFlow(ControlFlow::Exit));
         },
         "dashboard" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative { path: "/".into() },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID.clone(),
+                window_event: WindowEvent::Batch(vec![
+                    WindowEvent::NavigateRelative { path: "/".into() },
+                    WindowEvent::Show,
+                ]),
+            });
         },
         "settings" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative {
-                            path: "/autocomplete".into(),
-                        },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID.clone(),
+                window_event: WindowEvent::Batch(vec![
+                    WindowEvent::NavigateRelative {
+                        path: "/autocomplete".into(),
+                    },
+                    WindowEvent::Show,
+                ]),
+            });
         },
         "not-working" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative { path: "/help".into() },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID.clone(),
+                window_event: WindowEvent::Batch(vec![
+                    WindowEvent::NavigateRelative { path: "/help".into() },
+                    WindowEvent::Show,
+                ]),
+            });
         },
         "uninstall" => {
             tokio::runtime::Handle::current().spawn(async {

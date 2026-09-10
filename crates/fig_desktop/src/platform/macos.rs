@@ -99,6 +99,7 @@ use super::{
 };
 use crate::event::{
     Event,
+    EventLoopProxyExt,
     WindowEvent,
     WindowPosition,
 };
@@ -717,12 +718,10 @@ impl PlatformStateImpl {
                             && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
                             && accessibility_is_enabled();
 
-                        enabled_proxy
-                            .send_event(Event::WindowEvent {
-                                window_id: AUTOCOMPLETE_ID,
-                                window_event: WindowEvent::SetEnabled(is_enabled),
-                            })
-                            .unwrap();
+                        enabled_proxy.send_event_or_log(Event::WindowEvent {
+                            window_id: AUTOCOMPLETE_ID,
+                            window_event: WindowEvent::SetEnabled(is_enabled),
+                        });
                     });
 
                     let mut focused = self.focused_window.lock().unwrap();

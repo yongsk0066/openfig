@@ -51,6 +51,7 @@ use tracing::{
 use crate::event::{
     EmitEventName,
     Event,
+    EventLoopProxyExt,
     WindowEvent,
 };
 use crate::webview::WindowId;
@@ -227,16 +228,14 @@ pub async fn api_request(
         },
     };
 
-    proxy
-        .send_event(Event::WindowEvent {
-            window_id,
-            window_event: WindowEvent::Emit {
-                event_name: match response.id {
-                    Some(_) => EmitEventName::ProtoMessageReceived,
-                    None => EmitEventName::GlobalErrorOccurred,
-                },
-                payload: fig_desktop_api::handler::response_to_b64(response).into(),
+    proxy.send_event_or_log(Event::WindowEvent {
+        window_id,
+        window_event: WindowEvent::Emit {
+            event_name: match response.id {
+                Some(_) => EmitEventName::ProtoMessageReceived,
+                None => EmitEventName::GlobalErrorOccurred,
             },
-        })
-        .unwrap();
+            payload: fig_desktop_api::handler::response_to_b64(response).into(),
+        },
+    });
 }

@@ -64,6 +64,7 @@ use self::notification::WebviewNotificationsState;
 use self::window_id::DashboardId;
 use crate::event::{
     Event,
+    EventLoopProxyExt,
     ShowMessageNotification,
     WindowEvent,
 };
@@ -409,22 +410,20 @@ impl WebviewManager {
                             }),
                             WryWindowEvent::Focused(focused) => {
                                 if focused && window_state.window_id != AUTOCOMPLETE_ID {
-                                    proxy
-                                        .send_event(Event::WindowEvent {
-                                            window_id: AUTOCOMPLETE_ID,
-                                            window_event: WindowEvent::Hide,
-                                        })
-                                        .unwrap();
+                                    proxy.send_event_or_log(Event::WindowEvent {
+                                        window_id: AUTOCOMPLETE_ID,
+                                        window_event: WindowEvent::Hide,
+                                    });
                                 }
 
-                                proxy
-                                    .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::AppWindowFocusChanged {
+                                proxy.send_event_or_log(Event::PlatformBoundEvent(
+                                    PlatformBoundEvent::AppWindowFocusChanged {
                                         window_id: window_state.window_id.clone(),
                                         focused,
                                         fullscreen: window_state.window.fullscreen().is_some(),
                                         visible: window_state.window.is_visible(),
-                                    }))
-                                    .unwrap();
+                                    },
+                                ));
                             },
                             _ => (),
                         }
@@ -488,12 +487,10 @@ impl WebviewManager {
                                 !fig_settings::settings::get_bool_or("autocomplete.disable", false)
                                     && PlatformState::accessibility_is_enabled().unwrap_or(true);
 
-                            proxy
-                                .send_event(Event::WindowEvent {
-                                    window_id: AUTOCOMPLETE_ID,
-                                    window_event: WindowEvent::SetEnabled(autocomplete_enabled),
-                                })
-                                .unwrap();
+                            proxy.send_event_or_log(Event::WindowEvent {
+                                window_id: AUTOCOMPLETE_ID,
+                                window_event: WindowEvent::SetEnabled(autocomplete_enabled),
+                            });
                         },
                         Event::SetTrayVisible(visible) => {
                             if let Err(err) = tray.set_visible(visible) {
@@ -645,14 +642,12 @@ pub fn build_dashboard(
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(url.as_str())
         .with_ipc_handler(move |payload| {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Api {
-                        payload: payload.into_body(),
-                    },
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID.clone(),
+                window_event: WindowEvent::Api {
+                    payload: payload.into_body(),
+                },
+            });
         })
         .with_devtools(true)
         .with_asynchronous_custom_protocol(
@@ -711,14 +706,12 @@ pub fn build_autocomplete(
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(autocomplete::url().as_str())
         .with_ipc_handler(move |payload| {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID.clone(),
-                    window_event: WindowEvent::Api {
-                        payload: payload.into_body(),
-                    },
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: AUTOCOMPLETE_ID.clone(),
+                window_event: WindowEvent::Api {
+                    payload: payload.into_body(),
+                },
+            });
         })
         .with_asynchronous_custom_protocol(
             "fig".into(),
@@ -790,12 +783,10 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let enabled = !notification.as_bool().unwrap_or(false);
             debug!(%enabled, "Autocomplete");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::SetEnabled(enabled),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: AUTOCOMPLETE_ID,
+                window_event: WindowEvent::SetEnabled(enabled),
+            });
         }
     );
 
@@ -805,11 +796,9 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let theme = notification.as_string().as_deref().and_then(map_theme);
             debug!(?theme, "Theme changed");
-            proxy
-                .send_event(Event::WindowEventAll {
-                    window_event: WindowEvent::SetTheme(theme),
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEventAll {
+                window_event: WindowEvent::SetTheme(theme),
+            });
         }
     );
 
@@ -819,7 +808,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let enabled = !notification.as_bool().unwrap_or(false);
             debug!(%enabled, "Tray icon");
-            proxy.send_event(Event::SetTrayVisible(enabled)).unwrap();
+            proxy.send_event_or_log(Event::SetTrayVisible(enabled));
         }
     );
 
@@ -829,12 +818,10 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
             let url = dashboard::url();
             debug!(%url, "Dashboard host");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID,
-                    window_event: WindowEvent::NavigateAbsolute { url },
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: DASHBOARD_ID,
+                window_event: WindowEvent::NavigateAbsolute { url },
+            });
         }
     );
 
@@ -844,12 +831,10 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
             let url = autocomplete::url();
             debug!(%url, "Autocomplete host");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::NavigateAbsolute { url },
-                })
-                .unwrap();
+            proxy.send_event_or_log(Event::WindowEvent {
+                window_id: AUTOCOMPLETE_ID,
+                window_event: WindowEvent::NavigateAbsolute { url },
+            });
         }
     );
 }

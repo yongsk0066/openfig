@@ -400,9 +400,7 @@ impl WindowState {
                 }
             },
             WindowEvent::NavigateAbsolute { url } => {
-                self.webview
-                    .evaluate_script(&format!("window.location.href = '{url}';"))
-                    .unwrap();
+                self.eval(&format!("window.location.href = '{url}';"));
                 *self.url.lock() = url;
             },
             WindowEvent::NavigateRelative { path } => {
@@ -417,10 +415,10 @@ impl WindowState {
                 });
             },
             WindowEvent::NavigateForward => {
-                self.webview.evaluate_script("window.history.forward();").unwrap();
+                self.eval("window.history.forward();");
             },
             WindowEvent::NavigateBack => {
-                self.webview.evaluate_script("window.history.back();").unwrap();
+                self.eval("window.history.back();");
             },
             WindowEvent::Event { event_name, payload } => {
                 self.notification(notifications_state, &NotificationType::NotifyOnEvent, Notification {
@@ -435,17 +433,15 @@ impl WindowState {
 
                 let url = serde_json::json!(self.url.lock().clone());
 
-                self.webview
-                    .evaluate_script(&format!(
-                        "if (window.location.href === 'about:blank') {{\
+                self.eval(&format!(
+                    "if (window.location.href === 'about:blank') {{\
                             console.log('Reloading window to', {url});\
                             window.location.href = {url};\
                         }} else {{\
                             console.log('Reloading window');\
                             window.location.reload();\
                         }}"
-                    ))
-                    .unwrap();
+                ));
             },
             WindowEvent::Emit { event_name, payload } => {
                 self.emit(event_name, payload);
@@ -463,13 +459,11 @@ impl WindowState {
             WindowEvent::DebugMode(debug_mode) => {
                 // Macos does not support setting the webview background color so we have
                 // to set the css background root color to see the window
-                self.webview
-                    .evaluate_script(if debug_mode {
-                        "document.querySelector(':root').style.setProperty('background-color', 'red');"
-                    } else {
-                        "document.querySelector(':root').style.removeProperty('background-color');"
-                    })
-                    .unwrap();
+                self.eval(if debug_mode {
+                    "document.querySelector(':root').style.setProperty('background-color', 'red');"
+                } else {
+                    "document.querySelector(':root').style.removeProperty('background-color');"
+                });
             },
             WindowEvent::SetEnabled(enabled) => self.set_enabled(enabled),
             WindowEvent::SetTheme(theme) => self.set_theme(theme),
@@ -493,13 +487,22 @@ impl WindowState {
         }
     }
 
+    /// Run `script` in this window's webview, logging instead of panicking on failure.
+    ///
+    /// `evaluate_script` returns `Err` once the webview is gone — during shutdown, or after a
+    /// WebKit process crash. Notifications keep arriving until the event loop actually stops, so
+    /// unwrapping here turned an ordinary shutdown race into a main-thread panic.
+    fn eval(&self, script: &str) {
+        if let Err(err) = self.webview.evaluate_script(script) {
+            warn!(%err, %self.window_id, "Failed to evaluate script in webview");
+        }
+    }
+
     pub fn emit(&self, event_name: impl Display, payload: impl Into<serde_json::Value>) {
         let payload = payload.into();
-        self.webview
-            .evaluate_script(&format!(
-                "document.dispatchEvent(new CustomEvent('{event_name}', {{'detail': {payload}}}));"
-            ))
-            .unwrap();
+        self.eval(&format!(
+            "document.dispatchEvent(new CustomEvent('{event_name}', {{'detail': {payload}}}));"
+        ));
     }
 
     pub fn notification(
@@ -534,9 +537,7 @@ impl WindowState {
     }
 
     pub fn set_enabled(&self, enabled: bool) {
-        self.webview
-            .evaluate_script(format!("window.fig.enabled = {enabled};").as_str())
-            .unwrap();
+        self.eval(format!("window.fig.enabled = {enabled};").as_str());
         self.enabled.store(enabled, std::sync::atomic::Ordering::SeqCst);
     }
 

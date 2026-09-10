@@ -96,19 +96,17 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             };
 
             let mut encoded = BytesMut::new();
-            message.encode(&mut encoded).unwrap();
+            message.encode(&mut encoded)?;
 
             debug!(%message_id, "Sending edit buffer change notification to webview");
 
-            self.proxy
-                .send_event(Event::WindowEvent {
-                    window_id: sub.key().clone(),
-                    window_event: WindowEvent::Emit {
-                        event_name: EmitEventName::Notification,
-                        payload: BASE64_STANDARD.encode(encoded).into(),
-                    },
-                })
-                .unwrap();
+            self.proxy.send_event(Event::WindowEvent {
+                window_id: sub.key().clone(),
+                window_event: WindowEvent::Emit {
+                    event_name: EmitEventName::Notification,
+                    payload: BASE64_STANDARD.encode(encoded).into(),
+                },
+            })?;
         }
 
         let empty_edit_buffer = hook.text.trim().is_empty();

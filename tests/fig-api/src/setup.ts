@@ -19,10 +19,14 @@ eval(
 // Set up IPC
 window.ipc = {
   postMessage: (message: string) => {
-    let detail = childProcess.execSync(
-      `cargo run -p fig-api-mock -q -- request --cwd ${tempDir} ${message}`,
-      { stdio: "pipe" },
-    );
+    // `execSync` hands back a Buffer; the real transport is `evaluate_script`, which always
+    // delivers the base64 payload as a string. Send what the app sends.
+    const detail = childProcess
+      .execSync(`cargo run -p fig-api-mock -q -- request --cwd ${tempDir} ${message}`, {
+        stdio: "pipe",
+      })
+      .toString()
+      .trim();
     document.dispatchEvent(new CustomEvent("FigProtoMessageReceived", { detail }));
   },
 };

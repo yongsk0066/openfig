@@ -17,7 +17,18 @@ export const b64DecodeUnicode = (str: string): string =>
       .join(""),
   );
 
+// `Uint8Array.fromBase64` (TC39 "Uint8Array to/from base64", shipped in Safari 18.2) decodes in
+// one native call. The hand-rolled loop below runs one JS iteration per byte, which is 13,540 of
+// them for a single edit-buffer notification, so it is kept only as a fallback for engines that
+// do not have the static method yet.
+type FromBase64 = (base64: string) => Uint8Array;
+const nativeFromBase64 = (Uint8Array as unknown as { fromBase64?: FromBase64 }).fromBase64;
+
 export const b64ToBytes = (base64: string): Uint8Array => {
+  if (nativeFromBase64) {
+    return nativeFromBase64.call(Uint8Array, base64);
+  }
+
   const binaryString = window.atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);

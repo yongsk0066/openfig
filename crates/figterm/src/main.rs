@@ -30,11 +30,11 @@ use alacritty_terminal::event::EventListener;
 use alacritty_terminal::term::{
     ShellState,
     SizeInfo,
+    TextBuffer,
 };
 use anyhow::{
     Context as _,
     Result,
-    anyhow,
 };
 use bytes::BytesMut;
 use clap::Parser;
@@ -265,32 +265,29 @@ fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
     }
 }
 
-fn can_send_edit_buffer<T>(term: &Term<T>) -> bool
+/// The edit buffer that should be sent right now, or `None` if this is not a moment to send one.
+///
+/// This used to be a `bool` predicate whose caller then read the buffer a second time. The read is
+/// a scan of the grid from the command cursor to the bottom, so while an insertion lock was
+/// outstanding every send cost two of them.
+///
+/// The insertion-lock bookkeeping deliberately runs before any of the cheap gates: releasing the
+/// lock is a side effect, and the main loop's 16 ms timer stays armed for as long as it is set.
+fn can_send_edit_buffer<T>(term: &Term<T>) -> Option<TextBuffer>
 where
     T: EventListener,
 {
-    let shell_enabled = ["bash", "zsh", "dash"]
-        .into_iter()
-        .chain(USER_ENABLED_SHELLS.iter().map(|s| s.as_str()))
-        .any(|s| {
-            let shell_raw = term.shell_state().get_context().shell.as_deref();
-            // we actually want to work with a nested figterm :)
-            let shell = match shell_raw.and_then(|s| s.strip_suffix(" (figterm)")) {
-                Some(s) => Some(s),
-                None => shell_raw,
-            };
-
-            shell == Some(s)
-        });
-    let preexec = term.shell_state().preexec;
+    // `None` = not read yet; `Some(None)` = read, and there was no buffer.
+    let mut buffer: Option<Option<TextBuffer>> = None;
 
     let mut handle = INSERTION_LOCKED_AT.write_ignore_poison();
     let insertion_locked = match handle.as_ref() {
         Some(at) => {
             let lock_expired = at.elapsed().unwrap_or(Duration::ZERO) > Duration::from_millis(16);
             let should_unlock = lock_expired
-                || term
-                    .get_current_buffer()
+                || buffer
+                    .insert(term.get_current_buffer())
+                    .as_ref()
                     .is_none_or(|buff| &buff.buffer == (&EXPECTED_BUFFER.lock_ignore_poison() as &String));
             if should_unlock {
                 handle.take();
@@ -308,9 +305,38 @@ where
     };
     drop(handle);
 
+    // Read the shell name once instead of once per candidate, and strip the `<shell> (figterm)`
+    // suffix without allocating — we actually want to work with a nested figterm :)
+    let shell = term.shell_state().get_context().shell.as_deref().map(|shell| {
+        shell
+            .strip_suffix(')')
+            .and_then(|s| s.strip_suffix(PTY_BINARY_NAME))
+            .and_then(|s| s.strip_suffix(" ("))
+            .unwrap_or(shell)
+    });
+    let shell_enabled = ["bash", "zsh", "dash"]
+        .into_iter()
+        .chain(USER_ENABLED_SHELLS.iter().map(|s| s.as_str()))
+        .any(|s| shell == Some(s));
+
+    let preexec = term.shell_state().preexec;
+
     trace!(%shell_enabled, %preexec, %insertion_locked, "can_send_edit_buffer");
 
-    shell_enabled && !insertion_locked && !preexec
+    if !shell_enabled || insertion_locked || preexec {
+        return None;
+    }
+
+    // Same gates `send_edit_buffer` applies, checked before the grid scan rather than after it, so
+    // a disabled or detached session pays nothing per read.
+    if !*AUTOCOMPLETE_ENABLED || !ipc::desktop_connected() {
+        return None;
+    }
+
+    match buffer {
+        Some(buffer) => buffer,
+        None => term.get_current_buffer(),
+    }
 }
 
 const Q_DISABLE_AUTOCOMPLETE: &str = "Q_DISABLE_AUTOCOMPLETE";
@@ -321,47 +347,41 @@ fn autocomplete_enabled(env: &Env) -> bool {
 
 static AUTOCOMPLETE_ENABLED: LazyLock<bool> = LazyLock::new(|| autocomplete_enabled(&Env::new()));
 
-async fn send_edit_buffer<T>(
-    term: &Term<T>,
+async fn send_edit_buffer(
+    shell_state: &ShellState,
+    edit_buffer: TextBuffer,
     sender: &Sender<Hostbound>,
     cursor_coordinates: Option<TerminalCursorCoordinates>,
-) -> Result<()>
-where
-    T: EventListener,
-{
+) -> Result<()> {
     if !*AUTOCOMPLETE_ENABLED {
         return Ok(());
     }
 
     // Nothing drains the outgoing channel while the desktop app is away, and everything queued is
-    // thrown away by `outgoing_rx.drain()` at the next handshake anyway, so a hook sent now is
-    // pure memory growth: one per keystroke, for as long as the app is closed.
+    // thrown away by `outgoing_rx.drain()` at the next handshake, so a hook sent now is pure
+    // memory growth: one per keystroke, for as long as the app is closed.
     if !ipc::desktop_connected() {
         trace!("Not sending edit buffer: desktop app is not connected");
         return Ok(());
     }
 
-    match term.get_current_buffer() {
-        Some(edit_buffer) => {
-            if let Some(cursor_idx) = edit_buffer.cursor_idx.and_then(|i| i.try_into().ok()) {
-                debug!("edit_buffer: {edit_buffer:?}");
-                trace!("buffer bytes: {:02X?}", edit_buffer.buffer.as_bytes());
-                trace!("buffer chars: {:?}", edit_buffer.buffer.chars().collect::<Vec<_>>());
+    let Some(cursor_idx) = edit_buffer.cursor_idx.and_then(|i| i.try_into().ok()) else {
+        return Ok(());
+    };
 
-                let context = shell_state_to_context(term.shell_state());
+    debug!("edit_buffer: {edit_buffer:?}");
+    trace!("buffer bytes: {:02X?}", edit_buffer.buffer.as_bytes());
+    trace!("buffer chars: {:?}", edit_buffer.buffer.chars().collect::<Vec<_>>());
 
-                let edit_buffer_hook =
-                    new_edit_buffer_hook(Some(context), edit_buffer.buffer, cursor_idx, 0, cursor_coordinates);
-                let message = hook_to_message(edit_buffer_hook);
+    let context = shell_state_to_context(shell_state);
 
-                trace!("Sending: {message:?}");
+    let edit_buffer_hook = new_edit_buffer_hook(Some(context), edit_buffer.buffer, cursor_idx, 0, cursor_coordinates);
+    let message = hook_to_message(edit_buffer_hook);
 
-                sender.send_async(message).await?;
-            }
-            Ok(())
-        },
-        None => Err(anyhow!("No edit buffer to send")),
-    }
+    trace!("Sending: {message:?}");
+
+    sender.send_async(message).await?;
+    Ok(())
 }
 
 fn get_parent_shell() -> Result<String> {
@@ -824,8 +844,8 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                 write_buffer.reserve(write_buffer.len());
                             }
 
-                            if can_send_edit_buffer(&term)
-                                && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
+                            if let Some(edit_buffer) = can_send_edit_buffer(&term)
+                                && let Err(err) = send_edit_buffer(term.shell_state(), edit_buffer, &remote_sender, None).await {
                                     warn!("Failed to send edit buffer: {err}");
                                 }
 
@@ -879,8 +899,8 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                 // figterm on the machine 62.5 times a second forever, and the body then took a
                 // lock and immediately discarded the tick.
                 _ = edit_buffer_interval.tick(), if INSERTION_LOCKED_AT.read_ignore_poison().is_some() => {
-                    if can_send_edit_buffer(&term)
-                        && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
+                    if let Some(edit_buffer) = can_send_edit_buffer(&term)
+                        && let Err(err) = send_edit_buffer(term.shell_state(), edit_buffer, &remote_sender, None).await {
                             warn!(%err, "Failed to send edit buffer");
                         }
                     Ok(())

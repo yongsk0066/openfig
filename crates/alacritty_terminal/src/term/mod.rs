@@ -767,7 +767,9 @@ impl<T> Term<T> {
                     let mut buffer = self.get_text_region(&rect, Column(*cmd_cursor.column))?;
 
                     if let Some(cursor_idx) = buffer.cursor_idx {
-                        buffer.buffer = buffer.buffer.trim_end().to_string();
+                        // In place: `trim_end().to_string()` reallocated and copied the whole
+                        // buffer on every edit-buffer read just to drop trailing blanks.
+                        buffer.buffer.truncate(buffer.buffer.trim_end().len());
 
                         if buffer.buffer.len() < cursor_idx {
                             buffer

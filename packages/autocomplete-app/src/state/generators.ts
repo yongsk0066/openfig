@@ -1,14 +1,14 @@
 import logger from "loglevel";
-import { StoreApi } from "zustand";
+import type { StoreApi } from "zustand";
 import { sleep } from "@fig/shared/utils";
-import { ArgumentParserResult } from "@fig/autocomplete-parser";
+import type { ArgumentParserResult } from "@fig/autocomplete-parser";
 import { SETTINGS, getSetting } from "@fig/api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
 import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
 import { getCustomSuggestions } from "../generators/customSuggestionsGenerator";
-import { NamedSetState, AutocompleteState } from "./types";
-import { GeneratorState, GeneratorContext } from "../generators/helpers";
+import type { NamedSetState, AutocompleteState } from "./types";
+import type { GeneratorState, GeneratorContext } from "../generators/helpers";
 import { isTemplateSuggestion } from "../suggestions";
 
 export const shellContextSelector = ({ figState }: AutocompleteState): Fig.ShellContext => ({

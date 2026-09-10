@@ -1,4 +1,4 @@
-import { InstallCheckWithInstallKey } from "@/types/preferences";
+import type { InstallCheckWithInstallKey } from "@/types/preferences";
 import { Install } from "@fig/api-bindings";
 import { useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";

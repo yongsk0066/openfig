@@ -4,7 +4,11 @@ inputs:
 plugins:
   - local: protoc-gen-es
     opt:
+      # js+dts, not target=ts: `codegen/generate-requests.ts` imports this package
+      # under Node's strip-only TypeScript support, which cannot execute the ~130
+      # `enum` declarations protoc-gen-es emits for proto enums. js+dts also needs
+      # no transform in the bundler.
       - target=js+dts
       - import_extension=js
       - json_types=false
-    out: dist
+    out: src

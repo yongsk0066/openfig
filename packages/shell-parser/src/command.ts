@@ -1,4 +1,4 @@
-import { NodeType, BaseNode, createTextNode, parse } from "./parser.js";
+import { NodeType, type BaseNode, createTextNode, parse } from "./parser.js";
 import { ConvertCommandError, SubstituteAliasError } from "./errors.js";
 
 export * from "./errors.js";

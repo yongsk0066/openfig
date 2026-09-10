@@ -1,4 +1,4 @@
-import { InstallCheck } from "@/types/preferences";
+import type { InstallCheck } from "@/types/preferences";
 import { Fig, Internal } from "@fig/api-bindings";
 import { useEffect, useState } from "react";
 import { Button } from "../../ui/button";

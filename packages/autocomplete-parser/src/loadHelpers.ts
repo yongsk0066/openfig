@@ -1,4 +1,4 @@
-import logger, { Logger } from "loglevel";
+import logger, { type Logger } from "loglevel";
 import * as semver from "semver";
 import { ensureTrailingSlash, withTimeout } from "@fig/shared/utils";
 import { executeCommand, fread, isInDevMode } from "@fig/api-bindings-wrappers";

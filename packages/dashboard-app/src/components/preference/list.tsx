@@ -1,5 +1,5 @@
 import { alphaByTitle } from "@/lib/sort";
-import { Action, Pref } from "@/types/preferences";
+import type { Action, Pref } from "@/types/preferences";
 import { Setting } from "./listItem";
 import { getIconFromName } from "@/lib/icons";
 import { cn } from "@/lib/utils";

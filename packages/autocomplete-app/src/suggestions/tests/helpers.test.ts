@@ -5,7 +5,7 @@ global.fig = {
 
 const originalGlobalFig = global.fig;
 
-import { Suggestion } from "@fig/shared/internal";
+import type { Suggestion } from "@fig/shared/internal";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getNameMatch,

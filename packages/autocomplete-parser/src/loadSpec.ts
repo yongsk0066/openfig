@@ -1,13 +1,13 @@
-import logger, { Logger } from "loglevel";
+import logger, { type Logger } from "loglevel";
 import { Settings } from "@fig/api-bindings";
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { withTimeout, SpecLocationSource, splitPath, ensureTrailingSlash } from "@fig/shared/utils";
-import { Subcommand, SpecLocation } from "@fig/shared/internal";
+import type { Subcommand, SpecLocation } from "@fig/shared/internal";
 import { SETTINGS, getSetting, executeCommand, isInDevMode } from "@fig/api-bindings-wrappers";
 import {
   importFromPublicCDN,
   publicSpecExists,
-  SpecFileImport,
+  type SpecFileImport,
   importSpecFromFile,
   isDiffVersionedSpec,
   importFromLocalhost,

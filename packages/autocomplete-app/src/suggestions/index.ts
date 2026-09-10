@@ -1,18 +1,18 @@
-import { Result } from "@fig/fuzzysort";
+import type { Result } from "@fig/fuzzysort";
 import logger from "loglevel";
-import { Option, Subcommand, Arg, Suggestion, SuggestionType } from "@fig/shared/internal";
+import type { Option, Subcommand, Arg, Suggestion, SuggestionType } from "@fig/shared/internal";
 import {
   makeArray,
-  SuggestionFlags,
+  type SuggestionFlags,
   SuggestionFlag,
   compareNamedObjectsAlphabetically,
   memoizeOne,
   localProtocol,
   fieldsAreEqual,
 } from "@fig/shared/utils";
-import { countEqualOptions, Annotation, TokenType } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, SettingsMap } from "@fig/api-bindings-wrappers";
-import { GeneratorState } from "../generators/helpers";
+import { countEqualOptions, type Annotation, TokenType } from "@fig/autocomplete-parser";
+import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings-wrappers";
+import type { GeneratorState } from "../generators/helpers";
 
 import {
   getFuzzyNameMatches,

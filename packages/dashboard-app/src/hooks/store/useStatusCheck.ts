@@ -1,5 +1,5 @@
 import { StoreContext } from "@/context/zustand";
-import { InstallKey } from "@/types/preferences";
+import type { InstallKey } from "@/types/preferences";
 import { useContext } from "react";
 import { useStore } from "zustand";
 

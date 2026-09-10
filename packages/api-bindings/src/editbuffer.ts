@@ -1,5 +1,5 @@
-import { EditBufferChangedNotification, NotificationType } from "@fig/proto/fig";
-import { _subscribe, NotificationResponse } from "./notifications.js";
+import { type EditBufferChangedNotification, NotificationType } from "@fig/proto/fig";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 
 export function subscribe(
   handler: (notification: EditBufferChangedNotification) => NotificationResponse | undefined,

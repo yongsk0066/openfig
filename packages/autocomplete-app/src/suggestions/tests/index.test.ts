@@ -1,7 +1,7 @@
-import { Suggestion } from "@fig/shared/internal";
+import type { Suggestion } from "@fig/shared/internal";
 import { SETTINGS } from "@fig/api-bindings-wrappers";
 import * as settings from "@fig/api-bindings-wrappers";
-import { MockInstance, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { type MockInstance, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   getStaticArgSuggestions,
   filterSuggestions,

@@ -1,9 +1,9 @@
 import * as apiBindingsWrappers from "@fig/api-bindings-wrappers/executeCommand";
 
-import { Annotation } from "@fig/autocomplete-parser";
-import { MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Annotation } from "@fig/autocomplete-parser";
+import { type MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as helpers from "../helpers";
-import { GeneratorContext } from "../helpers";
+import type { GeneratorContext } from "../helpers";
 import { getScriptSuggestions } from "../scriptSuggestionsGenerator";
 
 vi.mock("@fig/api-bindings-wrappers/src/executeCommand", async () =>

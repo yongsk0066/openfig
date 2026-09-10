@@ -1,6 +1,6 @@
 import logger from "loglevel";
 import { fread } from "@fig/api-bindings-wrappers";
-import { SystemTheme } from "../hooks/helpers";
+import type { SystemTheme } from "../hooks/helpers";
 import { MissingThemeError } from "./errors";
 
 const THEMES = ["dark", "light"] as const;

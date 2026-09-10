@@ -1,18 +1,18 @@
-import { Internal } from "@fig/autocomplete-shared";
+import type { Internal } from "@fig/autocomplete-shared";
 import { getLogger } from "loglevel";
 import {
   parseArguments,
   TokenType,
   flattenAnnotations,
-  BasicAnnotation,
-  Annotation,
+  type BasicAnnotation,
+  type Annotation,
   getSpecPath,
   loadSubcommandCached,
   serializeSpecLocation,
 } from "@fig/autocomplete-parser";
-import { getAllCommandsWithAlias, AliasMap, Command } from "@fig/shell-parser";
+import { getAllCommandsWithAlias, type AliasMap, type Command } from "@fig/shell-parser";
 import { SpecLocationSource } from "@fig/shared/utils";
-import { Suggestion } from "@fig/shared/internal";
+import type { Suggestion } from "@fig/shared/internal";
 import {
   executeCommand,
   executeLoginShell,
@@ -21,12 +21,12 @@ import {
 } from "@fig/api-bindings-wrappers";
 import { History } from "@fig/api-bindings";
 import {
-  AnnotatedCommand,
-  HistoryEntry,
-  Graph,
+  type AnnotatedCommand,
+  type HistoryEntry,
+  type Graph,
   mirrorSubcommand,
   walkSubcommand,
-  HistoryContext,
+  type HistoryContext,
 } from "./helpers";
 import { MissingSpecError } from "./errors";
 

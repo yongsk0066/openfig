@@ -2,7 +2,7 @@ import { Code } from "@/components/text/code";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useStatusCheck } from "@/hooks/store/useStatusCheck";
-import { InstallCheck } from "@/types/preferences";
+import type { InstallCheck } from "@/types/preferences";
 import { Install } from "@fig/api-bindings";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";

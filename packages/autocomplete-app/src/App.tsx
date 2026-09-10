@@ -1,7 +1,7 @@
 import { WindowPosition, Settings } from "@fig/api-bindings";
 import { SETTINGS } from "@fig/api-bindings-wrappers";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { RowComponentProps } from "react-window";
+import type { RowComponentProps } from "react-window";
 
 import logger from "loglevel";
 import { getCWDForFilesAndFolders } from "@fig/shared/utils";
@@ -11,7 +11,7 @@ import { getMaxHeight, getMaxWidth, POPOUT_WIDTH } from "./window";
 import { useParseArgumentsEffect } from "./parser/hooks";
 import { loadHistory } from "./history";
 import "./index.css";
-import AutoSizedList, { AutoSizedHandleRef } from "./components/AutoSizedList";
+import AutoSizedList, { type AutoSizedHandleRef } from "./components/AutoSizedList";
 
 import { useFigKeypress, useFigAutocomplete, useFigSettings, useFigClearCache } from "./fig/hooks";
 
@@ -29,7 +29,7 @@ import {
 import { useShake, useDynamicResizeObserver, useSystemTheme } from "./hooks/helpers";
 
 import Suggestion from "./components/Suggestion";
-import Description, { DescriptionPosition } from "./components/Description";
+import Description, { type DescriptionPosition } from "./components/Description";
 import { setFontFamily, setFontSize, setTheme } from "./fig/themes";
 import LoadingIcon from "./components/LoadingIcon";
 

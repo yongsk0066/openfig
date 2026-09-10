@@ -1,8 +1,8 @@
-import { Annotation, TokenType } from "@fig/autocomplete-parser";
-import { Subcommand } from "@fig/shared/internal";
+import { type Annotation, TokenType } from "@fig/autocomplete-parser";
+import type { Subcommand } from "@fig/shared/internal";
 import { describe, expect, it } from "vitest";
 import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
-import { GeneratorContext } from "../helpers";
+import type { GeneratorContext } from "../helpers";
 
 const defaultContext: GeneratorContext = {
   annotations: [] as Annotation[],

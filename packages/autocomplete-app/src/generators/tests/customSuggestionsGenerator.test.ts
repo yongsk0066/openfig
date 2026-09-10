@@ -1,8 +1,8 @@
-import { Annotation } from "@fig/autocomplete-parser";
-import { MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Annotation } from "@fig/autocomplete-parser";
+import { type MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getCustomSuggestions } from "../customSuggestionsGenerator";
 import * as helpers from "../helpers";
-import { GeneratorContext } from "../helpers";
+import type { GeneratorContext } from "../helpers";
 
 const context: GeneratorContext = {
   annotations: [] as Annotation[],

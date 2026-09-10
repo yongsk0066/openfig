@@ -1,4 +1,4 @@
-import { PlatformInfo, PlatformRestrictions } from "@/types/preferences";
+import type { PlatformInfo, PlatformRestrictions } from "@/types/preferences";
 
 /**
  * @returns `true` if `restrictions` is undefined, or all fields in `restrictions` are equal to their corresponding entries in `platformInfo`. `false` otherwise.

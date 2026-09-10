@@ -142,17 +142,18 @@ const sourceFile = project.createSourceFile(
     );
     const requestSchemas = requestsWithMatchingResponses.map((s) => `${s}Schema`);
     const otherRequestSchemas = otherRequests.map((s) => `${s}Schema`);
-    const imports = [
-      requestsWithMatchingResponses,
-      responses,
-      otherRequests,
-      requestSchemas,
-      otherRequestSchemas,
-    ]
+    // Messages are types, `*Schema` are values: `verbatimModuleSyntax` wants
+    // them in separate import statements.
+    const typeImports = [requestsWithMatchingResponses, responses, otherRequests]
       .flat()
       .sort()
       .map(capitalizeFirstLetter);
-    writer.writeLine(`import { \n${imports.join(",\n")}\n } from "@fig/proto/fig";`);
+    const valueImports = [requestSchemas, otherRequestSchemas]
+      .flat()
+      .sort()
+      .map(capitalizeFirstLetter);
+    writer.writeLine(`import type { \n${typeImports.join(",\n")}\n } from "@fig/proto/fig";`);
+    writer.writeLine(`import { \n${valueImports.join(",\n")}\n } from "@fig/proto/fig";`);
     writer
       .writeLine(
         [

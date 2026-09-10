@@ -1,15 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "lib": ["ES2024"],
-    "newLine": "lf",
-    "esModuleInterop": true,
+    "target": "ES2025",
+    "lib": ["ES2025"],
+    /* Bundler mode: `preserve` implies moduleResolution "bundler",
+       esModuleInterop, allowSyntheticDefaultImports and resolveJsonModule. */
+    "module": "preserve",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true,
     "noEmit": true
   },

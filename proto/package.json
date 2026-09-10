@@ -4,29 +4,25 @@
   "license": "MIT OR Apache-2.0",
   "author": "OpenFig contributors",
   "files": [
-    "dist",
+    "src",
     "package.json"
   ],
   "type": "module",
   "exports": {
-    "./*": "./dist/*_pb.js",
+    "./*": "./src/*_pb.js",
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "rm -rf dist && buf generate && tsc",
+    "codegen": "rm -rf src && buf generate",
     "lint": "buf lint && (buf format --exit-code > /dev/null || (echo 'Run `buf format -w`' && exit 1))",
-    "lint:fix": "buf format -w",
-    "precommit": "exit 0",
-    "clean": "rm -rf dist"
+    "lint:fix": "buf format -w"
   },
   "dependencies": {
     "@bufbuild/protobuf": "catalog:"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
-    "@bufbuild/protoc-gen-es": "catalog:",
-    "@fig/tsconfig": "workspace:^",
-    "typescript": "catalog:"
+    "@bufbuild/protoc-gen-es": "catalog:"
   },
   "engines": {
     "node": ">=26"

@@ -1,32 +1,11 @@
 {
+  "extends": ["@fig/tsconfig/base.json", "@fig/tsconfig/dom.json"],
   "compilerOptions": {
-    "target": "ES2024",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
-
-    /* Linting */
-    "strict": true,
-    // "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-
-    /* imports */
     "paths": {
       "@/*": ["./src/*"],
       "@assets/*": ["./assets/*"]
     },
-    "types": ["@fig/types"]
+    "types": ["@fig/types", "node"]
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "vite.config.ts"]
 }

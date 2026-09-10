@@ -1,10 +1,10 @@
 import logger from "loglevel";
-import { StoreApi } from "zustand";
+import type { StoreApi } from "zustand";
 import { Shell } from "@fig/api-bindings";
-import { Suggestion } from "@fig/shared/internal";
+import type { Suggestion } from "@fig/shared/internal";
 import { makeArray, longestCommonPrefix, ensureTrailingSlash } from "@fig/shared/utils";
 import { SETTINGS } from "@fig/api-bindings-wrappers";
-import { NamedSetState, AutocompleteState, Visibility } from "./types";
+import { type NamedSetState, type AutocompleteState, Visibility } from "./types";
 import { isMatchingType, getNameMatch, getQueryTermForSuggestion } from "../suggestions/helpers";
 import { updateAutocompleteIndexFromUserInsert } from "../suggestions/sorting";
 import { InsertPrefixError } from "./errors";

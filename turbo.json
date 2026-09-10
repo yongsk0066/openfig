@@ -17,7 +17,7 @@
       "dependsOn": ["^build"]
     },
     "codegen": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^codegen"],
       "outputs": ["src/requests.ts"],
       "cache": false
     }

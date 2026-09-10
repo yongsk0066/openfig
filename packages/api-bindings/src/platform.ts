@@ -1,4 +1,4 @@
-import { GetPlatformInfoResponse } from "@fig/proto/fig";
+import type { GetPlatformInfoResponse } from "@fig/proto/fig";
 import { sendGetPlatformInfoRequest } from "./requests.js";
 import { AppBundleType, DesktopEnvironment, DisplayServerProtocol, Os } from "@fig/proto/fig";
 

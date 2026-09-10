@@ -1,7 +1,7 @@
-import { useCallback, useMemo, CSSProperties, useRef } from "react";
+import { useCallback, useMemo, type CSSProperties, useRef } from "react";
 import logger from "loglevel";
 import fuzzysort from "@fig/fuzzysort";
-import { Suggestion as SuggestionT } from "@fig/shared/internal";
+import type { Suggestion as SuggestionT } from "@fig/shared/internal";
 import { makeArray } from "@fig/shared/utils";
 import { getQueryTermForSuggestion } from "../suggestions/helpers";
 import SuggestionIcon from "./SuggestionIcon";

@@ -2,7 +2,7 @@ import logger from "loglevel";
 
 import { executeCommand } from "@fig/api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
-import { runCachedGenerator, GeneratorContext, haveContextForGenerator } from "./helpers";
+import { runCachedGenerator, type GeneratorContext, haveContextForGenerator } from "./helpers";
 
 export async function getCustomSuggestions(
   generator: Fig.Generator,

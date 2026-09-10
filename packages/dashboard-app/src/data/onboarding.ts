@@ -1,4 +1,4 @@
-import { InstallCheck } from "@/types/preferences";
+import type { InstallCheck } from "@/types/preferences";
 import installChecks from "./install";
 import { PRODUCT_NAME } from "@/lib/constants";
 

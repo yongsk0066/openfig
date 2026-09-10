@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, createContext } from "react";
+import { type Dispatch, type SetStateAction, createContext } from "react";
 
 // Coordinates listeners for keyboard inputs to prevent having >1 input listening to keyboard events at a time.
 type ListenerProps = {

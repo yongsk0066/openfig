@@ -1,4 +1,4 @@
-import { Subcommand } from "@fig/shared/internal";
+import type { Subcommand } from "@fig/shared/internal";
 
 const allCaches: Array<Map<string, unknown>> = [];
 

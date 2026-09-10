@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Switch } from "../ui/switch";
-import { Pref, PrefDefault } from "@/types/preferences";
+import type { Pref, PrefDefault } from "@/types/preferences";
 import {
   Select,
   SelectContent,

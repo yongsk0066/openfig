@@ -1,5 +1,5 @@
 import React from "react";
-import { Suggestion, SuggestionType } from "@fig/shared/internal";
+import type { Suggestion, SuggestionType } from "@fig/shared/internal";
 import { localProtocol } from "@fig/shared/utils";
 
 type SuggestionIconProps = {

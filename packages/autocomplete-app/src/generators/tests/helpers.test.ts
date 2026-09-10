@@ -1,11 +1,11 @@
 import { sleep } from "@fig/shared/utils";
-import { Annotation } from "@fig/autocomplete-parser";
+import type { Annotation } from "@fig/autocomplete-parser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   generatorCache,
   runCachedGenerator,
   haveContextForGenerator,
-  GeneratorContext,
+  type GeneratorContext,
 } from "../helpers";
 
 const context: GeneratorContext = {

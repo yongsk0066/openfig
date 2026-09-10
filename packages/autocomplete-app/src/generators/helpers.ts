@@ -1,5 +1,5 @@
-import { Annotation } from "@fig/autocomplete-parser";
-import { Suggestion } from "@fig/shared/internal";
+import type { Annotation } from "@fig/autocomplete-parser";
+import type { Suggestion } from "@fig/shared/internal";
 import { getCWDForFilesAndFolders } from "@fig/shared/utils";
 import { getSetting, SETTINGS } from "@fig/api-bindings-wrappers";
 import { Cache } from "./cache";

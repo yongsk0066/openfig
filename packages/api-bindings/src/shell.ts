@@ -1,13 +1,13 @@
 import {
   NotificationType,
-  ProcessChangedNotification,
-  ShellPromptReturnedNotification,
-  TextUpdate,
-  HistoryUpdatedNotification,
+  type ProcessChangedNotification,
+  type ShellPromptReturnedNotification,
+  type TextUpdate,
+  type HistoryUpdatedNotification,
   TextUpdateSchema,
 } from "@fig/proto/fig";
 import { sendInsertTextRequest } from "./requests.js";
-import { _subscribe, NotificationResponse } from "./notifications.js";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 import { create } from "@bufbuild/protobuf";
 
 export const processDidChange = {

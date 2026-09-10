@@ -7,7 +7,7 @@ import {
   makeArray,
   SpecLocationSource,
   SuggestionFlag,
-  SuggestionFlags,
+  type SuggestionFlags,
   withTimeout,
 } from "@fig/shared/utils";
 import {
@@ -17,7 +17,7 @@ import {
   isInDevMode,
   SETTINGS,
 } from "@fig/api-bindings-wrappers";
-import { Command, substituteAlias } from "@fig/shell-parser";
+import { type Command, substituteAlias } from "@fig/shell-parser";
 import { getSpecPath, loadSubcommandCached, serializeSpecLocation } from "./loadSpec.js";
 import { ParseArgumentsError, ParsingHistoryError, UpdateStateError } from "./errors.js";
 import { createCache, generateSpecCache } from "./caches.js";

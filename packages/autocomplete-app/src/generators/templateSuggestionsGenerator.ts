@@ -1,7 +1,7 @@
 import logger from "loglevel";
-import { Annotation, TokenType } from "@fig/autocomplete-parser";
+import { type Annotation, TokenType } from "@fig/autocomplete-parser";
 import { makeArray, findLast } from "@fig/shared/utils";
-import { GeneratorContext } from "./helpers";
+import type { GeneratorContext } from "./helpers";
 import { getHistoryArgSuggestions } from "../history";
 
 const getHelpSuggestions = (annotations: Annotation[]) => {

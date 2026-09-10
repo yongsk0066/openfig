@@ -1,5 +1,5 @@
 import { StoreContext } from "@/context/zustand";
-import { State } from "@/lib/store";
+import type { State } from "@/lib/store";
 import { useContext } from "react";
 import { useStore } from "zustand";
 

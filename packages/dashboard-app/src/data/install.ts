@@ -1,4 +1,4 @@
-import { InstallCheckWithInstallKey } from "@/types/preferences";
+import type { InstallCheckWithInstallKey } from "@/types/preferences";
 import accessibility_fig from "@assets/images/accessibility_fig.png?url";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { Platform } from "@fig/api-bindings";

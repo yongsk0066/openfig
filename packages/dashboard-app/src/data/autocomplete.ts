@@ -1,4 +1,4 @@
-import { Intro, PrefSection } from "@/components/preference/list";
+import type { Intro, PrefSection } from "@/components/preference/list";
 import { PRODUCT_NAME } from "@/lib/constants";
 
 const autocompleteSettings: PrefSection[] = [

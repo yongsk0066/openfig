@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, RefCallback, RefObject } from "react";
-import { useResizeObserver, ResizeObserverBoxOptions } from "use-resize-observer";
+import { useState, useEffect, useMemo, useCallback, type RefCallback, type RefObject } from "react";
+import { useResizeObserver, type ResizeObserverBoxOptions } from "use-resize-observer";
 
 type Dimensions = {
   height?: number;

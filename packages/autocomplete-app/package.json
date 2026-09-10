@@ -35,6 +35,7 @@
   "devDependencies": {
     "@fig/fuzzysort": "workspace:^",
     "@fig/shared": "workspace:^",
+    "@fig/tsconfig": "workspace:^",
     "@fig/types": "workspace:^",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",

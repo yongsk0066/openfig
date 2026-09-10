@@ -1,7 +1,7 @@
 import logger from "loglevel";
 import { executeCommandTimeout } from "@fig/api-bindings-wrappers";
 import { runPipingConsoleMethods } from "../utils";
-import { GeneratorContext, haveContextForGenerator, runCachedGenerator } from "./helpers";
+import { type GeneratorContext, haveContextForGenerator, runCachedGenerator } from "./helpers";
 
 export async function getScriptSuggestions(
   generator: Fig.Generator,

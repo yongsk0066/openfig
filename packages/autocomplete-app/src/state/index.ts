@@ -1,21 +1,21 @@
 import React from "react";
 import logger from "loglevel";
-import { create, Mutate, StateCreator, StoreApi } from "zustand";
+import { create, type Mutate, type StateCreator, type StoreApi } from "zustand";
 
-import { Suggestion } from "@fig/shared/internal";
+import type { Suggestion } from "@fig/shared/internal";
 import { fieldsAreEqual, makeArray, memoizeOne } from "@fig/shared/utils";
-import { AliasMap, getCommand } from "@fig/shell-parser";
-import { ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, SettingsMap } from "@fig/api-bindings-wrappers";
-import { type Types } from "@fig/api-bindings";
+import { type AliasMap, getCommand } from "@fig/shell-parser";
+import { type ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser";
+import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings-wrappers";
+import type { Types } from "@fig/api-bindings";
 import { detailedDiff } from "deep-object-diff";
-import { FigState, initialFigState } from "../fig/hooks";
-import { AutocompleteState, NamedSetState, Visibility } from "./types";
+import { type FigState, initialFigState } from "../fig/hooks";
+import { type AutocompleteState, type NamedSetState, Visibility } from "./types";
 
 import { updatePriorities } from "../suggestions/sorting";
 import { deduplicateSuggestions, filterSuggestions, getAllSuggestions } from "../suggestions";
 
-import { GeneratorState } from "../generators/helpers";
+import type { GeneratorState } from "../generators/helpers";
 
 import { getFullHistorySuggestions } from "../history";
 import { createGeneratorState } from "./generators";

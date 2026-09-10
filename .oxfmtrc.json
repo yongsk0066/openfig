@@ -9,6 +9,7 @@
     "target/**",
     "crates/**",
     "tests/figterm2/**",
+    "proto/src/**",
     "packages/fuzzysort/**",
     "pnpm-lock.yaml",
     "**/*.md",

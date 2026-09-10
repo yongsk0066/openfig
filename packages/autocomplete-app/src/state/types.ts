@@ -1,9 +1,9 @@
-import { Suggestion } from "@fig/shared/internal";
-import { ArgumentParserResult } from "@fig/autocomplete-parser";
-import { Command } from "@fig/shell-parser";
-import { SettingsMap } from "@fig/api-bindings-wrappers";
-import { FigState } from "../fig/hooks";
-import { GeneratorState } from "../generators/helpers";
+import type { Suggestion } from "@fig/shared/internal";
+import type { ArgumentParserResult } from "@fig/autocomplete-parser";
+import type { Command } from "@fig/shell-parser";
+import type { SettingsMap } from "@fig/api-bindings-wrappers";
+import type { FigState } from "../fig/hooks";
+import type { GeneratorState } from "../generators/helpers";
 
 export enum Visibility {
   VISIBLE = "visible",

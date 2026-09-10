@@ -1,5 +1,5 @@
-import { LocalStateChangedNotification, NotificationType } from "@fig/proto/fig";
-import { _subscribe, NotificationResponse } from "./notifications.js";
+import { type LocalStateChangedNotification, NotificationType } from "@fig/proto/fig";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 
 import { sendGetLocalStateRequest, sendUpdateLocalStateRequest } from "./requests.js";
 

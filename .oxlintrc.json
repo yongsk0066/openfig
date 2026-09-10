@@ -1,6 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "react-hooks", "jsx-a11y", "import", "unicorn"],
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "jsx-a11y",
+    "import",
+    "unicorn"
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -52,11 +59,17 @@
     "target/**",
     "**/*.config.js",
     "**/*.config.ts",
+    "proto/src/**",
     "packages/fuzzysort/**"
   ],
   "overrides": [
     {
-      "files": ["tests/fig-api/**", "packages/*/tests/**", "**/*.test.ts", "**/*.test.tsx"],
+      "files": [
+        "tests/fig-api/**",
+        "packages/*/tests/**",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
       "rules": {
         "no-eval": "off",
         "unicorn/prefer-module": "off",

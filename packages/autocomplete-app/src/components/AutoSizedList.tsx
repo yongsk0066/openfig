@@ -1,5 +1,5 @@
-import { useImperativeHandle, Ref } from "react";
-import { List, ListProps, useListRef } from "react-window";
+import { useImperativeHandle, type Ref } from "react";
+import { List, type ListProps, useListRef } from "react-window";
 import { twMerge } from "tailwind-merge";
 import { useDynamicResizeObserver } from "../hooks/helpers";
 

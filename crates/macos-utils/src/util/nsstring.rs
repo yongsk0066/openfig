@@ -1,4 +1,3 @@
-use appkit_nsworkspace_bindings::NSString as AppkitNSString;
 use cocoa::foundation::NSString as CocoaNSString;
 use objc::runtime::Object;
 
@@ -87,23 +86,5 @@ impl std::ops::Deref for NSStringRef {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl From<AppkitNSString> for NSStringRef {
-    fn from(s: AppkitNSString) -> Self {
-        // SAFETY:
-        // Operation: `IdRef::new(s.0)`.
-        // Contract (see `IdRef::new`): the pointer must be null or a live object that outlives
-        // the returned borrow.
-        // Evidence: `appkit_nsworkspace_bindings::NSString` is a bindgen newtype over an
-        // Objective-C `id` produced by the generated NSWorkspace bindings; it carries no `Drop`
-        // impl, so converting it here neither releases nor transfers ownership — the borrow's
-        // validity is inherited from whatever produced the `AppkitNSString`.
-        // UNPROVEN: `AppkitNSString` has no documented ownership contract of its own, so
-        // "outlives the borrow" cannot be discharged locally. This impl is currently dead code
-        // (nothing in the workspace constructs an `NSStringRef` this way); see
-        // docs/13-unsafe-review.md, adjacent smells.
-        Self(unsafe { IdRef::new(s.0) })
     }
 }

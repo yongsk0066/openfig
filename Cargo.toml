@@ -4,7 +4,6 @@ members = [
   "crates/*",
   "crates/macos-utils/accessibility-master/accessibility",
   "crates/macos-utils/accessibility-master/accessibility-sys",
-  "crates/macos-utils/appkit-nsworkspace-bindings",
   "tests/fig-api/fig-api-mock",
   "tests/figterm2",
 ]
@@ -23,7 +22,6 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 anstream = "1.0.0"
 anyhow = "1.0.98"
-appkit-nsworkspace-bindings = { path = "crates/macos-utils/appkit-nsworkspace-bindings" }
 assert_cmd = "2.0.17" # This version is required for musl builds to succeed
 async-trait = "0.1.87"
 base64 = "0.23.1"

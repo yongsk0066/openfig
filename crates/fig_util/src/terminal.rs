@@ -35,8 +35,10 @@ pub const SPECIAL_TERMINALS: &[Terminal] = &[Terminal::Tmux, Terminal::Nvim, Ter
 /// and therefore needs `AXManualAccessibility` switched on before the caret can be read.
 ///
 /// Derived from the enum rather than written out, so it cannot drift from
-/// [`Terminal::is_xterm`]. `macos-utils` owns the window server but cannot depend on this
-/// crate (cycle), so `fig_desktop` injects this list into `WindowServer::new`.
+/// [`Terminal::is_xterm`]. `macos-utils` owns the window server but deliberately depends on
+/// neither this crate nor `fig_desktop`, so `fig_desktop` injects this list into
+/// `WindowServer::new`. (There is no dependency cycle to avoid: `macos-utils` is not in
+/// `fig_util`'s dependency list.)
 pub fn xterm_bundle_ids() -> &'static [&'static str] {
     static IDS: OnceLock<Vec<&'static str>> = OnceLock::new();
     IDS.get_or_init(|| {

@@ -1,55 +1,12 @@
 pub mod notification_center;
-mod nsarray;
 mod nsstring;
 
 use std::ops::Deref;
 
 use cocoa::base::nil;
 pub use notification_center::NotificationCenter;
-pub use nsarray::NSArrayRef;
 pub use nsstring::NSStringRef;
-use objc::rc::StrongPtr;
 use objc::runtime::Object;
-
-/// An owning Objective-C object pointer.
-///
-/// # Invariants
-///
-/// The wrapped `StrongPtr` owns exactly one retain, which it releases on drop.
-#[repr(transparent)]
-#[derive(Clone)]
-pub struct Id(objc::rc::StrongPtr);
-
-impl Id {
-    /// # Safety
-    ///
-    /// The caller must ensure that `ptr` is a live Objective-C object **that already carries a
-    /// `+1` retain which this value takes over** — objc 0.2 documents `StrongPtr::new` as
-    /// "constructs a `StrongPtr` to a newly created object that already has a +1 retain count.
-    /// This will not retain the object." Passing a borrowed (`+0`) pointer therefore produces
-    /// an over-release when the `Id` drops.
-    ///
-    /// Note that `Id` derives `Clone`, and `StrongPtr::clone` retains, so cloning is balanced.
-    pub unsafe fn new(ptr: *mut Object) -> Self {
-        // SAFETY:
-        // Operation: `StrongPtr::new(ptr)`.
-        // Contract (objc 0.2): "unsafe because the caller must ensure the given object pointer
-        // is valid", plus the +1-ownership-transfer rule quoted above.
-        // Evidence: both are this function's own `# Safety` preconditions, restated verbatim;
-        // nothing between accepting them and the call can invalidate them.
-        // Postcondition: the returned `Id` is the sole owner of that retain and will release it
-        // on drop.
-        Self(StrongPtr::new(ptr))
-    }
-}
-
-impl std::ops::Deref for Id {
-    type Target = StrongPtr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 /// A non-owning reference to an Objective-C object.
 #[repr(transparent)]

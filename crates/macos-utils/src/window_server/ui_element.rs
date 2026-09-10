@@ -7,7 +7,6 @@ use accessibility_sys::{
     _AXUIElementGetWindow,
     AXError,
     AXUIElement,
-    AXUIElementCopyAttributeNames,
     AXUIElementRef,
     AXUIElementSetAttributeValue,
     AXValue,
@@ -30,10 +29,7 @@ use accessibility_sys::{
     kAXWebAreaRole,
 };
 use core_foundation::ConcreteCFType;
-use core_foundation::array::{
-    CFArray,
-    CFArrayRef,
-};
+use core_foundation::array::CFArray;
 use core_foundation::base::{
     CFType,
     CFTypeRef,
@@ -64,10 +60,7 @@ use core_graphics::window::{
 };
 use tracing::warn;
 
-use crate::util::{
-    NSArrayRef,
-    NSStringRef,
-};
+use crate::util::NSStringRef;
 
 pub struct UIElement(AXUIElement);
 
@@ -333,60 +326,6 @@ impl UIElement {
             .collect();
 
         Ok(filtered)
-    }
-
-    fn attribute_list(&self) -> Result<Vec<String>> {
-        // SAFETY:
-        // Operations: `ax_call::<_, CFArrayRef>` (ending in `assume_init`) and the
-        // `AXUIElementCopyAttributeNames` FFI call.
-        // Contract (HIServices): on `kAXErrorSuccess` it writes a `+1` `CFArrayRef` of
-        // `CFString` through the out-parameter and writes nothing otherwise; `ax_call` only
-        // `assume_init`s on success, and `CFArrayRef` is a raw pointer so any written value is
-        // valid at that type.
-        // Evidence: `self.get_ref()` is live for `&self` (TYPE FACT).
-        // Leak note: `NSArrayRef::from(CFArrayRef)` is *non-owning*, so the `+1` from the Copy
-        // rule is never released — one leaked array per call. `print_all_attribute_values`, the
-        // only caller, is `#[allow(dead_code)]` debug tooling.
-        // See docs/13-unsafe-review.md #6.
-        let attrs: NSArrayRef<NSStringRef> =
-            unsafe { ax_call(|names: *mut CFArrayRef| AXUIElementCopyAttributeNames(self.get_ref(), names))?.into() };
-        let filtered: Vec<_> = attrs
-            .iter()
-            // SAFETY:
-            // Operations: `NSStringRef::new` and, through `Deref`, the read of the element
-            // pointer.
-            // Contract of `NSStringRef::new`: null, or a live `NSString` for the returned
-            // value's lifetime.
-            // Evidence: the array is leaked (see above) and therefore outlives every element
-            // reference derived from it; HIServices documents the array as containing
-            // `CFString`s, which are toll-free bridged to `NSString`. `to_owned()` copies
-            // before the borrow ends.
-            .filter_map(|attr| unsafe { NSStringRef::new(*attr).as_str().map(|s| s.to_owned()) })
-            .collect();
-
-        Ok(filtered)
-    }
-
-    #[allow(dead_code)]
-    pub fn print_all_attribute_values(&self) {
-        if let Ok(attrs) = self.attribute_list() {
-            for key in attrs {
-                if let Ok(value) = self.get_attr_ref(key.as_str()) {
-                    let value_str = if let Some(s) = value.downcast::<CFString>() {
-                        format!("{s:?}")
-                    } else if let Some(cf_b) = value.downcast::<CFBoolean>() {
-                        let b: bool = cf_b.into();
-                        format!("{b:?}")
-                    } else if let Some(ax) = value.downcast::<AXValue>() {
-                        format!("{ax:?}")
-                    } else {
-                        format!("Unknown {{ type_id: {:?} }}", value.type_of())
-                    };
-
-                    warn!("{key}: {value_str}");
-                }
-            }
-        }
     }
 
     fn children(&self) -> Result<Vec<UIElement>> {

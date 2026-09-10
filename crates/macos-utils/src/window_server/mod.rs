@@ -79,8 +79,9 @@ use crate::util::NotificationCenter;
 use crate::util::notification_center::get_app_from_notification;
 
 /// System processes that never host a shell. Our own bundle id is *not* here: it is
-/// injected through [`WindowServer::new`] because this crate cannot depend on
-/// `fig_util` (`fig_util` already depends on this crate on macOS).
+/// injected through [`WindowServer::new`] so this crate stays independent of `fig_util` and the
+/// list stays testable. (The old comment claimed a dependency cycle — `fig_util` does not
+/// depend on `macos-utils`, on macOS or anywhere else.)
 const BLOCKED_BUNDLE_IDS: &[&str] = &[
     "com.apple.ViewBridgeAuxiliary",
     "com.apple.notificationcenterui",
@@ -190,8 +191,9 @@ pub struct WindowServerInner {
 
 impl WindowServer {
     /// `own_bundle_id` and `xterm_bundle_ids` are injected rather than read from
-    /// `fig_util::consts` / `fig_util::Terminal`: `fig_util` depends on this crate on
-    /// macOS, so depending back on it would be a cycle.
+    /// `fig_util::consts` / `fig_util::Terminal` so this crate keeps no dependency on `fig_util`
+    /// and both values stay injectable in tests. (Not, as the previous comment claimed, because
+    /// `fig_util` depends on this crate — it does not.)
     pub fn new(
         sender: Sender<WindowServerEvent>,
         own_bundle_id: &'static str,

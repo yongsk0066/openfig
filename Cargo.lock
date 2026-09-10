@@ -151,14 +151,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "appkit-nsworkspace-bindings"
-version = "1.19.7"
-dependencies = [
- "bindgen",
- "objc",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -328,8 +320,6 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
- "log",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -2960,7 +2950,6 @@ version = "1.19.7"
 dependencies = [
  "accessibility",
  "accessibility-sys",
- "appkit-nsworkspace-bindings",
  "block2",
  "cocoa",
  "core-foundation",
@@ -2969,7 +2958,6 @@ dependencies = [
  "flume",
  "fnv",
  "libc",
- "nix 0.31.3",
  "objc",
  "objc2",
  "objc2-app-kit",

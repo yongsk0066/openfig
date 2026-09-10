@@ -3,7 +3,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 pub mod accessibility;
-pub mod applications;
 pub mod bundle;
 pub mod caret_position;
 pub mod image;

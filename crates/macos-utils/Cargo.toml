@@ -37,7 +37,5 @@ flume.workspace = true
 fnv = "1.0.7"
 accessibility-sys = { path = "./accessibility-master/accessibility-sys" }
 accessibility = { path = "./accessibility-master/accessibility" }
-appkit-nsworkspace-bindings.workspace = true
 tracing.workspace = true
 tokio.workspace = true
-nix.workspace = true

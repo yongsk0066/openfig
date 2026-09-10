@@ -36,7 +36,7 @@ pub fn desktop_app_running() -> bool {
     };
 
     let bundle_id = ns_string!(APP_BUNDLE_ID);
-    let running_applications = unsafe { NSRunningApplication::runningApplicationsWithBundleIdentifier(bundle_id) };
+    let running_applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(bundle_id);
 
     if !running_applications.is_empty() {
         return true;

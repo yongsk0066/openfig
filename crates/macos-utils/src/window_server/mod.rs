@@ -31,17 +31,19 @@ use core_foundation::string::{
 };
 use dashmap::DashMap;
 use flume::Sender;
-use objc2::mutability::InteriorMutable;
 use objc2::rc::{
     Allocated,
     Retained,
 };
-use objc2::runtime::AnyObject;
+use objc2::runtime::{
+    AnyObject,
+    NSObjectProtocol,
+};
 use objc2::{
-    ClassType,
-    DeclaredClass,
-    declare_class,
-    msg_send_id,
+    AllocAnyThread,
+    DefinedClass,
+    define_class,
+    msg_send,
     sel,
 };
 use objc2_app_kit::{
@@ -208,70 +210,65 @@ trait WindowServerHandler {
     fn did_launch_application(&mut self, notif: &NSNotification);
 }
 
-const OBSERVER_CLASS_NAME: &str = "Fig_WindowServerObserver";
-
 pub struct Ivars {
     handler: *mut c_void,
 }
 
-declare_class! {
+define_class!(
+    // SAFETY:
+    // - The superclass NSObject does not have any subclassing requirements.
+    // - `ObserverClass` does not implement `Drop`.
+    #[unsafe(super(NSObject))]
+    // The name is referenced from the notification-center registrations below, so it is pinned
+    // rather than left to objc2's module-path-plus-version default.
+    #[name = "Fig_WindowServerObserver"]
+    #[ivars = Ivars]
     pub struct ObserverClass;
 
-    // - The superclass NSObject does not have any subclassing requirements.
-    // - Interior mutability is a safe default.
-    // - `ObserverClass` does not implement `Drop`.
-    unsafe impl ClassType for ObserverClass {
-        type Super = NSObject;
-        type Mutability = InteriorMutable;
-        const NAME: &'static str = OBSERVER_CLASS_NAME;
-    }
-
-    impl DeclaredClass for ObserverClass {
-        type Ivars = Ivars;
-    }
-
-    unsafe impl ObserverClass {
-        #[method_id(initWithHandler:)]
+    impl ObserverClass {
+        #[unsafe(method_id(initWithHandler:))]
         fn init_with_handler(this: Allocated<Self>, handler: *mut c_void) -> Option<Retained<Self>> {
             let this = this.set_ivars(Ivars {
                 handler
             });
-            unsafe { msg_send_id![super(this), init] }
+            unsafe { msg_send![super(this), init] }
         }
 
-        #[method(didActivateApplication:)]
+        #[unsafe(method(didActivateApplication:))]
         fn did_activate_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler as *mut WindowServerInner;
             let inner = unsafe { &mut *inner };
             inner.did_activate_application(notif);
         }
 
-        #[method(activeSpaceChanged:)]
+        #[unsafe(method(activeSpaceChanged:))]
         fn active_space_changed(&self, notif: &NSNotification) {
             let inner = self.ivars().handler as *mut WindowServerInner;
             let inner = unsafe { &mut *inner };
             inner.active_space_changed(notif);
         }
 
-        #[method(didTerminateApplication:)]
+        #[unsafe(method(didTerminateApplication:))]
         fn did_terminate_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler as *mut WindowServerInner;
             let inner = unsafe { &mut *inner };
             inner.did_terminate_application(notif);
         }
 
-        #[method(didLaunchApplication:)]
+        #[unsafe(method(didLaunchApplication:))]
         fn did_launch_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler as *mut WindowServerInner;
             let inner = unsafe { &mut *inner };
             inner.did_launch_application(notif);
         }
     }
-}
+
+    unsafe impl NSObjectProtocol for ObserverClass {}
+);
 
 impl ObserverClass {
     pub fn new(handler: *mut c_void) -> Retained<Self> {
-        unsafe { msg_send_id![Self::alloc(), initWithHandler:handler] }
+        unsafe { msg_send![Self::alloc(), initWithHandler:handler] }
     }
 }
 
@@ -388,8 +385,9 @@ impl WindowServerInner {
                 self.register(&app, true);
             }
 
+            // objc2-foundation 0.3 yields Retained<T> from NSArray::iter, not &T.
             for app in workspace.runningApplications().iter() {
-                self.register(app, false)
+                self.register(&app, false)
             }
         }
 
@@ -450,7 +448,7 @@ impl WindowServerHandler for WindowServerInner {
 
                 let has_running = apps
                     .iter()
-                    .any(|running| app_bundle_id(running).map(|id| id == bundle_id).unwrap_or(false));
+                    .any(|running| app_bundle_id(&running).map(|id| id == bundle_id).unwrap_or(false));
 
                 if !has_running {
                     trace!("Deregistering app {bundle_id:?} since no other instances are running");

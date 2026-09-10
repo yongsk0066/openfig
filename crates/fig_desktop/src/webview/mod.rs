@@ -380,7 +380,7 @@ impl WebviewManager {
             }
 
             match event {
-                WryEvent::NewEvents(StartCause::Init) => info!("Fig has started"),
+                WryEvent::NewEvents(StartCause::Init) => info!("{PRODUCT_NAME} has started"),
                 WryEvent::WindowEvent { event, window_id, .. } => {
                     if let Some(window_state) = self.window_id_map.get(&window_id) {
                         match event {

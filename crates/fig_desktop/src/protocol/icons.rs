@@ -130,7 +130,7 @@ pub async fn handle(
     request: Request<Vec<u8>>,
     _: WindowId,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
-    debug!(uri =% request.uri(), "Fig protocol request");
+    debug!(uri =% request.uri(), "fig:// protocol request");
     let url = Url::parse(&request.uri().to_string())?;
     let domain = url.domain();
     let pairs: HashMap<_, _> = url.query_pairs().collect();

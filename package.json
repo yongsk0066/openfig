@@ -4,10 +4,10 @@
   "author": "Amazon Web Services",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
   "license": "MIT OR Apache-2.0",
-  "packageManager": "pnpm@10.0.0+sha256.43abf6e720fb7bc53c591b0862605c7d323d0a9d2dd33bcac07b062e13cf4948",
+  "packageManager": "pnpm@12.3.4",
   "type": "module",
   "engines": {
-    "node": "^22.0.0"
+    "node": ">=22"
   },
   "scripts": {
     "build": "turbo build",

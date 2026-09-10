@@ -21,6 +21,7 @@ use tao::dpi::{
     LogicalPosition,
     LogicalSize,
     Position,
+    Size,
 };
 use tao::window::Window;
 use tracing::{
@@ -77,6 +78,172 @@ pub struct WindowState {
     pub window_geometry_state: Mutex<WindowGeometryState>,
     pub enabled: AtomicBool,
     pub url: Mutex<Url>,
+}
+
+/// One monitor, as `solve_geometry` needs it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MonitorFrame {
+    /// Physical position, as tao reports it.
+    pub position: Position,
+    /// Physical size, as tao reports it.
+    pub size: Size,
+    pub scale_factor: f64,
+}
+
+impl From<tao::monitor::MonitorHandle> for MonitorFrame {
+    fn from(monitor: tao::monitor::MonitorHandle) -> Self {
+        Self {
+            position: monitor.position().into(),
+            size: monitor.size().into(),
+            scale_factor: monitor.scale_factor(),
+        }
+    }
+}
+
+impl MonitorFrame {
+    fn rect(&self) -> Rect {
+        Rect {
+            position: self.position,
+            size: self.size,
+        }
+    }
+
+    fn logical_position(&self) -> LogicalPosition<f64> {
+        self.position.to_logical(self.scale_factor)
+    }
+
+    fn logical_size(&self) -> LogicalSize<f64> {
+        self.size.to_logical(self.scale_factor)
+    }
+}
+
+/// Everything `solve_geometry` needs to know about the display arrangement.
+#[derive(Debug, Clone, Default)]
+pub struct Screen {
+    /// The monitor the window is currently on, used for `Centered`.
+    pub current: Option<MonitorFrame>,
+    /// The primary monitor's scale factor. The caret arrives in the primary monitor's
+    /// coordinate space, so it is what caret positions are converted with.
+    pub primary_scale_factor: Option<f64>,
+    pub monitors: Vec<MonitorFrame>,
+}
+
+/// Where the autocomplete window goes, and what to tell the app about the result.
+///
+/// This is the calculation half of `update_window_geometry`, which was 193 lines of state
+/// update, monitor search, coordinate conversion, clipping and window manipulation with no
+/// tests at all. Everything about the screen and the focused window arrives as an argument, so
+/// the arithmetic can be exercised directly.
+///
+/// `None` means there is nothing to position (no current monitor for a `Centered` request).
+fn solve_geometry(
+    position: WindowPosition,
+    size: LogicalSize<f64>,
+    anchor: LogicalSize<f64>,
+    screen: &Screen,
+    max_height: f64,
+    active_window_bottom: impl Fn(f64) -> Option<f64>,
+) -> Option<(Position, WindowGeometryResult)> {
+    let unclipped = WindowGeometryResult {
+        is_above: false,
+        is_clipped: false,
+    };
+
+    match position {
+        WindowPosition::Absolute(position) => Some((position, unclipped)),
+        WindowPosition::Centered => {
+            let monitor = screen.current?;
+            let monitor_position = monitor.logical_position();
+            let monitor_size = monitor.logical_size();
+
+            Some((
+                Position::Logical(LogicalPosition::new(
+                    monitor_position.x + monitor_size.width * 0.5 - size.width * 0.5,
+                    monitor_position.y + monitor_size.height * 0.5 - size.height * 0.5,
+                )),
+                unclipped,
+            ))
+        },
+        WindowPosition::RelativeToCaret {
+            caret_position,
+            caret_size,
+        } => {
+            // The monitor the caret is on, plus whether the dropdown fits above or below it.
+            let found = screen.monitors.iter().find_map(|monitor| {
+                let scale = screen.primary_scale_factor.unwrap_or(monitor.scale_factor);
+                let logical_caret_position: LogicalPosition<f64> = caret_position.to_logical(scale);
+                let logical_caret_size: LogicalSize<f64> = caret_size.to_logical(scale);
+
+                monitor
+                    .rect()
+                    .contains(logical_caret_position.into(), monitor.scale_factor)
+                    .then(|| {
+                        let monitor_position = monitor.logical_position();
+                        let monitor_size = monitor.logical_size();
+
+                        (
+                            logical_caret_position,
+                            logical_caret_size,
+                            monitor_position.y >= logical_caret_position.y - max_height,
+                            monitor_position.y + monitor_size.height
+                                < logical_caret_position.y + logical_caret_size.height + max_height,
+                            monitor.scale_factor,
+                            Some((monitor_position, monitor_size)),
+                        )
+                    })
+            });
+
+            let (
+                caret_position,
+                caret_size,
+                overflows_monitor_above,
+                overflows_monitor_below,
+                scale_factor,
+                monitor_frame,
+            ) = found.unwrap_or_else(|| {
+                (
+                    caret_position.to_logical(1.0),
+                    caret_size.to_logical(1.0),
+                    false,
+                    false,
+                    1.0,
+                    None,
+                )
+            });
+
+            let overflows_window_below = active_window_bottom(scale_factor)
+                .is_some_and(|bottom| bottom < max_height + caret_position.y + caret_size.height);
+
+            let is_above = !overflows_monitor_above && (overflows_monitor_below || overflows_window_below);
+
+            let mut x: f64 = caret_position.x + anchor.width;
+            let mut y: f64 = if is_above {
+                caret_position.y - size.height - anchor.height
+            } else {
+                caret_position.y + caret_size.height + anchor.height
+            };
+
+            let is_clipped = if let Some((monitor_position, monitor_size)) = &monitor_frame {
+                let is_clipped = caret_position.x + size.width > monitor_position.x + monitor_size.width;
+
+                x = x
+                    .min(monitor_position.x + monitor_size.width - size.width)
+                    .max(monitor_position.x);
+                y = y
+                    .min(monitor_position.y + monitor_size.height - size.height)
+                    .max(monitor_position.y);
+
+                is_clipped
+            } else {
+                false
+            };
+
+            Some((Position::Logical(LogicalPosition::new(x, y)), WindowGeometryResult {
+                is_above,
+                is_clipped,
+            }))
+        },
+    }
 }
 
 impl WindowState {
@@ -159,116 +326,18 @@ impl WindowState {
 
         let window = &self.window;
 
-        let (position, is_above, is_clipped) = match position {
-            WindowPosition::Absolute(position) => (position, false, false),
-            WindowPosition::Centered => {
-                let scale_factor = window.scale_factor();
+        let screen = Screen {
+            current: window.current_monitor().map(MonitorFrame::from),
+            primary_scale_factor: window.primary_monitor().map(|monitor| monitor.scale_factor()),
+            monitors: window.available_monitors().map(MonitorFrame::from).collect(),
+        };
 
-                let Some(monitor) = window.current_monitor() else {
-                    return (false, false);
-                };
+        let max_height = fig_settings::settings::get_int_or("autocomplete.height", 140) as f64;
 
-                let monitor_position: LogicalPosition<f64> = monitor.position().to_logical(scale_factor);
-                let monitor_size: LogicalSize<f64> = monitor.size().to_logical(scale_factor);
-
-                (
-                    Position::Logical(LogicalPosition::new(
-                        monitor_position.x + monitor_size.width * 0.5 - size.width * 0.5,
-                        monitor_position.y + monitor_size.height * 0.5 - size.height * 0.5,
-                    )),
-                    false,
-                    false,
-                )
-            },
-            WindowPosition::RelativeToCaret {
-                caret_position,
-                caret_size,
-            } => {
-                let max_height = fig_settings::settings::get_int_or("autocomplete.height", 140) as f64;
-
-                let primary_monitor = window.primary_monitor();
-                let primary_scale_factor = primary_monitor.as_ref().map(|monitor| monitor.scale_factor());
-
-                let (
-                    caret_position,
-                    caret_size,
-                    overflows_monitor_above,
-                    overflows_monitor_below,
-                    scale_factor,
-                    monitor_frame,
-                ) = window
-                    .available_monitors()
-                    .find_map(|monitor| {
-                        let monitor_scale_factor = monitor.scale_factor();
-                        let monitor_frame = Rect {
-                            position: monitor.position().into(),
-                            size: monitor.size().into(),
-                        };
-
-                        let logical_caret_position: LogicalPosition<f64> =
-                            caret_position.to_logical(primary_scale_factor.unwrap_or(monitor_scale_factor));
-                        let logical_caret_size: LogicalSize<f64> =
-                            caret_size.to_logical(primary_scale_factor.unwrap_or(monitor_scale_factor));
-
-                        monitor_frame
-                            .contains(logical_caret_position.into(), monitor_scale_factor)
-                            .then(|| {
-                                let monitor_position: LogicalPosition<f64> =
-                                    monitor.position().to_logical(monitor_scale_factor);
-                                let monitor_size: LogicalSize<f64> = monitor.size().to_logical(monitor_scale_factor);
-
-                                (
-                                    logical_caret_position,
-                                    logical_caret_size,
-                                    monitor_position.y >= logical_caret_position.y - max_height,
-                                    monitor_position.y + monitor_size.height
-                                        < logical_caret_position.y + logical_caret_size.height + max_height,
-                                    monitor_scale_factor,
-                                    Some((monitor_position, monitor_size)),
-                                )
-                            })
-                    })
-                    .unwrap_or_else(|| {
-                        (
-                            caret_position.to_logical(1.0),
-                            caret_size.to_logical(1.0),
-                            false,
-                            false,
-                            1.0,
-                            None,
-                        )
-                    });
-
-                let overflows_window_below = platform_state
-                    .active_window_bottom(scale_factor)
-                    .is_some_and(|bottom| bottom < max_height + caret_position.y + caret_size.height);
-
-                let above = !overflows_monitor_above & (overflows_monitor_below | overflows_window_below);
-
-                let mut x: f64 = caret_position.x + anchor.width;
-                let mut y: f64 = match above {
-                    true => caret_position.y - size.height - anchor.height,
-                    false => caret_position.y + caret_size.height + anchor.height,
-                };
-
-                #[allow(clippy::all)]
-                let clipped = if let Some((monitor_position, monitor_size)) = &monitor_frame {
-                    let clipped = caret_position.x + size.width > monitor_position.x + monitor_size.width;
-
-                    x = x
-                        .min(monitor_position.x + monitor_size.width - size.width)
-                        .max(monitor_position.x);
-                    y = y
-                        .min(monitor_position.y + monitor_size.height - size.height)
-                        .max(monitor_position.y);
-
-                    clipped
-                } else {
-                    false
-                };
-
-                (Position::Logical(LogicalPosition::new(x, y)), above, clipped)
-            },
+        let Some((position, result)) = solve_geometry(position, size, anchor, &screen, max_height, |scale| {
+            platform_state.active_window_bottom(scale)
+        }) else {
+            return (false, false);
         };
 
         if !dry_run {
@@ -293,7 +362,7 @@ impl WindowState {
             }
         }
 
-        (is_above, is_clipped)
+        (result.is_above, result.is_clipped)
     }
 
     #[allow(clippy::only_used_in_recursion)]
@@ -527,5 +596,129 @@ impl WindowState {
 
     pub fn set_theme(&self, theme: Option<Theme>) {
         self.window.set_theme(theme.and_then(to_tao_theme));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tao::dpi::PhysicalPosition;
+
+    use super::*;
+
+    /// A 1920x1080 monitor at the origin, scale 1, so logical == physical.
+    fn monitor() -> MonitorFrame {
+        MonitorFrame {
+            position: Position::Physical(PhysicalPosition::new(0, 0)),
+            size: Size::Physical(tao::dpi::PhysicalSize::new(1920, 1080)),
+            scale_factor: 1.0,
+        }
+    }
+
+    fn screen() -> Screen {
+        Screen {
+            current: Some(monitor()),
+            primary_scale_factor: Some(1.0),
+            monitors: vec![monitor()],
+        }
+    }
+
+    fn caret(x: f64, y: f64) -> WindowPosition {
+        WindowPosition::RelativeToCaret {
+            caret_position: Position::Logical(LogicalPosition::new(x, y)),
+            caret_size: Size::Logical(LogicalSize::new(10.0, 20.0)),
+        }
+    }
+
+    fn logical(position: Position) -> LogicalPosition<f64> {
+        position.to_logical(1.0)
+    }
+
+    const SIZE: LogicalSize<f64> = LogicalSize::new(300.0, 140.0);
+    const ANCHOR: LogicalSize<f64> = LogicalSize::new(0.0, 5.0);
+    const MAX_HEIGHT: f64 = 140.0;
+
+    fn solve(position: WindowPosition, bottom: Option<f64>) -> (Position, WindowGeometryResult) {
+        solve_geometry(position, SIZE, ANCHOR, &screen(), MAX_HEIGHT, |_| bottom).unwrap()
+    }
+
+    #[test]
+    fn an_absolute_position_is_passed_through() {
+        let want = Position::Logical(LogicalPosition::new(12.0, 34.0));
+        let (position, result) = solve(WindowPosition::Absolute(want), None);
+
+        assert_eq!(logical(position), logical(want));
+        assert!(!result.is_above);
+        assert!(!result.is_clipped);
+    }
+
+    #[test]
+    fn centered_puts_the_window_in_the_middle_of_the_current_monitor() {
+        let (position, _) = solve(WindowPosition::Centered, None);
+        assert_eq!(logical(position), LogicalPosition::new(960.0 - 150.0, 540.0 - 70.0));
+    }
+
+    #[test]
+    fn there_is_nothing_to_centre_without_a_current_monitor() {
+        let screen = Screen {
+            current: None,
+            ..screen()
+        };
+        assert!(solve_geometry(WindowPosition::Centered, SIZE, ANCHOR, &screen, MAX_HEIGHT, |_| None).is_none());
+    }
+
+    /// Plenty of room below the caret: the window sits under it, offset by the anchor.
+    #[test]
+    fn the_dropdown_opens_below_the_caret_when_it_fits() {
+        let (position, result) = solve(caret(400.0, 300.0), None);
+
+        assert!(!result.is_above);
+        assert!(!result.is_clipped);
+        assert_eq!(logical(position), LogicalPosition::new(400.0, 300.0 + 20.0 + 5.0));
+    }
+
+    /// Near the bottom of the screen there is no room below, so it flips above the caret.
+    #[test]
+    fn the_dropdown_flips_above_the_caret_at_the_bottom_of_the_screen() {
+        let (position, result) = solve(caret(400.0, 1000.0), None);
+
+        assert!(result.is_above);
+        assert_eq!(logical(position).y, 1000.0 - 140.0 - 5.0);
+    }
+
+    /// It also flips when the *terminal window* ends before the dropdown would, even though the
+    /// monitor has room — this is what `active_window_bottom` is for.
+    #[test]
+    fn the_dropdown_flips_above_when_the_terminal_window_ends_first() {
+        let (_, below) = solve(caret(400.0, 300.0), Some(900.0));
+        assert!(
+            !below.is_above,
+            "a window ending at 900 leaves room for 140 below y=320"
+        );
+
+        let (_, above) = solve(caret(400.0, 300.0), Some(400.0));
+        assert!(above.is_above, "a window ending at 400 does not");
+    }
+
+    /// A caret near the right edge reports clipping and is pulled back onto the monitor.
+    #[test]
+    fn a_caret_near_the_right_edge_clips() {
+        let (position, result) = solve(caret(1800.0, 300.0), None);
+
+        assert!(result.is_clipped);
+        assert_eq!(logical(position).x, 1920.0 - 300.0, "pulled back inside the monitor");
+    }
+
+    /// A caret on no known monitor still yields a position rather than nothing.
+    #[test]
+    fn a_caret_off_screen_falls_back_to_the_raw_coordinates() {
+        let screen = Screen {
+            monitors: vec![],
+            ..screen()
+        };
+        let (position, result) =
+            solve_geometry(caret(400.0, 300.0), SIZE, ANCHOR, &screen, MAX_HEIGHT, |_| None).unwrap();
+
+        assert!(!result.is_clipped, "nothing to clip against");
+        assert_eq!(logical(position), LogicalPosition::new(400.0, 325.0));
     }
 }

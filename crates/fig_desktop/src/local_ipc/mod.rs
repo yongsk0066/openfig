@@ -2,6 +2,7 @@ pub(crate) mod commands;
 mod hooks;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{
     Context,
@@ -122,7 +123,19 @@ pub async fn start_local_ipc(
 
     let listener = UnixListener::bind(&socket_path)?;
 
-    while let Ok((stream, _)) = listener.accept().await {
+    loop {
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(err) => {
+                // A single transient accept failure (EMFILE, ECONNABORTED, ...) used to end the
+                // `while let Ok(..)` loop and silently kill the desktop's only local IPC
+                // listener for the rest of the process's life.
+                warn!(%err, "Failed to accept a local IPC connection");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            },
+        };
+
         tokio::spawn(handle_local_ipc(
             BufferedUnixStream::new(stream),
             platform_state.clone(),
@@ -132,8 +145,6 @@ pub async fn start_local_ipc(
             LocalIpcContext::new(),
         ));
     }
-
-    Ok(())
 }
 
 async fn handle_local_ipc<Ctx>(

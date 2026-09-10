@@ -469,7 +469,13 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     let runtime_result = runtime.block_on(async {
         terminal.set_raw_mode()?;
 
-        let (main_loop_tx, main_loop_rx) = flume::bounded::<MainLoopEvent>(16);
+        // Unbounded on purpose: the only consumer of `main_loop_rx` is the `select!` below, and
+        // `EventHandler::send_event` runs *inside* that same loop (the terminal parser calls it
+        // while the loop is processing PTY output). A bounded channel therefore deadlocks the
+        // loop against itself as soon as the burst is deeper than the bound — flume's blocking
+        // `send()` parks the thread that is supposed to drain it. Each command cycle pushes 2
+        // events (3 with csi-u), so a paste that produces ~6 prompts already hangs the shell.
+        let (main_loop_tx, main_loop_rx) = flume::unbounded::<MainLoopEvent>();
 
         let history_sender = history::spawn_history_task().await;
 

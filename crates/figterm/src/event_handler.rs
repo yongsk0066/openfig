@@ -63,9 +63,9 @@ impl EventListener for EventHandler {
                     std::env::set_current_dir(cwd).ok();
                 }
 
-                self.main_loop_sender
-                    .send(MainLoopEvent::SetImmediateMode(false))
-                    .unwrap();
+                if let Err(err) = self.main_loop_sender.send(MainLoopEvent::SetImmediateMode(false)) {
+                    error!(%err, "Sender error");
+                }
 
                 if let Err(err) = self.socket_sender.send(message) {
                     error!(%err, "Sender error");
@@ -82,10 +82,13 @@ impl EventListener for EventHandler {
                 let hook = new_preexec_hook(Some(context));
                 let message = hook_to_message(hook);
 
-                self.main_loop_sender.send(MainLoopEvent::UnlockInterception).unwrap();
-                self.main_loop_sender
-                    .send(MainLoopEvent::SetImmediateMode(true))
-                    .unwrap();
+                if let Err(err) = self.main_loop_sender.send(MainLoopEvent::UnlockInterception) {
+                    error!(%err, "Sender error");
+                }
+
+                if let Err(err) = self.main_loop_sender.send(MainLoopEvent::SetImmediateMode(true)) {
+                    error!(%err, "Sender error");
+                }
 
                 if let Err(err) = self.socket_sender.send(message) {
                     error!(%err, "Sender error");

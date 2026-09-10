@@ -93,6 +93,28 @@ impl RemoteHookHandler for RemoteHook {
     }
 }
 
+/// Absolute path of the freshly built pty binary (`target/<profile>/<PTY_BINARY_NAME>`).
+///
+/// The test binary lives in `target/<profile>/deps/`, so the sibling of its grandparent directory
+/// is the profile directory. `cargo nextest run` builds the workspace's bin targets, so this is
+/// always present when the tests are run through the normal gate.
+fn pty_binary() -> Result<std::path::PathBuf> {
+    let test_exe = std::env::current_exe().context("no current_exe")?;
+    let profile_dir = test_exe
+        .parent()
+        .and_then(|deps| deps.parent())
+        .context("test binary is not under target/<profile>/deps")?;
+    let path = profile_dir.join(fig_util::consts::PTY_BINARY_NAME);
+    if !path.exists() {
+        anyhow::bail!(
+            "{} was not built at {}; run the tests through `cargo nextest run --workspace`",
+            fig_util::consts::PTY_BINARY_NAME,
+            path.display()
+        );
+    }
+    Ok(path)
+}
+
 pub struct Shell {
     // pub remote_socket: UnixListener,
     pub desktop_socket: UnixListener,
@@ -152,6 +174,10 @@ impl Shell {
         let mut cmd = CommandBuilder::new(shell);
 
         let session_id = "1234";
+        // `pre.sh` honours a pre-set `Q_TERM_PATH`; without it the shell integration would exec
+        // whatever pty binary is *installed* on this machine, so the test would silently validate
+        // the installed app instead of the workspace build.
+        cmd.env("Q_TERM_PATH", pty_binary()?);
         cmd.env("Q_NEW_SESSION", "1");
         cmd.env("MOCK_QTERM_SESSION_ID", session_id);
         cmd.env("TMPDIR", tempdir.path());

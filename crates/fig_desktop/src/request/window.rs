@@ -1,10 +1,8 @@
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     DragWindowRequest,
-    FocusAction,
     PositionWindowRequest,
     PositionWindowResponse,
-    WindowFocusRequest,
 };
 use fig_remote_ipc::figterm::FigtermState;
 use tao::dpi::LogicalSize;
@@ -85,21 +83,6 @@ pub async fn position_window(
         )),
         None => Err("unable to determine is_above and is_clipped".into()),
     }
-}
-
-pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &dyn EventSender) -> RequestResult {
-    debug!(?request, %window_id, "Window Focus Request");
-    match request.r#type() {
-        FocusAction::TakeFocus => {
-            proxy.send_event_or_err(Event::WindowEvent {
-                window_id,
-                window_event: WindowEvent::Show,
-            })?;
-        },
-        FocusAction::ReturnFocus => return Err("ReturnFocus not implemented".into()),
-    }
-
-    RequestResult::success()
 }
 
 pub async fn drag(request: DragWindowRequest, window_id: WindowId, proxy: &dyn EventSender) -> RequestResult {

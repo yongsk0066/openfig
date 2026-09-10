@@ -104,8 +104,15 @@ const responseTypes = getSubmessageTypes("ServerOriginatedMessage").filter((type
   type.includes("Response"),
 );
 
+// Requests deliberately left without a generated wrapper. `getSubmessageTypes` returns *message*
+// names, so the previous `request !== "notificationRequest"` filter — comparing against a field
+// name — never excluded anything and the wrapper was emitted anyway.
+//   NotificationRequest: `notifications.ts` calls `sendMessage` directly.
+//   PingRequest:         no caller anywhere in the workspace.
+const EXCLUDED_REQUESTS = new Set(["NotificationRequest", "PingRequest"]);
+
 const [requestsWithMatchingResponses, otherRequests] = requestTypes
-  .filter((request) => request !== "notificationRequest")
+  .filter((request) => !EXCLUDED_REQUESTS.has(request))
   .reduce(
     (result, request) => {
       const [matchingResponse, other] = result;

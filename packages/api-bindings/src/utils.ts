@@ -1,22 +1,3 @@
-export const b64EncodeUnicode = (str: string): string =>
-  // first we use encodeURIComponent to get percent-encoded UTF-8,
-  // then we convert the percent encodings into raw bytes which
-  // can be fed into btoa.
-  btoa(
-    encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
-      String.fromCharCode(Number(`0x${p1}`)),
-    ),
-  );
-
-export const b64DecodeUnicode = (str: string): string =>
-  // Going backwards: from bytestream, to percent-encoding, to original string.
-  decodeURIComponent(
-    atob(str)
-      .split("")
-      .map((c) => `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`)
-      .join(""),
-  );
-
 // `Uint8Array.fromBase64` (TC39 "Uint8Array to/from base64", shipped in Safari 18.2) decodes in
 // one native call. The hand-rolled loop below runs one JS iteration per byte, which is 13,540 of
 // them for a single edit-buffer notification, so it is kept only as a fallback for engines that
@@ -38,6 +19,10 @@ export const b64ToBytes = (base64: string): Uint8Array => {
   return bytes;
 };
 
+// Only reachable through `core.ts`'s `window.ipc.postMessage` fallback, which the desktop app
+// never takes (`javascript_init(true)` fixes `supportApiProto`). It is kept because
+// `tests/fig-api/fig-api-mock` runs with `javascript_init(false)` and that transport is what the
+// vitest suite exercises. Do not delete without deleting that harness.
 const base64abc = [
   "A",
   "B",

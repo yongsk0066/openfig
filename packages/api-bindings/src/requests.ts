@@ -21,11 +21,8 @@ import type {
   InsertTextRequest,
   InstallRequest,
   InstallResponse,
-  NotificationRequest,
   OnboardingRequest,
   OpenInExternalApplicationRequest,
-  PingRequest,
-  PingResponse,
   PositionWindowRequest,
   PositionWindowResponse,
   ReadFileRequest,
@@ -35,7 +32,6 @@ import type {
   UpdateApplicationPropertiesRequest,
   UpdateLocalStateRequest,
   UpdateSettingsPropertyRequest,
-  WindowFocusRequest,
   WriteFileRequest,
 } from "@fig/proto/fig";
 import {
@@ -50,17 +46,14 @@ import {
   HistoryQueryRequestSchema,
   InsertTextRequestSchema,
   InstallRequestSchema,
-  NotificationRequestSchema,
   OnboardingRequestSchema,
   OpenInExternalApplicationRequestSchema,
-  PingRequestSchema,
   PositionWindowRequestSchema,
   ReadFileRequestSchema,
   RunProcessRequestSchema,
   UpdateApplicationPropertiesRequestSchema,
   UpdateLocalStateRequestSchema,
   UpdateSettingsPropertyRequestSchema,
-  WindowFocusRequestSchema,
   WriteFileRequestSchema,
 } from "@fig/proto/fig";
 import { sendMessage } from "./core.js";
@@ -275,25 +268,6 @@ export async function sendHistoryQueryRequest(
   });
 }
 
-export async function sendPingRequest(
-  request: Omit<PingRequest, "$typeName" | "$unknown">,
-): Promise<PingResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage({ case: "pingRequest", value: create(PingRequestSchema, request) }, (response) => {
-      switch (response?.case) {
-        case "pingResponse":
-          resolve(response.value);
-          break;
-        case "error":
-          reject(Error(response.value));
-          break;
-        default:
-          reject(Error(`Invalid response '${response?.case}' for 'PingRequest'`));
-      }
-    });
-  });
-}
-
 export async function sendGetPlatformInfoRequest(
   request: Omit<GetPlatformInfoRequest, "$typeName" | "$unknown">,
 ): Promise<GetPlatformInfoResponse> {
@@ -332,28 +306,6 @@ export async function sendWriteFileRequest(
             break;
           default:
             reject(Error(`Invalid response '${response?.case}' for 'WriteFileRequest'`));
-        }
-      },
-    );
-  });
-}
-
-export async function sendNotificationRequest(
-  request: Omit<NotificationRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      { case: "notificationRequest", value: create(NotificationRequestSchema, request) },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(Error(`Invalid response '${response?.case}' for 'NotificationRequest'`));
         }
       },
     );
@@ -454,28 +406,6 @@ export async function sendOnboardingRequest(
             break;
           default:
             reject(Error(`Invalid response '${response?.case}' for 'OnboardingRequest'`));
-        }
-      },
-    );
-  });
-}
-
-export async function sendWindowFocusRequest(
-  request: Omit<WindowFocusRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      { case: "windowFocusRequest", value: create(WindowFocusRequestSchema, request) },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(Error(`Invalid response '${response?.case}' for 'WindowFocusRequest'`));
         }
       },
     );

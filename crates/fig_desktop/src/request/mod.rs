@@ -27,7 +27,6 @@ use fig_proto::fig::{
     PositionWindowRequest,
     RunProcessRequest,
     UpdateApplicationPropertiesRequest,
-    WindowFocusRequest,
 };
 use fig_remote_ipc::figterm::FigtermState;
 use fig_settings::{
@@ -105,15 +104,6 @@ impl<'a> fig_desktop_api::handler::EventHandler for EventHandler<'a> {
             request.request,
             request.context.window_id.clone(),
             request.context.figterm_state,
-            request.context.proxy,
-        )
-        .await
-    }
-
-    async fn window_focus(&self, request: Wrapped<Self::Ctx, WindowFocusRequest>) -> RequestResult {
-        window::focus(
-            request.request,
-            request.context.window_id.clone(),
             request.context.proxy,
         )
         .await

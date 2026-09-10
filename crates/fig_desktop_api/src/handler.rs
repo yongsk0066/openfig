@@ -19,7 +19,6 @@ use fig_proto::fig::{
     RunProcessRequest,
     ServerOriginatedMessage,
     UpdateApplicationPropertiesRequest,
-    WindowFocusRequest,
 };
 use fig_proto::prost::Message;
 use fig_settings::settings::SettingsProvider;
@@ -52,10 +51,6 @@ pub trait EventHandler {
     }
 
     async fn position_window(&self, request: Wrapped<Self::Ctx, PositionWindowRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn window_focus(&self, request: Wrapped<Self::Ctx, WindowFocusRequest>) -> RequestResult {
         RequestResult::unimplemented(request.request)
     }
 
@@ -165,7 +160,6 @@ where
                 UpdateApplicationPropertiesRequest,
                 UpdateLocalStateRequest,
                 UpdateSettingsPropertyRequest,
-                WindowFocusRequest,
                 WriteFileRequest,
             };
             use requests::*;
@@ -198,7 +192,6 @@ where
                 UpdateSettingsPropertyRequest(request) => settings::update(request).await,
                 // window
                 PositionWindowRequest(request) => event_handler.position_window(request!(request)).await,
-                WindowFocusRequest(request) => event_handler.window_focus(request!(request)).await,
                 DragWindowRequest(request) => event_handler.drag_window(request!(request)).await,
                 // onboarding
                 OnboardingRequest(request) => event_handler.onboarding(request!(request)).await,

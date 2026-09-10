@@ -85,6 +85,9 @@ export function sendMessage(
     return;
   }
 
+  // Test-only transport. The desktop app always sets `supportApiProto`, so this is unreachable
+  // there; `tests/fig-api/fig-api-mock` uses `javascript_init(false)` and drives the API through
+  // exactly this path.
   const postMessage = window?.ipc?.postMessage;
   if (postMessage && typeof postMessage === "function") {
     const b64 = bytesToBase64(buffer);

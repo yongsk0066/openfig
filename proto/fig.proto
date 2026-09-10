@@ -4,6 +4,9 @@ package fig;
 import "fig_common.proto";
 
 message ClientOriginatedMessage {
+  // 119: window_focus_request — `sendWindowFocusRequest` was its only producer and had no caller.
+  reserved 119;
+
   optional int64 id = 1;
 
   oneof submessage {
@@ -18,7 +21,6 @@ message ClientOriginatedMessage {
     UpdateApplicationPropertiesRequest update_application_properties_request = 111;
     DestinationOfSymbolicLinkRequest destination_of_symbolic_link_request = 112;
     OnboardingRequest onboarding_request = 118;
-    WindowFocusRequest window_focus_request = 119;
     OpenInExternalApplicationRequest open_in_external_application_request = 120;
     AppendToFileRequest append_to_file_request = 127;
     GetLocalStateRequest get_local_state_request = 128;
@@ -316,17 +318,6 @@ message GetPlatformInfoResponse {
   optional DesktopEnvironment desktop_environment = 2;
   optional DisplayServerProtocol display_server_protocol = 3;
   optional AppBundleType app_bundle_type = 4;
-}
-
-/// Window Focus
-
-enum FocusAction {
-  FOCUS_ACTION_TAKE_FOCUS = 0;
-  FOCUS_ACTION_RETURN_FOCUS = 1;
-}
-
-message WindowFocusRequest {
-  optional FocusAction type = 1;
 }
 
 message OpenInExternalApplicationRequest {

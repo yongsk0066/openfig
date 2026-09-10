@@ -91,12 +91,6 @@ export declare type ClientOriginatedMessage = Message<"fig.ClientOriginatedMessa
     case: "onboardingRequest";
   } | {
     /**
-     * @generated from field: fig.WindowFocusRequest window_focus_request = 119;
-     */
-    value: WindowFocusRequest;
-    case: "windowFocusRequest";
-  } | {
-    /**
      * @generated from field: fig.OpenInExternalApplicationRequest open_in_external_application_request = 120;
      */
     value: OpenInExternalApplicationRequest;
@@ -1087,22 +1081,6 @@ export declare type GetPlatformInfoResponse = Message<"fig.GetPlatformInfoRespon
 export declare const GetPlatformInfoResponseSchema: GenMessage<GetPlatformInfoResponse>;
 
 /**
- * @generated from message fig.WindowFocusRequest
- */
-export declare type WindowFocusRequest = Message<"fig.WindowFocusRequest"> & {
-  /**
-   * @generated from field: optional fig.FocusAction type = 1;
-   */
-  type?: FocusAction | undefined;
-};
-
-/**
- * Describes the message fig.WindowFocusRequest.
- * Use `create(WindowFocusRequestSchema)` to create a new message.
- */
-export declare const WindowFocusRequestSchema: GenMessage<WindowFocusRequest>;
-
-/**
  * @generated from message fig.OpenInExternalApplicationRequest
  */
 export declare type OpenInExternalApplicationRequest = Message<"fig.OpenInExternalApplicationRequest"> & {
@@ -2050,26 +2028,6 @@ export enum AppBundleType {
  * Describes the enum fig.AppBundleType.
  */
 export declare const AppBundleTypeSchema: GenEnum<AppBundleType>;
-
-/**
- * @generated from enum fig.FocusAction
- */
-export enum FocusAction {
-  /**
-   * @generated from enum value: FOCUS_ACTION_TAKE_FOCUS = 0;
-   */
-  TAKE_FOCUS = 0,
-
-  /**
-   * @generated from enum value: FOCUS_ACTION_RETURN_FOCUS = 1;
-   */
-  RETURN_FOCUS = 1,
-}
-
-/**
- * Describes the enum fig.FocusAction.
- */
-export declare const FocusActionSchema: GenEnum<FocusAction>;
 
 /**
  * @generated from enum fig.ActionAvailability

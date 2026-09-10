@@ -11,10 +11,9 @@ use std::fs::{
 };
 use std::io::{
     Read,
-    Seek,
-    SeekFrom,
     Write,
 };
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
 pub use error::{
@@ -43,6 +42,21 @@ use thiserror::Error;
 use tracing::error;
 
 pub type Map = serde_json::Map<String, Value>;
+
+/// Drops any group/other bits from `path`, best effort.
+fn tighten_permissions(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Ok(metadata) = fs::metadata(path) else {
+        return;
+    };
+    let mode = metadata.permissions().mode();
+    if mode & 0o077 != 0
+        && let Err(err) = fs::set_permissions(path, fs::Permissions::from_mode(mode & !0o077))
+    {
+        error!(%err, ?path, "Failed to tighten permissions");
+    }
+}
 
 static SETTINGS_FILE_LOCK: RwLock<()> = RwLock::new(());
 
@@ -202,10 +216,22 @@ pub trait JsonStore: Sized {
 
             // If the file doesn't exist, create it.
             if !path.exists() {
-                let mut file = FileRwLock::new(File::create(path)?);
+                let mut file = FileRwLock::new(
+                    File::options()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .mode(0o600)
+                        .open(&path)?,
+                );
                 file.write()?.write_all(b"{}")?;
                 serde_json::Map::new()
             } else {
+                // This file holds the user's settings and, for `state`, tokens; the first-creation
+                // path used a plain `File::create`, so an install that predates the `mode(0o600)`
+                // in `save_to_file` still has a world-readable file until something writes to it.
+                tighten_permissions(&path);
+
                 let mut file = FileRwLock::new(File::open(&path)?);
                 let mut read = file.write()?;
                 serde_json::from_reader(&mut *read)?
@@ -237,15 +263,39 @@ pub trait JsonStore: Sized {
 
                 error!(%err, ?file_content, "Failed to load json file into global backend");
 
-                // Write default data to file
-                let json = Self::new_from_backend(Backend::Memory(Map::new()));
-                if let Err(err) = json.save_to_file() {
-                    error!(%err, "Failed to write default data to file");
+                // Move the unreadable file aside instead of writing `{}` over it. It used to be
+                // overwritten with defaults here, so a single truncated write — or a JSON file
+                // this version cannot parse — silently destroyed every setting the user had, with
+                // no copy left anywhere.
+                if let Err(err) = Self::quarantine_unparseable_file() {
+                    error!(%err, "Failed to move the unparseable json file aside");
                 }
 
                 Err(err)
             },
         }
+    }
+
+    /// Renames the current file out of the way as `<name>.corrupt-<timestamp>`.
+    fn quarantine_unparseable_file() -> Result<()> {
+        let path = Self::path()?;
+        let Some(name) = path.file_name() else {
+            return Ok(());
+        };
+
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_default();
+
+        let mut quarantined = name.to_os_string();
+        quarantined.push(format!(".corrupt-{stamp}"));
+        let quarantined = path.with_file_name(quarantined);
+
+        let _lock_guard = Self::file_lock().write();
+        fs::rename(&path, &quarantined)?;
+        error!(from = ?path, to = ?quarantined, "Moved the unparseable json file aside");
+        Ok(())
     }
 
     fn save_to_file(&self) -> Result<()> {
@@ -258,28 +308,49 @@ pub trait JsonStore: Sized {
             fs::create_dir_all(parent)?;
         }
 
+        // Serialize before touching the file at all. The old code opened the real file with
+        // `O_TRUNC` and only then tried to serialize, so a failure there left a `{}` file behind.
+        let contents = serde_json::to_vec_pretty(&*self.map())?;
+
         let _lock_guard = Self::file_lock().write();
 
-        let mut file_opts = File::options();
-        file_opts.create(true).write(true).truncate(true);
+        // Hold the cross-process advisory lock on the real file for the whole replacement, and
+        // open it *without* `O_TRUNC`: the old code truncated before it acquired the lock, so a
+        // concurrent reader that won that race read an empty file and saw every setting vanish.
+        let mut lock_file = FileRwLock::new(
+            File::options()
+                .create(true)
+                .read(true)
+                .write(true)
+                // Explicitly *not* truncating: this handle only exists to hold the lock.
+                .truncate(false)
+                .mode(0o600)
+                .open(&path)?,
+        );
+        let _file_guard = lock_file.write()?;
 
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            file_opts.mode(0o600);
-        }
+        let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+        tmp_name.push(".tmp");
+        let tmp_path = path.with_file_name(tmp_name);
 
-        let mut file = FileRwLock::new(file_opts.open(&path)?);
-        let mut lock = file.write()?;
-
-        if let Err(_err) = serde_json::to_writer_pretty(&mut *lock, &*self.map()) {
-            // Write {} to the file if the serialization failed
-            lock.seek(SeekFrom::Start(0))?;
-            lock.set_len(0)?;
-            lock.write_all(b"{}")?;
+        let write = || -> Result<()> {
+            let mut tmp = File::options()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp_path)?;
+            tmp.write_all(&contents)?;
+            // `rename` orders the directory entry, not the data behind it.
+            tmp.sync_all()?;
+            drop(tmp);
+            fs::rename(&tmp_path, &path)?;
+            Ok(())
         };
-        lock.flush()?;
 
-        Ok(())
+        write().inspect_err(|_| {
+            let _ = fs::remove_file(&tmp_path);
+        })
     }
 
     fn set(&mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) {
@@ -364,54 +435,139 @@ impl JsonStore for OldSettings {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use std::path::Path;
+#[cfg(test)]
+mod test {
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::sync::LazyLock;
 
-//     use super::*;
+    use super::*;
 
-//     fn test_store_type(path: &Path, store: JsonType) {
-//         let mut local_json = LocalJson::load_file(store).unwrap();
-//         assert_eq!(fs::read_to_string(path).unwrap(), "");
-//         assert_eq!(local_json.inner, serde_json::Map::new());
-//         local_json.save().unwrap();
-//         assert_eq!(fs::read_to_string(path).unwrap(), "{}");
+    /// A `JsonStore` backed by a file in a temp directory, so the round trip can be checked
+    /// without touching the user's real settings. Every nextest test runs in its own process, so
+    /// the statics below are private to one test.
+    static TEST_DIR: LazyLock<tempfile::TempDir> = LazyLock::new(|| tempfile::tempdir().unwrap());
+    static TEST_FILE_LOCK: RwLock<()> = RwLock::new(());
+    static TEST_DATA: RwLock<Option<Map>> = RwLock::new(None);
 
-//         local_json.set("a", 123);
-//         local_json.set("b", "hello");
-//         local_json.set("c", false);
-//         local_json.save().unwrap();
-//         assert_eq!(
-//             fs::read_to_string(path).unwrap(),
-//             "{\n  \"a\": 123,\n  \"b\": \"hello\",\n  \"c\": false\n}"
-//         );
+    struct TestStore {
+        inner: Backend,
+    }
 
-//         local_json.remove("a").unwrap();
-//         local_json.save().unwrap();
-//         assert_eq!(
-//             fs::read_to_string(path).unwrap(),
-//             "{\n  \"b\": \"hello\",\n  \"c\": false\n}"
-//         );
-//         assert_eq!(local_json.get("b").unwrap(), "hello");
+    impl JsonStore for TestStore {
+        fn path() -> Result<PathBuf> {
+            Ok(TEST_DIR.path().join("local.json"))
+        }
 
-//         fs::write(path, "invalid json").unwrap();
-//         assert!(matches!(
-//             LocalJson::load_file(store).unwrap_err(),
-//             Error::SettingsNotObject
-//         ));
-//     }
+        fn file_lock() -> &'static RwLock<()> {
+            &TEST_FILE_LOCK
+        }
 
-//     #[fig_test::test]
-//     fn test_settings_raw() {
-//         let path = tempfile::tempdir().unwrap().into_path().join("local.json");
-//         std::env::set_var("FIG_DIRECTORIES_SETTINGS_PATH", &path);
-//         test_store_type(&path, JsonType::Settings);
-//     }
+        fn data_lock() -> &'static RwLock<Option<Map>> {
+            &TEST_DATA
+        }
 
-//     #[fig_test::test]
-//     fn test_state_raw() {
-//         let path = tempfile::tempdir().unwrap().into_path().join("local.json");
-//         std::env::set_var("FIG_DIRECTORIES_STATE_PATH", &path);
-//         test_store_type(&path, JsonType::State);
-//     }
-// }
+        fn new_from_backend(backend: Backend) -> Self {
+            Self { inner: backend }
+        }
+
+        fn map(&self) -> ReadGuard<'_, Map> {
+            match &self.inner {
+                Backend::Global => ReadGuard::Global(Self::data_lock().read()),
+                Backend::Memory(map) => ReadGuard::Memory(map),
+            }
+        }
+
+        fn map_mut(&mut self) -> WriteGuard<'_, Map> {
+            match &mut self.inner {
+                Backend::Global => WriteGuard::Global(Self::data_lock().write()),
+                Backend::Memory(map) => WriteGuard::Memory(map),
+            }
+        }
+    }
+
+    fn contents() -> String {
+        fs::read_to_string(TestStore::path().unwrap()).unwrap()
+    }
+
+    fn mode() -> u32 {
+        fs::metadata(TestStore::path().unwrap()).unwrap().permissions().mode() & 0o777
+    }
+
+    /// The round trip the commented-out `test_store_type` used to cover, against the current API.
+    #[test]
+    fn set_get_remove_round_trip() {
+        let path = TestStore::path().unwrap();
+
+        let mut store = TestStore::load().unwrap();
+        assert_eq!(contents(), "{}", "load must create the file");
+        assert_eq!(*store.map(), Map::new());
+
+        store.set("a", 123);
+        store.set("b", "hello");
+        store.set("c", false);
+        store.save_to_file().unwrap();
+        assert_eq!(contents(), "{\n  \"a\": 123,\n  \"b\": \"hello\",\n  \"c\": false\n}");
+
+        let reloaded = TestStore::load().unwrap();
+        assert_eq!(reloaded.get("b").unwrap().as_str(), Some("hello"));
+        assert_eq!(reloaded.get_int("a"), Some(123));
+        assert_eq!(reloaded.get_bool("c"), Some(false));
+
+        let mut store = TestStore::load().unwrap();
+        store.remove("a").unwrap();
+        store.save_to_file().unwrap();
+        assert_eq!(contents(), "{\n  \"b\": \"hello\",\n  \"c\": false\n}");
+
+        // No temp file left behind by the atomic replacement.
+        assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
+    }
+
+    /// The file holds settings and, for `state`, tokens. The first-creation path used a plain
+    /// `File::create`, which gave 0644 — measurably so on this machine before the fix — and
+    /// nothing ever narrowed it again.
+    #[test]
+    fn the_file_is_never_world_readable() {
+        let path = TestStore::path().unwrap();
+
+        TestStore::load().unwrap();
+        assert_eq!(mode(), 0o600, "freshly created file");
+
+        // An existing file created by an older version is repaired on the next load.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        TestStore::load().unwrap();
+        assert_eq!(mode(), 0o600, "pre-existing 0644 file");
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        let mut store = TestStore::load().unwrap();
+        store.set("a", 1);
+        store.save_to_file().unwrap();
+        assert_eq!(mode(), 0o600, "after a save");
+    }
+
+    /// A file this version cannot parse used to be overwritten with `{}` — every setting the user
+    /// had, gone, with no copy anywhere. It must be moved aside instead.
+    #[test]
+    fn an_unparseable_file_is_preserved() {
+        let path = TestStore::path().unwrap();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "invalid json").unwrap();
+
+        TestStore::load_into_global().unwrap_err();
+
+        let quarantined: Vec<_> = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let name = entry.file_name().into_string().ok()?;
+                name.contains(".corrupt-").then_some(entry.path())
+            })
+            .collect();
+
+        assert_eq!(quarantined.len(), 1, "the unparseable file was not preserved");
+        assert_eq!(fs::read_to_string(&quarantined[0]).unwrap(), "invalid json");
+        assert!(!path.exists(), "the unparseable file was left in place");
+
+        // The in-memory backend falls back to empty so the process can keep running.
+        assert_eq!(*TEST_DATA.read(), Some(Map::new()));
+    }
+}

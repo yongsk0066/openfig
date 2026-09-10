@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "set-host": "fig settings developer.autocomplete.host http://localhost:3124",
-    "remove-host": "fig settings developer.autocomplete.host --delete",
+    "set-host": "q settings developer.autocomplete.host http://localhost:3124",
+    "remove-host": "q settings developer.autocomplete.host --delete",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -47,13 +47,5 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
-  },
-  "bundledDependencies": [
-    "@fig/fuzzysort",
-    "@fig/shared"
-  ],
-  "browserslist": [
-    "defaults",
-    "Safari >= 11"
-  ]
+  }
 }

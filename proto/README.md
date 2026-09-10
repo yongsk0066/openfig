@@ -3,7 +3,7 @@
 We use [protocol buffers](https://developers.google.com/protocol-buffers/) as a
 message format for inter process communication.
 
-This folder defines three main protocols:
+This folder defines four protocols:
 
 1. `local.proto` - Protocol for communication from local processes like
    `figterm` and the `fig` CLI to the desktop app
@@ -32,10 +32,11 @@ brew install protobuf
 
 ## Installation/Usage
 
-To compile protos, run:
+The generated TypeScript lives in `src/` and is committed. To regenerate it
+after editing a `.proto`, run:
 
 ```shell
-./build-ts.sh
+pnpm exec turbo codegen
 ```
 
 ## Deprecating an API

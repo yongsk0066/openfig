@@ -79,13 +79,13 @@ const Description = ({
         descriptionRef.current.scrollLeft = scroll;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     [descriptionRef.current],
   );
 
   useEffect(() => {
     setDescriptionScroll(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [currentArg]);
 
   const itemType = selectedItem?.type || "";

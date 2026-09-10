@@ -39,9 +39,5 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
-  },
-  "browserslist": [
-    "defaults",
-    "Safari >= 11"
-  ]
+  }
 }

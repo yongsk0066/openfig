@@ -33,12 +33,18 @@ import Description, { type DescriptionPosition } from "./components/Description"
 import { setFontFamily, setFontSize, setTheme } from "./fig/themes";
 import LoadingIcon from "./components/LoadingIcon";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+// Spec `previewComponent`s are evaluated at runtime and render with the app's
+// own React, so the three modules are published on `window` for them.
+declare global {
+  interface Window {
+    React: typeof React;
+    jsxRuntime: typeof jsxRuntime;
+    figApiBindings: typeof figApiBindings;
+  }
+}
+
 window.jsxRuntime = jsxRuntime;
 window.React = React;
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 window.figApiBindings = figApiBindings;
 
 type SuggestionProps = React.ComponentProps<typeof Suggestion>;
@@ -279,7 +285,7 @@ function App() {
       interceptKeystrokes,
     });
     setInterceptKeystrokes(interceptKeystrokes, suggestions.length > 0, shellContext?.sessionId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [interceptKeystrokes, suggestions.length]);
   useEffect(() => {
     setTheme(systemTheme, theme as string);
@@ -299,7 +305,7 @@ function App() {
   const scrollToItemCallback = useCallback(() => {
     logger.info("Scrolling to", { selectedIndex });
     listRef.current?.scrollToItem(selectedIndex);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIndex, windowState.descriptionPosition]);
 
   useEffect(() => {
@@ -336,13 +342,13 @@ function App() {
     return () => {
       isMostRecentEffect = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [
     size.suggestionWidth,
     size.maxHeight,
     buffer,
     windowState.isDescriptionSeparate,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     suggestions[selectedIndex]?.previewComponent,
   ]);
 
@@ -379,12 +385,12 @@ function App() {
           logger.debug("Unable to set window position", { err });
         });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     [
       windowState.descriptionPosition,
       hasSpecialArgDescription,
       isHidden,
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       suggestions[selectedIndex]?.previewComponent,
     ],
   );

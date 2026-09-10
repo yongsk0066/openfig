@@ -55,7 +55,7 @@ export const updateSettings = (newSettings: SettingsMap) => {
   settings = newSettings;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 export const getSetting = <T = unknown>(key: SETTINGS, defaultValue?: any): T =>
   settings[key] ?? defaultValue;
 

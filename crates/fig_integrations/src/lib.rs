@@ -1,3 +1,4 @@
+pub(crate) mod atomic;
 pub(crate) mod backup;
 pub mod error;
 pub mod file;

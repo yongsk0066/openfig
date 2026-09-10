@@ -1,8 +1,4 @@
-use std::fs::File;
-use std::io::{
-    ErrorKind,
-    Write,
-};
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -22,6 +18,7 @@ use serde::{
     Serialize,
 };
 
+use crate::atomic::write_atomic;
 use crate::error::{
     ErrorExt,
     Result,
@@ -378,20 +375,37 @@ impl DotfileShellIntegration {
         Ok(())
     }
 
-    async fn install_inner(&self) -> Result<()> {
-        let dotfile = self.dotfile_path();
-        let mut contents = if dotfile.exists() {
-            backup_file(&dotfile, fig_util::directories::utc_backup_dir().ok())?;
-            self.uninstall().await?;
-            std::fs::read_to_string(&dotfile)?
-        } else {
-            String::new()
-        };
+    /// Whether either of our blocks is currently present in `text`.
+    fn is_present_in(&self, text: &str) -> Result<bool> {
+        Ok((self.pre && self.source_regex(When::Pre, false)?.is_match(text))
+            || (self.post && self.source_regex(When::Post, false)?.is_match(text)))
+    }
 
-        let original_contents = contents.clone();
+    /// The rc file with our blocks removed and the remainder normalised.
+    ///
+    /// Shared by `uninstall` and `install_inner` so that installing over an existing install and
+    /// uninstalling agree byte for byte.
+    fn strip_from_text(&self, text: &str) -> Result<String> {
+        let mut contents = text.to_owned();
 
         if self.pre {
-            self.script_integration(When::Pre)?.install().await?;
+            contents = self.remove_from_text(&contents, When::Pre)?;
+        }
+
+        if self.post {
+            contents = self.remove_from_text(&contents, When::Post)?;
+        }
+
+        let mut contents = contents.trim().to_string();
+        contents.push('\n');
+        Ok(contents)
+    }
+
+    /// The rc file as it should look once installed, given its current contents.
+    fn compose(&self, existing: &str) -> Result<String> {
+        let mut contents = self.strip_from_text(existing)?;
+
+        if self.pre {
             let (shebang, post_shebang) = split_shebang(&contents);
             contents = format!(
                 "{}{}\n{}\n{}",
@@ -403,7 +417,6 @@ impl DotfileShellIntegration {
         }
 
         if self.post {
-            self.script_integration(When::Post)?.install().await?;
             contents = format!(
                 "{}\n{}\n{}\n",
                 contents,
@@ -412,9 +425,36 @@ impl DotfileShellIntegration {
             );
         }
 
-        if contents.ne(&original_contents) {
-            let mut file = File::create(&dotfile).with_path(self.path())?;
-            file.write_all(contents.as_bytes())?;
+        Ok(contents)
+    }
+
+    async fn install_inner(&self) -> Result<()> {
+        let dotfile = self.dotfile_path();
+
+        // This used to run a full `uninstall()` — a truncating rewrite of the rc file — and then
+        // read the result back, so every install rewrote the user's rc file twice and the
+        // "did anything change?" guard below compared the new contents against the *post-uninstall*
+        // snapshot rather than against what was on disk. Strip in memory instead: one comparison
+        // against the real original, and at most one write.
+        let original_contents = if dotfile.exists() {
+            backup_file(&dotfile, fig_util::directories::utc_backup_dir().ok())?;
+            std::fs::read_to_string(&dotfile)?
+        } else {
+            String::new()
+        };
+
+        if self.pre {
+            self.script_integration(When::Pre)?.install().await?;
+        }
+
+        if self.post {
+            self.script_integration(When::Post)?.install().await?;
+        }
+
+        let contents = self.compose(&original_contents)?;
+
+        if contents != original_contents {
+            write_atomic(&dotfile, contents.as_bytes(), None).with_path(self.path())?;
         }
         Ok(())
     }
@@ -443,20 +483,15 @@ impl Integration for DotfileShellIntegration {
     async fn uninstall(&self) -> Result<()> {
         let dotfile = self.dotfile_path();
         if dotfile.exists() {
-            let mut contents = std::fs::read_to_string(&dotfile)?;
+            let original_contents = std::fs::read_to_string(&dotfile)?;
 
-            if self.pre {
-                contents = self.remove_from_text(&contents, When::Pre)?;
+            // Do not rewrite a file we have nothing to remove from. This runs on rc files the
+            // integration was never installed into (`uninstall` iterates every candidate dotfile
+            // for both shells), and the rewrite alone trims the user's trailing whitespace.
+            if self.is_present_in(&original_contents)? {
+                let contents = self.strip_from_text(&original_contents)?;
+                write_atomic(&dotfile, contents.as_bytes(), None).with_path(self.path())?;
             }
-
-            if self.post {
-                contents = self.remove_from_text(&contents, When::Post)?;
-            }
-
-            contents = contents.trim().to_string();
-            contents.push('\n');
-
-            std::fs::write(&dotfile, contents.as_bytes()).with_path(self.path())?;
         }
 
         if self.pre {
@@ -554,5 +589,81 @@ mod test {
             "split with shebang and no linefeed"
         );
         assert_eq!(("", contents), split_shebang(without_shebang), "split with no shebang");
+    }
+
+    fn dotfile(shell: Shell, name: &'static str, dir: &std::path::Path) -> DotfileShellIntegration {
+        DotfileShellIntegration {
+            shell,
+            pre: true,
+            post: true,
+            dotfile_directory: dir.to_path_buf(),
+            dotfile_name: name,
+        }
+    }
+
+    /// install -> uninstall must return the rc file exactly as it was, and installing over an
+    /// already-installed file must be a no-op. `install_inner` used to get this by running a full
+    /// `uninstall()` (a truncating rewrite) before composing the new contents; now both paths go
+    /// through `strip_from_text`, so the two have to agree.
+    #[test]
+    fn install_uninstall_roundtrip_is_stable() {
+        let dir = tempfile::tempdir().unwrap();
+
+        for (shell, name) in [(Shell::Zsh, ".zshrc"), (Shell::Bash, ".bashrc")] {
+            let integration = dotfile(shell, name, dir.path());
+
+            for original in [
+                "# user config\nexport FOO=1\n",
+                "#!/usr/bin/env zsh\n# user config\nexport FOO=1\n",
+                "",
+            ] {
+                let installed = integration.compose(original).unwrap();
+                assert!(
+                    installed.contains(&integration.source_text(When::Pre).unwrap()),
+                    "{name}: pre block missing"
+                );
+                assert!(
+                    installed.contains(&integration.source_text(When::Post).unwrap()),
+                    "{name}: post block missing"
+                );
+                // Installing again changes nothing, so `install_inner` writes nothing.
+                assert_eq!(
+                    integration.compose(&installed).unwrap(),
+                    installed,
+                    "{name}: install is not idempotent"
+                );
+
+                // Uninstalling gets back to the original, modulo the trailing-newline
+                // normalisation both paths apply.
+                let mut expected = original.trim().to_string();
+                expected.push('\n');
+                assert_eq!(
+                    integration.strip_from_text(&installed).unwrap(),
+                    expected,
+                    "{name}: uninstall did not restore the original"
+                );
+            }
+        }
+    }
+
+    /// `uninstall` must not rewrite a file it has nothing to remove from — it runs on rc files the
+    /// integration was never installed into, and the rewrite alone rewrites trailing whitespace.
+    #[tokio::test]
+    async fn uninstall_leaves_an_untouched_dotfile_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let contents = "# user config\nexport FOO=1\n\n\n";
+        let path = dir.path().join(".zshrc");
+        std::fs::write(&path, contents).unwrap();
+
+        let integration = DotfileShellIntegration {
+            shell: Shell::Zsh,
+            pre: false,
+            post: false,
+            dotfile_directory: dir.path().to_path_buf(),
+            dotfile_name: ".zshrc",
+        };
+        integration.uninstall().await.unwrap();
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), contents);
     }
 }

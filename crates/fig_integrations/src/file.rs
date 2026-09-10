@@ -2,14 +2,11 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use tokio::fs::{
-    self,
-    File,
-};
-use tokio::io::AsyncWriteExt;
+use tokio::fs;
 use tracing::debug;
 
 use crate::Integration;
+use crate::atomic::write_atomic;
 use crate::error::{
     Error,
     ErrorExt,
@@ -85,18 +82,10 @@ impl Integration for FileIntegration {
             fs::create_dir_all(&parent_dir).await.with_path(parent_dir)?;
         }
 
-        let mut options = File::options();
-        options.write(true).create(true).truncate(true);
-
-        if let Some(mode) = self.mode {
-            options.mode(mode);
-        }
-
-        let mut file = options.open(&self.path).await.with_path(&self.path)?;
-
         debug!(path =? self.path, "Writing file integrations");
-        file.write_all(self.contents.as_bytes()).await?;
-        file.flush().await?;
+        // Atomic: these are sourced by the user's shell at startup, so a half-written file is a
+        // shell that fails to start. Small enough (<1 KB) that the blocking write does not matter.
+        write_atomic(&self.path, self.contents.as_bytes(), self.mode).with_path(&self.path)?;
 
         Ok(())
     }

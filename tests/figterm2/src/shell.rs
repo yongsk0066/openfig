@@ -228,6 +228,17 @@ impl Shell {
         Ok(())
     }
 
+    /// Writes `text` to the pty in a single `write` the way a terminal delivers a paste, instead
+    /// of one keystroke every 10 ms. The point is to hand the parser a burst it cannot drain
+    /// between events.
+    pub async fn pasted(&mut self, text: &str) -> Result<()> {
+        println!("pasting: {text:?}");
+        self.writer.write_all(text.as_bytes())?;
+        self.writer.flush()?;
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        Ok(())
+    }
+
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
         self.pty_pair.master.resize(PtySize {
             cols,

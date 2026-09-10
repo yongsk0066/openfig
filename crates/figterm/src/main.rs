@@ -154,6 +154,19 @@ pub enum MainLoopEvent {
     UnsetCsiU,
 }
 
+/// The channel `EventHandler` pushes main-loop events onto.
+///
+/// It **must** stay unbounded. The only consumer of the receiver is the `select!` loop in
+/// [`figterm_main`], and `EventHandler::send_event` is called from *inside* that loop: the
+/// terminal parser invokes it while the loop is busy in its `master.read` arm. A bounded channel
+/// therefore lets the loop deadlock against itself — flume's blocking `send()` parks the very
+/// thread that is supposed to drain the channel. Each command cycle pushes two events (three with
+/// csi-u enabled), and one 16 KiB read of a pasted script easily carries dozens of prompts, so the
+/// old `bounded(16)` wedged the shell on a large paste.
+fn main_loop_channel() -> (flume::Sender<MainLoopEvent>, flume::Receiver<MainLoopEvent>) {
+    flume::unbounded()
+}
+
 fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
     let terminal = FigTerminal::parent_terminal(&Context::new()).map(|s| s.to_string());
 
@@ -469,13 +482,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     let runtime_result = runtime.block_on(async {
         terminal.set_raw_mode()?;
 
-        // Unbounded on purpose: the only consumer of `main_loop_rx` is the `select!` below, and
-        // `EventHandler::send_event` runs *inside* that same loop (the terminal parser calls it
-        // while the loop is processing PTY output). A bounded channel therefore deadlocks the
-        // loop against itself as soon as the burst is deeper than the bound — flume's blocking
-        // `send()` parks the thread that is supposed to drain it. Each command cycle pushes 2
-        // events (3 with csi-u), so a paste that produces ~6 prompts already hangs the shell.
-        let (main_loop_tx, main_loop_rx) = flume::unbounded::<MainLoopEvent>();
+        let (main_loop_tx, main_loop_rx) = main_loop_channel();
 
         let history_sender = history::spawn_history_task().await;
 
@@ -845,6 +852,21 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The main-loop channel is drained by the same `select!` loop that fills it, so a bounded
+    /// channel deadlocks figterm against itself on a burst deeper than the bound.
+    #[test]
+    fn main_loop_channel_is_unbounded() {
+        let (tx, rx) = main_loop_channel();
+        assert_eq!(tx.capacity(), None, "main loop channel must not be bounded");
+
+        // With `bounded(16)` this loop parks forever: nothing drains `rx`.
+        for i in 0..10_000 {
+            tx.send(MainLoopEvent::SetImmediateMode(i % 2 == 0))
+                .expect("send to a live receiver must not fail");
+        }
+        assert_eq!(rx.len(), 10_000);
+    }
 
     #[test]
     fn autocomplete_enabled_test() {

@@ -1,7 +1,7 @@
 import React from "react";
 import logger from "loglevel";
 import ReactDOM from "react-dom/client";
-import { State } from "@fig/api-bindings-wrappers";
+import { State } from "@fig/api-bindings/wrappers";
 import { preloadSpecs } from "@fig/autocomplete-parser";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";

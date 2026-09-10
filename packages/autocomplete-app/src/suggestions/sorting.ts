@@ -1,6 +1,6 @@
 import { makeArray } from "@fig/shared/utils";
 import type { Suggestion } from "@fig/shared/internal";
-import { SETTINGS, getSetting } from "@fig/api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@fig/api-bindings/wrappers";
 
 // { command: { commandParam: count/lastUsedDate } }
 // e.g. git: { add: 2, push: 4 }

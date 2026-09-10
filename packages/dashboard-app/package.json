@@ -30,8 +30,7 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@fig/tsconfig": "workspace:^",
-    "@fig/types": "workspace:^",
+    "@fig/config": "workspace:^",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

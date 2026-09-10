@@ -1,6 +1,6 @@
 import logger from "loglevel";
 
-import { executeCommand } from "@fig/api-bindings-wrappers";
+import { executeCommand } from "@fig/api-bindings/wrappers";
 import { runPipingConsoleMethods } from "../utils";
 import { runCachedGenerator, type GeneratorContext, haveContextForGenerator } from "./helpers";
 

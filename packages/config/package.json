@@ -1,14 +1,15 @@
 {
-  "name": "@fig/tsconfig",
+  "name": "@fig/config",
   "version": "0.1.0",
   "private": true,
   "license": "MIT OR Apache-2.0",
   "author": "OpenFig contributors",
   "files": [
     "base.json",
-    "dom.json"
+    "dom.json",
+    "global.d.ts"
   ],
-  "scripts": {},
+  "types": "global.d.ts",
   "peerDependencies": {
     "typescript": "*"
   }

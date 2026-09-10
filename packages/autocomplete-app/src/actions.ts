@@ -1,4 +1,4 @@
-import type { SettingsMap } from "@fig/api-bindings-wrappers";
+import type { SettingsMap } from "@fig/api-bindings/wrappers";
 import * as app from "./fig.json";
 import { create } from "@bufbuild/protobuf";
 import { ActionAvailability, ActionSchema } from "@fig/proto/fig";

@@ -11,7 +11,7 @@ import {
   fieldsAreEqual,
 } from "@fig/shared/utils";
 import { countEqualOptions, type Annotation, TokenType } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings-wrappers";
+import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
 import type { GeneratorState } from "../generators/helpers";
 
 import {

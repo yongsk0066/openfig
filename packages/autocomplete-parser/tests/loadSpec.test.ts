@@ -1,5 +1,5 @@
 import logger from "loglevel";
-import { SETTINGS, updateSettings } from "@fig/api-bindings-wrappers";
+import { SETTINGS, updateSettings } from "@fig/api-bindings/wrappers";
 import { SpecLocationSource } from "@fig/shared/utils";
 import { getSpecPath, loadFigSubcommand, loadSubcommandCached } from "../src/loadSpec";
 import * as loadHelpers from "../src/loadHelpers";
@@ -13,8 +13,8 @@ vi.mock("../src/loadHelpers", () => ({
   isDiffVersionedSpec: vi.fn(),
 }));
 
-vi.mock("@fig/api-bindings-wrappers", async () => ({
-  ...(await vi.importActual("@fig/api-bindings-wrappers")),
+vi.mock("@fig/api-bindings/wrappers", async () => ({
+  ...(await vi.importActual("@fig/api-bindings/wrappers")),
   executeCommand: vi.fn(),
 }));
 

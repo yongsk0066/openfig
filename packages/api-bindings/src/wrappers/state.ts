@@ -1,4 +1,4 @@
-import { State as DefaultState } from "@fig/api-bindings";
+import { State as DefaultState } from "../index.js";
 
 export enum States {
   DEVELOPER_API_HOST = "developer.apiHost",

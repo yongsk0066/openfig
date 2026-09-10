@@ -1,5 +1,5 @@
 import logger from "loglevel";
-import { fread } from "@fig/api-bindings-wrappers";
+import { fread } from "@fig/api-bindings/wrappers";
 import type { SystemTheme } from "../hooks/helpers";
 import { MissingThemeError } from "./errors";
 

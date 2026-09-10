@@ -1,7 +1,7 @@
 import type { Suggestion } from "@fig/shared/internal";
 import type { ArgumentParserResult } from "@fig/autocomplete-parser";
 import type { Command } from "@fig/shell-parser";
-import type { SettingsMap } from "@fig/api-bindings-wrappers";
+import type { SettingsMap } from "@fig/api-bindings/wrappers";
 import type { FigState } from "../fig/hooks";
 import type { GeneratorState } from "../generators/helpers";
 

@@ -3,7 +3,7 @@ import type { StoreApi } from "zustand";
 import { Shell } from "@fig/api-bindings";
 import type { Suggestion } from "@fig/shared/internal";
 import { makeArray, longestCommonPrefix, ensureTrailingSlash } from "@fig/shared/utils";
-import { SETTINGS } from "@fig/api-bindings-wrappers";
+import { SETTINGS } from "@fig/api-bindings/wrappers";
 import { type NamedSetState, type AutocompleteState, Visibility } from "./types";
 import { isMatchingType, getNameMatch, getQueryTermForSuggestion } from "../suggestions/helpers";
 import { updateAutocompleteIndexFromUserInsert } from "../suggestions/sorting";

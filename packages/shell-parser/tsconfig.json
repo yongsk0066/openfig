@@ -1,5 +1,5 @@
 {
-  "extends": ["@fig/tsconfig/base.json", "@fig/tsconfig/dom.json"],
+  "extends": ["@fig/config/base.json", "@fig/config/dom.json"],
   "compilerOptions": {},
   "include": ["src"]
 }

@@ -2,7 +2,7 @@ import logger from "loglevel";
 import type { StoreApi } from "zustand";
 import { sleep } from "@fig/shared/utils";
 import type { ArgumentParserResult } from "@fig/autocomplete-parser";
-import { SETTINGS, getSetting } from "@fig/api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@fig/api-bindings/wrappers";
 import { runPipingConsoleMethods } from "../utils";
 import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";

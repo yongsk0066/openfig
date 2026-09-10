@@ -4,19 +4,25 @@
   "license": "MIT OR Apache-2.0",
   "author": "OpenFig contributors",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wrappers": "./src/wrappers/index.ts",
+    "./wrappers/*": "./src/wrappers/*.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "codegen": "node codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "catalog:",
-    "@fig/proto": "workspace:^"
+    "@fig/proto": "workspace:^",
+    "@fig/shared": "workspace:^",
+    "loglevel": "^1.9.2"
   },
   "devDependencies": {
-    "@fig/tsconfig": "workspace:^",
-    "@fig/types": "workspace:^",
+    "@fig/config": "workspace:^",
     "@types/node": "catalog:",
+    "@withfig/autocomplete-types": "catalog:",
     "ts-morph": "catalog:",
     "typescript": "catalog:"
   },

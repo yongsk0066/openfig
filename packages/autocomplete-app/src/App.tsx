@@ -1,5 +1,5 @@
 import { WindowPosition, Settings } from "@fig/api-bindings";
-import { SETTINGS } from "@fig/api-bindings-wrappers";
+import { SETTINGS } from "@fig/api-bindings/wrappers";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { RowComponentProps } from "react-window";
 

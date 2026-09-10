@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import logger from "loglevel";
 import { Keybindings, Shell } from "@fig/api-bindings";
-import { SETTINGS, getSetting } from "@fig/api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@fig/api-bindings/wrappers";
 import { ACTIONS, AutocompleteAction } from "../actions";
 import { useShallow } from "zustand/shallow";
 import { useAutocompleteStore } from "../state";

@@ -8,7 +8,7 @@ import {
   Types,
 } from "@fig/api-bindings";
 import type { AliasMap } from "@fig/shell-parser";
-import { type SettingsMap, updateSettings } from "@fig/api-bindings-wrappers";
+import { type SettingsMap, updateSettings } from "@fig/api-bindings/wrappers";
 import { clearSpecIndex } from "@fig/autocomplete-parser";
 import { updateSelectSuggestionKeybindings } from "../actions";
 import { generatorCache } from "../generators/helpers";

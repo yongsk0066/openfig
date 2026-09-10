@@ -16,7 +16,7 @@ import {
   getSetting,
   isInDevMode,
   SETTINGS,
-} from "@fig/api-bindings-wrappers";
+} from "@fig/api-bindings/wrappers";
 import { type Command, substituteAlias } from "@fig/shell-parser";
 import { getSpecPath, loadSubcommandCached, serializeSpecLocation } from "./loadSpec.js";
 import { ParseArgumentsError, ParsingHistoryError, UpdateStateError } from "./errors.js";

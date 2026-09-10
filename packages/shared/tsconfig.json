@@ -1,7 +1,7 @@
 {
-  "extends": ["@fig/tsconfig/base.json", "@fig/tsconfig/dom.json"],
+  "extends": ["@fig/config/base.json", "@fig/config/dom.json"],
   "compilerOptions": {
-    "types": ["@fig/types", "@withfig/autocomplete-types"]
+    "types": ["@fig/config", "@withfig/autocomplete-types"]
   },
   "include": ["src"]
 }

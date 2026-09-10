@@ -11,8 +11,7 @@
   },
   "devDependencies": {
     "@fig/api-bindings": "workspace:^",
-    "@fig/tsconfig": "workspace:^",
-    "@fig/types": "workspace:^",
+    "@fig/config": "workspace:^",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

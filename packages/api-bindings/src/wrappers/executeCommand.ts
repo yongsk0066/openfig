@@ -5,7 +5,7 @@
  * vitest is not able to mock it (because of esm restrictions).
  */
 import { withTimeout } from "@fig/shared/utils";
-import { Process } from "@fig/api-bindings";
+import { Process } from "../index.js";
 import logger from "loglevel";
 
 export const cleanOutput = (output: string) =>

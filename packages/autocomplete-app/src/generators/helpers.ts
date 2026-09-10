@@ -1,7 +1,7 @@
 import type { Annotation } from "@fig/autocomplete-parser";
 import type { Suggestion } from "@fig/shared/internal";
 import { getCWDForFilesAndFolders } from "@fig/shared/utils";
-import { getSetting, SETTINGS } from "@fig/api-bindings-wrappers";
+import { getSetting, SETTINGS } from "@fig/api-bindings/wrappers";
 import { Cache } from "./cache";
 
 export type GeneratorContext = Fig.ShellContext & {

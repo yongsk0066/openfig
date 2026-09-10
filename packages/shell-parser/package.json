@@ -17,7 +17,7 @@
     "@fig/shared": "workspace:^"
   },
   "devDependencies": {
-    "@fig/tsconfig": "workspace:^",
+    "@fig/config": "workspace:^",
     "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

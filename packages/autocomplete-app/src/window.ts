@@ -1,4 +1,4 @@
-import { getSetting, SETTINGS } from "@fig/api-bindings-wrappers";
+import { getSetting, SETTINGS } from "@fig/api-bindings/wrappers";
 
 // Default settings values.
 export const MAX_WIDTH = 320;

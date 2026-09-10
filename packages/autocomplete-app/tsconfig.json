@@ -1,7 +1,7 @@
 {
-  "extends": ["@fig/tsconfig/base.json", "@fig/tsconfig/dom.json"],
+  "extends": ["@fig/config/base.json", "@fig/config/dom.json"],
   "compilerOptions": {
-    "types": ["@withfig/autocomplete-types", "@fig/types", "node"]
+    "types": ["@withfig/autocomplete-types", "@fig/config", "node"]
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"]
 }

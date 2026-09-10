@@ -1,5 +1,5 @@
 import { fs } from "@fig/api-bindings";
-import { isInDevMode } from "@fig/api-bindings-wrappers";
+import { isInDevMode } from "@fig/api-bindings/wrappers";
 
 // Logging functions
 const DEFAULT_CONSOLE = {

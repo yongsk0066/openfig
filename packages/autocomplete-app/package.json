@@ -17,7 +17,6 @@
   "dependencies": {
     "@bufbuild/protobuf": "catalog:",
     "@fig/api-bindings": "workspace:~",
-    "@fig/api-bindings-wrappers": "workspace:^",
     "@fig/autocomplete-helpers": "^2.0.0",
     "@fig/autocomplete-parser": "workspace:^",
     "@fig/autocomplete-shared": "^1.1.2",
@@ -33,10 +32,9 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
+    "@fig/config": "workspace:^",
     "@fig/fuzzysort": "workspace:^",
     "@fig/shared": "workspace:^",
-    "@fig/tsconfig": "workspace:^",
-    "@fig/types": "workspace:^",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

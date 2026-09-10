@@ -1,5 +1,5 @@
 import logger from "loglevel";
-import { executeCommandTimeout } from "@fig/api-bindings-wrappers";
+import { executeCommandTimeout } from "@fig/api-bindings/wrappers";
 import { runPipingConsoleMethods } from "../utils";
 import { type GeneratorContext, haveContextForGenerator, runCachedGenerator } from "./helpers";
 

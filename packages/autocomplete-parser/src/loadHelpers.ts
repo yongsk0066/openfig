@@ -1,7 +1,7 @@
 import logger, { type Logger } from "loglevel";
 import * as semver from "semver";
 import { ensureTrailingSlash, withTimeout } from "@fig/shared/utils";
-import { executeCommand, fread, isInDevMode } from "@fig/api-bindings-wrappers";
+import { executeCommand, fread, isInDevMode } from "@fig/api-bindings/wrappers";
 import z from "zod";
 import { MOST_USED_SPECS } from "./constants.js";
 import { LoadLocalSpecError } from "./errors.js";

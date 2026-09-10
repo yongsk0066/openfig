@@ -1,4 +1,4 @@
-import { Process } from "@fig/api-bindings";
+import { Process } from "../index.js";
 import { withTimeout } from "@fig/shared/utils";
 import { createErrorInstance } from "@fig/shared/errors";
 import logger from "loglevel";

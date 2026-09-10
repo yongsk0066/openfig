@@ -18,7 +18,7 @@ import {
   executeLoginShell,
   SETTINGS,
   getSetting,
-} from "@fig/api-bindings-wrappers";
+} from "@fig/api-bindings/wrappers";
 import { History } from "@fig/api-bindings";
 import {
   type AnnotatedCommand,

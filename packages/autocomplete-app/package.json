@@ -15,14 +15,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
     "@fig/api-bindings": "workspace:~",
     "@fig/api-bindings-wrappers": "workspace:^",
+    "@fig/autocomplete-helpers": "^2.0.0",
     "@fig/autocomplete-parser": "workspace:^",
+    "@fig/autocomplete-shared": "^1.1.2",
     "@fig/proto": "workspace:^",
     "@fig/shell-parser": "workspace:^",
-    "@bufbuild/protobuf": "catalog:",
-    "@fig/autocomplete-helpers": "^2.0.0",
-    "@fig/autocomplete-shared": "^1.1.2",
     "deep-object-diff": "^1.1.9",
     "loglevel": "^1.9.2",
     "react": "catalog:",
@@ -33,9 +33,9 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@fig/types": "workspace:^",
     "@fig/fuzzysort": "workspace:^",
     "@fig/shared": "workspace:^",
+    "@fig/types": "workspace:^",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

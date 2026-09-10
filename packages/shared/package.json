@@ -15,9 +15,9 @@
     "@fig/autocomplete-shared": "^1.1.2"
   },
   "devDependencies": {
+    "@fig/fuzzysort": "workspace:^",
     "@fig/tsconfig": "workspace:^",
     "@fig/types": "workspace:^",
-    "@fig/fuzzysort": "workspace:^",
     "@withfig/autocomplete-types": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

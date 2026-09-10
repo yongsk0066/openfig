@@ -1,12 +1,6 @@
 import { Result } from "@fig/fuzzysort";
 import logger from "loglevel";
-import {
-  Option,
-  Subcommand,
-  Arg,
-  Suggestion,
-  SuggestionType,
-} from "@fig/shared/internal";
+import { Option, Subcommand, Arg, Suggestion, SuggestionType } from "@fig/shared/internal";
 import {
   makeArray,
   SuggestionFlags,
@@ -16,16 +10,8 @@ import {
   localProtocol,
   fieldsAreEqual,
 } from "@fig/shared/utils";
-import {
-  countEqualOptions,
-  Annotation,
-  TokenType,
-} from "@fig/autocomplete-parser";
-import {
-  getSetting,
-  SETTINGS,
-  SettingsMap,
-} from "@fig/api-bindings-wrappers";
+import { countEqualOptions, Annotation, TokenType } from "@fig/autocomplete-parser";
+import { getSetting, SETTINGS, SettingsMap } from "@fig/api-bindings-wrappers";
 import { GeneratorState } from "../generators/helpers";
 
 import {

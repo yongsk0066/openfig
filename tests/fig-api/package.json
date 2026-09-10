@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@fig/api-bindings": "workspace:^",
     "@fig/tsconfig": "workspace:^",
     "@fig/types": "workspace:^",
-    "@fig/api-bindings": "workspace:^",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

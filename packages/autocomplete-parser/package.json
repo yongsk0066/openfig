@@ -12,18 +12,18 @@
   "dependencies": {
     "@fig/api-bindings": "workspace:^",
     "@fig/api-bindings-wrappers": "workspace:^",
-    "@fig/shell-parser": "workspace:^",
     "@fig/autocomplete-generators": "^2.4.0",
     "@fig/autocomplete-helpers": "^2.0.0",
     "@fig/autocomplete-shared": "^1.1.2",
+    "@fig/shell-parser": "workspace:^",
     "loglevel": "^1.9.2",
     "semver": "^7.8.5",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@fig/shared": "workspace:^",
     "@fig/tsconfig": "workspace:^",
     "@fig/types": "workspace:^",
-    "@fig/shared": "workspace:^",
     "@types/semver": "^7.8.0",
     "@withfig/autocomplete-types": "catalog:",
     "jsdom": "catalog:",

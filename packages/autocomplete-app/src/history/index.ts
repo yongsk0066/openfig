@@ -10,11 +10,7 @@ import {
   loadSubcommandCached,
   serializeSpecLocation,
 } from "@fig/autocomplete-parser";
-import {
-  getAllCommandsWithAlias,
-  AliasMap,
-  Command,
-} from "@fig/shell-parser";
+import { getAllCommandsWithAlias, AliasMap, Command } from "@fig/shell-parser";
 import { SpecLocationSource } from "@fig/shared/utils";
 import { Suggestion } from "@fig/shared/internal";
 import {

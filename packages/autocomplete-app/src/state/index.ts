@@ -6,15 +6,8 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { Suggestion } from "@fig/shared/internal";
 import { fieldsAreEqual, makeArray, memoizeOne } from "@fig/shared/utils";
 import { AliasMap, getCommand } from "@fig/shell-parser";
-import {
-  ArgumentParserResult,
-  initialParserState,
-} from "@fig/autocomplete-parser";
-import {
-  getSetting,
-  SETTINGS,
-  SettingsMap,
-} from "@fig/api-bindings-wrappers";
+import { ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser";
+import { getSetting, SETTINGS, SettingsMap } from "@fig/api-bindings-wrappers";
 import { type Types } from "@fig/api-bindings";
 import { detailedDiff } from "deep-object-diff";
 import { FigState, initialFigState } from "../fig/hooks";

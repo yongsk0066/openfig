@@ -2,12 +2,7 @@ import { Metadata, convertSubcommand, initializeDefault } from "@fig/autocomplet
 import logger from "loglevel";
 import { folders, filepaths } from "@fig/autocomplete-generators";
 import * as Internal from "@fig/shared/internal";
-import {
-  SuggestionFlag,
-  SuggestionFlags,
-  makeArray,
-  SpecLocationSource,
-} from "@fig/shared/utils";
+import { SuggestionFlag, SuggestionFlags, makeArray, SpecLocationSource } from "@fig/shared/utils";
 import { Command, getCommand } from "@fig/shell-parser";
 import {
   findOption,

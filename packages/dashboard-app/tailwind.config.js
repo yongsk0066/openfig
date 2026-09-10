@@ -123,9 +123,6 @@ export default {
         shimmer: "shimmer 4s ease-in-out infinite",
         shine: "shine 4s ease-in-out infinite",
       },
-      fontFamily: {
-        ember: ["Ember", "sans-serif"],
-      },
     },
   },
   plugins: [],

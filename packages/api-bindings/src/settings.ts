@@ -1,7 +1,4 @@
-import {
-  SettingsChangedNotification,
-  NotificationType,
-} from "@fig/proto/fig";
+import { SettingsChangedNotification, NotificationType } from "@fig/proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
 import { sendGetSettingsPropertyRequest, sendUpdateSettingsPropertyRequest } from "./requests.js";

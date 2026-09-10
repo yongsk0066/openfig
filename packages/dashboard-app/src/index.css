@@ -1,42 +1,6 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
-@font-face {
-  font-family: "Ember";
-  font-weight: 100;
-  src: url("../assets/fonts/Ember/AmazonEmber_Th.ttf");
-}
-
-@font-face {
-  font-family: "Ember";
-  font-weight: 200 300;
-  src: url("../assets/fonts/Ember/AmazonEmber_Lt.ttf");
-}
-
-@font-face {
-  font-family: "Ember";
-  font-weight: 400;
-  src: url("../assets/fonts/Ember/AmazonEmber_Rg.ttf");
-}
-
-@font-face {
-  font-family: "Ember";
-  font-weight: 500 600;
-  src: url("../assets/fonts/Ember/AmazonEmber_Md.ttf");
-}
-
-@font-face {
-  font-family: "Ember";
-  font-weight: 700;
-  src: url("../assets/fonts/Ember/AmazonEmber_Bd.ttf");
-}
-
-@font-face {
-  font-family: "Ember";
-  font-weight: 800 900;
-  src: url("../assets/fonts/Ember/AmazonEmber_He.ttf");
-}
-
 @layer base {
   :root {
     height: 100%;
@@ -71,11 +35,6 @@
     --ring: 240 10% 3.9%;
 
     --radius: 0.5rem;
-
-    /* Amazon Q Developer CLI upgrade banner colors */
-    --q-banner-bg: #262626;
-    --q-banner-border: #8e48ff;
-    --q-banner-link: #b07fff;
   }
 
   body {
@@ -111,11 +70,6 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
-
-    /* Amazon Q Developer CLI upgrade banner colors */
-    --q-banner-bg: #262626;
-    --q-banner-border: #8e48ff;
-    --q-banner-link: #b07fff;
   }
 }
 
@@ -129,7 +83,7 @@
 }
 
 @layer components {
-  .gradient-q-secondary-light {
+  .gradient-fig-secondary-light {
     background: radial-gradient(
       ellipse farthest-corner at 100% 0%,
       #a7f8ff 0%,
@@ -139,7 +93,7 @@
     );
   }
 
-  .gradient-q-secondary-light-alt {
+  .gradient-fig-secondary-light-alt {
     background: radial-gradient(
       ellipse farthest-corner at 100% 0%,
       #008dff 0%,
@@ -148,17 +102,12 @@
     );
   }
 
-  .gradient-q-secondary-dark {
+  .gradient-fig-secondary-dark {
     background:
       radial-gradient(122.5% 122.5% at 0% 0%, #000000 0%, rgba(0, 0, 0, 0) 100%),
       radial-gradient(100% 100% at 0% 100%, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%),
       radial-gradient(100% 100% at 100% 0%, #6e3bf1 7.53%, rgba(110, 59, 241, 0) 100%),
       radial-gradient(100% 86.61% at 100% 100%, #538bf7 0%, rgba(83, 139, 247, 0) 100%), #301673;
-  }
-
-  .q-banner {
-    background-color: var(--q-banner-bg);
-    border: 1px solid var(--q-banner-border);
   }
 }
 

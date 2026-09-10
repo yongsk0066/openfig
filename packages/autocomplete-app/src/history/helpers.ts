@@ -1,11 +1,7 @@
 import { Internal, Metadata } from "@fig/autocomplete-shared";
 import logger from "loglevel";
 import { Command } from "@fig/shell-parser";
-import {
-  ArgumentParserResult,
-  BasicAnnotation,
-  TokenType,
-} from "@fig/autocomplete-parser";
+import { ArgumentParserResult, BasicAnnotation, TokenType } from "@fig/autocomplete-parser";
 import { SuggestionNotFoundError } from "./errors";
 
 export type AnnotatedCommand = {

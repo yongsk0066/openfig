@@ -16,9 +16,9 @@
     "loglevel": "^1.9.2"
   },
   "devDependencies": {
+    "@fig/shared": "workspace:^",
     "@fig/tsconfig": "workspace:^",
     "@fig/types": "workspace:^",
-    "@fig/shared": "workspace:^",
     "@withfig/autocomplete-types": "catalog:",
     "typescript": "catalog:"
   },

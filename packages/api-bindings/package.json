@@ -10,8 +10,8 @@
     "codegen": "node codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
   "dependencies": {
-    "@fig/proto": "workspace:^",
-    "@bufbuild/protobuf": "catalog:"
+    "@bufbuild/protobuf": "catalog:",
+    "@fig/proto": "workspace:^"
   },
   "devDependencies": {
     "@fig/tsconfig": "workspace:^",

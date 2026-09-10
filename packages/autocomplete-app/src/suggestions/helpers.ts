@@ -1,11 +1,7 @@
 import fuzzysort from "@fig/fuzzysort";
 import logger from "loglevel";
 import { Suggestion } from "@fig/shared/internal";
-import {
-  makeArray,
-  longestCommonPrefix,
-  ensureTrailingSlash,
-} from "@fig/shared/utils";
+import { makeArray, longestCommonPrefix, ensureTrailingSlash } from "@fig/shared/utils";
 
 const SHORTCUT_PREFIX = "?";
 

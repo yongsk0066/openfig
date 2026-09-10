@@ -23,9 +23,9 @@
     "@bufbuild/protobuf": "catalog:"
   },
   "devDependencies": {
-    "@fig/tsconfig": "workspace:^",
     "@bufbuild/buf": "catalog:",
     "@bufbuild/protoc-gen-es": "catalog:",
+    "@fig/tsconfig": "workspace:^",
     "typescript": "catalog:"
   },
   "engines": {

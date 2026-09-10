@@ -152,9 +152,7 @@ const sourceFile = project.createSourceFile(
       .flat()
       .sort()
       .map(capitalizeFirstLetter);
-    writer.writeLine(
-      `import { \n${imports.join(",\n")}\n } from "@fig/proto/fig";`,
-    );
+    writer.writeLine(`import { \n${imports.join(",\n")}\n } from "@fig/proto/fig";`);
     writer
       .writeLine(
         [

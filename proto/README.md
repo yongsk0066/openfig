@@ -38,7 +38,7 @@ To compile protos, run:
 ./build-ts.sh
 ```
 
-## Deprecating an Amazon Q API
+## Deprecating an API
 
 1. Edit `fig.proto` and add the `[deprecated=true]` annotation to the relevant
    fields

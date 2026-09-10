@@ -1,9 +1,3 @@
-<p align="center">
-    <img width="300" src="https://github.com/withfig/fig/blob/main/static/FigBanner.png?raw=true"/>
-</p>
-
----
-
 # Autocomplete v9
 
 This is where all the changes to autocomplete are made. This readme will

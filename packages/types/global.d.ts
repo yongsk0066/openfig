@@ -5,8 +5,13 @@ declare global {
      */
     const constants:
       | {
-          codewhisperer: boolean;
           version: string;
+          productName?: string;
+          cliBinaryName?: string;
+          ptyBinaryName?: string;
+          bundleId?: string;
+          urlSchema?: string;
+          dataDirName?: string;
           cli?: string;
           bundlePath?: string;
           remote?: string;

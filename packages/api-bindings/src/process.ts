@@ -1,9 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { sendRunProcessRequest } from "./requests.js";
-import {
-  DurationSchema,
-  EnvironmentVariableSchema,
-} from "@fig/proto/fig_common";
+import { DurationSchema, EnvironmentVariableSchema } from "@fig/proto/fig_common";
 
 export async function run({
   executable,

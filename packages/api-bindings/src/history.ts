@@ -1,7 +1,4 @@
-import {
-  HistoryQueryRequest_Param,
-  HistoryQueryRequest_ParamSchema,
-} from "@fig/proto/fig";
+import { HistoryQueryRequest_Param, HistoryQueryRequest_ParamSchema } from "@fig/proto/fig";
 import { sendHistoryQueryRequest } from "./requests.js";
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@fig/proto/fig_common";

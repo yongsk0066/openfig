@@ -20,12 +20,12 @@ export type Intro = {
 
 function FeatureIntro({ intro }: { intro: Intro }) {
   return (
-    <section className="flex flex-col justify-center p-6 gap-4 w-full gradient-q-secondary-light-alt rounded-lg items-start text-white min-h-[6.5rem]">
+    <section className="flex flex-col justify-center p-6 gap-4 w-full gradient-fig-secondary-light-alt rounded-lg items-start text-white min-h-[6.5rem]">
       <div className="flex gap-4 justify-between w-full">
         <div className="flex gap-4">
           <div className="flex-shrink-0">{getIconFromName(intro.title, 48)}</div>
           <div className="flex flex-col">
-            <h1 className="font-bold text-2xl font-ember leading-none">{intro.title}</h1>
+            <h1 className="font-bold text-2xl leading-none">{intro.title}</h1>
             <p className="text-base">
               {parseBackticksToCode(
                 intro.description,

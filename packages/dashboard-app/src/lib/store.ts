@@ -1,10 +1,5 @@
 import { create } from "zustand";
-import {
-  Settings as ApiSettings,
-  State as ApiState,
-  Install,
-  Platform,
-} from "@fig/api-bindings";
+import { Settings as ApiSettings, State as ApiState, Install, Platform } from "@fig/api-bindings";
 import { PlatformInfo } from "@/types/preferences";
 
 type KV = Record<string, unknown>;

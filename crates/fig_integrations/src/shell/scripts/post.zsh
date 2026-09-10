@@ -16,9 +16,6 @@ if [[ -z "${Q_SHELL:-}" ]]; then
   Q_SHELL=$({{CLI_BINARY_NAME}} _ get-shell)
 fi
 
-# shellcheck disable=SC2059
-function fig_osc { printf "\033]697;$1\007" "${@:2}"; }
-
 Q_HAS_SET_PROMPT=0
 
 fig_preexec() {
@@ -70,8 +67,10 @@ fig_preexec() {
 
   Q_HAS_SET_PROMPT=0
 
-  fig_osc "OSCLock=%s" "${QTERM_SESSION_ID}"
-  fig_osc PreExec
+  # One write instead of two: each `fig_osc` is a separate `printf`, i.e. a separate write(2)
+  # into the pty that figterm has to wake up for.
+  # shellcheck disable=SC2059
+  printf '\033]697;OSCLock=%s\007\033]697;PreExec\007' "${QTERM_SESSION_ID}"
 }
 
 fig_precmd() {
@@ -79,20 +78,21 @@ fig_precmd() {
 
   fig_reset_hooks
 
-  fig_osc "OSCUnlock=%s" "${QTERM_SESSION_ID}"
-  fig_osc "Dir=%s" "$PWD"
-  fig_osc "Shell=zsh"
-  fig_osc "ShellPath=%s" "${Q_SHELL:-$SHELL}"
-  if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-    fig_osc "WSLDistro=%s" "${WSL_DISTRO_NAME}"
-  fi
-  fig_osc "PID=%d" "$$"
-  fig_osc "ExitCode=%s" "${LAST_STATUS}"
-  fig_osc "TTY=%s" "${TTY}"
-  fig_osc "Log=%s" "${Q_LOG_LEVEL}"
-  fig_osc "ZshAutosuggestionColor=%s" "${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE}"
-  fig_osc "FigAutosuggestionColor=%s" "${Q_AUTOSUGGEST_HIGHLIGHT_STYLE}"
-  fig_osc "User=%s" "${USER:-root}"
+  # One `printf` for the whole prompt report. This used to be eleven separate `fig_osc` calls,
+  # i.e. eleven `printf`s and eleven writes into the pty, on every prompt.
+  # `WSLDistro` never fires on macOS and `FigAutosuggestionColor` has no producer at all, so both
+  # keys are gone (nothing parses them either).
+  # shellcheck disable=SC2059
+  printf '\033]697;OSCUnlock=%s\007\033]697;Dir=%s\007\033]697;Shell=zsh\007\033]697;ShellPath=%s\007\033]697;PID=%d\007\033]697;ExitCode=%s\007\033]697;TTY=%s\007\033]697;Log=%s\007\033]697;ZshAutosuggestionColor=%s\007\033]697;User=%s\007' \
+    "${QTERM_SESSION_ID}" \
+    "$PWD" \
+    "${Q_SHELL:-$SHELL}" \
+    "$$" \
+    "${LAST_STATUS}" \
+    "${TTY}" \
+    "${Q_LOG_LEVEL}" \
+    "${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE}" \
+    "${USER:-root}"
 
   if [ "$Q_HAS_SET_PROMPT" -eq 1 ]; then
     # ^C pressed while entering command, call preexec manually to clear fig prompts.
@@ -184,9 +184,6 @@ fig_reset_hooks() {
 }
 
 fig_reset_hooks
-if [[ -n "${PROCESS_LAUNCHED_BY_Q:-}" ]]; then
-  fig_osc DoneSourcing
-fi
 
 fi
 

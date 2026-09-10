@@ -1800,14 +1800,6 @@ impl<T: EventListener> Handler for Term<T> {
     }
 
     #[inline]
-    fn wsl_distro(&mut self, distro: &str) {
-        if self.shell_state.osc_lock {
-            return;
-        }
-        self.shell_state.get_mut_context().wsl_distro = Some(distro.trim().into());
-    }
-
-    #[inline]
     fn exit_code(&mut self, exit_code: i32) {
         if self.shell_state.osc_lock {
             return;
@@ -1845,21 +1837,6 @@ impl<T: EventListener> Handler for Term<T> {
 
         if let Some(color_support) = self.shell_state().color_support {
             self.shell_state.zsh_autosuggestion_color = Some(shell_color::parse_suggestion_color_zsh_autosuggest(
-                color,
-                color_support,
-            ));
-        }
-    }
-
-    #[inline]
-    fn fig_suggestion_color(&mut self, color: &str) {
-        if self.shell_state.osc_lock || color.is_empty() {
-            return;
-        }
-        trace!("Fig suggestion color: {color:?}");
-
-        if let Some(color_support) = self.shell_state().color_support {
-            self.shell_state.fig_autosuggestion_color = Some(shell_color::parse_suggestion_color_zsh_autosuggest(
                 color,
                 color_support,
             ));

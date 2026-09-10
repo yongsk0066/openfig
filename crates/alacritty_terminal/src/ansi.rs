@@ -509,9 +509,6 @@ pub trait Handler {
     /// Fig ShellPath Osc
     fn shell_path(&mut self, _: &Path) {}
 
-    /// Fig WSL Distro Osc
-    fn wsl_distro(&mut self, _: &str) {}
-
     /// Fig ExitCode Osc
     fn exit_code(&mut self, _: i32) {}
 
@@ -520,9 +517,6 @@ pub trait Handler {
 
     /// Fig ZshSuggestionColor Osc
     fn zsh_suggestion_color(&mut self, _: &str) {}
-
-    /// FigSuggestionColor Osc
-    fn fig_suggestion_color(&mut self, _: &str) {}
 
     /// Fig tty Osc
     fn tty(&mut self, _: &str) {}
@@ -1223,10 +1217,6 @@ where
                                         Ok(path_str) => self.handler.shell_path(Path::new(path_str)),
                                         Err(err) => error!("Failed to parse path: {err}"),
                                     },
-                                    b"WSLDistro" => match str::from_utf8(val[1..].as_ref()) {
-                                        Ok(s) => self.handler.wsl_distro(s),
-                                        Err(err) => error!("Error decoding WSL Distro: {err}"),
-                                    },
                                     b"ExitCode" => match str::from_utf8(&val[1..]) {
                                         Ok(code) => match code.parse::<i32>() {
                                             Ok(code) => self.handler.exit_code(code),
@@ -1241,10 +1231,6 @@ where
                                     b"ZshAutosuggestionColor" => match str::from_utf8(&val[1..]) {
                                         Ok(s) => self.handler.zsh_suggestion_color(s),
                                         Err(err) => error!("Error decoding ZshAutosuggestionColor: {err}"),
-                                    },
-                                    b"FigAutosuggestionColor" => match str::from_utf8(&val[1..]) {
-                                        Ok(s) => self.handler.fig_suggestion_color(s),
-                                        Err(err) => error!("Error decoding FigAutosuggestionColor: {err}"),
                                     },
                                     b"TTY" => match str::from_utf8(&val[1..]) {
                                         Ok(s) => self.handler.tty(s),

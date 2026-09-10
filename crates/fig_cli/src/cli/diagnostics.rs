@@ -16,7 +16,6 @@ use crossterm::{
     execute,
 };
 use eyre::ContextCompat;
-use fig_diagnostic::Diagnostics;
 use fig_ipc::local::send_recv_command_to_socket;
 use fig_proto::local::command::Command;
 use fig_proto::local::command_response::Response;
@@ -118,4 +117,272 @@ pub async fn verify_integration(integration: impl Into<String>) -> Result<String
     };
 
     message.context("No message found")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Absorbed from the former `fig_diagnostic` crate: 261 lines whose only consumer was this file.
+// ---------------------------------------------------------------------------------------------
+
+use std::collections::BTreeMap;
+
+use fig_os_shim::{
+    Context,
+    Os,
+    PlatformProvider,
+};
+use fig_util::consts::build::HASH;
+use fig_util::manifest::manifest;
+use fig_util::{
+    Shell,
+    Terminal,
+};
+use serde::Serialize;
+use sysinfo::{
+    CpuRefreshKind,
+    MemoryRefreshKind,
+    RefreshKind,
+    System,
+};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
+
+use crate::util::system_info::{
+    OSVersion,
+    os_version,
+};
+
+fn serialize_display_option<D, S>(display: &Option<D>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    D: std::fmt::Display,
+    S: serde::Serializer,
+{
+    match display {
+        Some(display) => serializer.serialize_str(&display.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildDetails {
+    version: String,
+    hash: Option<&'static str>,
+    date: Option<String>,
+    variant: String,
+}
+
+impl BuildDetails {
+    fn new() -> BuildDetails {
+        let date = fig_util::consts::build::DATETIME
+            .and_then(|input| OffsetDateTime::parse(input, &Rfc3339).ok())
+            .and_then(|time| {
+                let rfc3339 = time.format(&Rfc3339).ok()?;
+                let duration = OffsetDateTime::now_utc() - time;
+                Some(format!("{rfc3339} ({duration:.0} ago)"))
+            });
+
+        BuildDetails {
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            hash: HASH,
+            date,
+            variant: manifest().variant.to_string(),
+        }
+    }
+}
+
+fn serialize_os_version<S>(version: &Option<OSVersion>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match version {
+        Some(version) => serializer.serialize_str(&version.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SystemInfo {
+    #[serde(serialize_with = "serialize_os_version")]
+    os: Option<OSVersion>,
+    chip: Option<String>,
+    total_cores: Option<usize>,
+    memory: Option<String>,
+}
+
+impl SystemInfo {
+    fn new() -> SystemInfo {
+        let system = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::everything())
+                .with_memory(MemoryRefreshKind::everything()),
+        );
+
+        let mut hardware_info = SystemInfo {
+            os: os_version().cloned(),
+            chip: None,
+            total_cores: System::physical_core_count(),
+            memory: Some(format!("{:0.2} GB", system.total_memory() as f32 / 2.0_f32.powi(30))),
+        };
+
+        if let Some(processor) = system.cpus().first() {
+            hardware_info.chip = Some(processor.brand().into());
+        }
+
+        hardware_info
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct EnvVarDiagnostic {
+    env_vars: BTreeMap<String, String>,
+}
+
+impl EnvVarDiagnostic {
+    fn new() -> EnvVarDiagnostic {
+        let env_vars = std::env::vars()
+            .filter(|(key, _)| {
+                let fig_var = fig_util::env_var::ALL.contains(&key.as_str());
+                let other_var = [
+                    // General env vars
+                    "SHELL",
+                    "DISPLAY",
+                    "PATH",
+                    "TERM",
+                    "ZDOTDIR",
+                    // Linux vars
+                    "XDG_CURRENT_DESKTOP",
+                    "XDG_SESSION_DESKTOP",
+                    "XDG_SESSION_TYPE",
+                    "GLFW_IM_MODULE",
+                    "GTK_IM_MODULE",
+                    "QT_IM_MODULE",
+                    "XMODIFIERS",
+                    // Macos vars
+                    "__CFBundleIdentifier",
+                ]
+                .contains(&key.as_str());
+
+                fig_var || other_var
+            })
+            .map(|(key, value)| {
+                // sanitize username from values
+                let username = format!("/{}", whoami::username().unwrap_or_else(|_| "unknown".into()));
+                (key, value.replace(&username, "/USER"))
+            })
+            .collect();
+
+        EnvVarDiagnostic { env_vars }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct CurrentEnvironment {
+    cwd: Option<String>,
+    cli_path: Option<String>,
+    os: Os,
+    shell_path: Option<String>,
+    shell_version: Option<String>,
+    #[serde(serialize_with = "serialize_display_option")]
+    terminal: Option<Terminal>,
+    #[serde(skip_serializing_if = "is_false")]
+    in_ssh: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    in_ci: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    in_codespaces: bool,
+}
+
+impl CurrentEnvironment {
+    async fn new() -> CurrentEnvironment {
+        use fig_util::process_info::{
+            Pid,
+            PidExt,
+        };
+        let ctx = Context::new();
+
+        let username = format!("/{}", whoami::username().unwrap_or_else(|_| "unknown".into()));
+
+        let shell_path = Pid::current()
+            .parent()
+            .and_then(|pid| pid.exe())
+            .map(|p| p.to_string_lossy().replace(&username, "/USER"));
+        let shell_version = Shell::current_shell_version().await.map(|(_, v)| v).ok();
+
+        let cwd = ctx
+            .env()
+            .current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().replace(&username, "/USER"));
+
+        // The path of *this* binary. This was a copy-paste of the `cwd` expression above
+        // (`current_dir()`), so `q diagnostic` reported the working directory twice and never
+        // told you which `q` you were actually running — the single most useful line in the
+        // report when there is more than one install on the machine.
+        let cli_path = std::env::current_exe()
+            .ok()
+            .map(|path| path.to_string_lossy().replace(&username, "/USER"));
+
+        let os = ctx.platform().os();
+        let terminal = Terminal::parent_terminal(&ctx);
+
+        let in_ssh = crate::util::system_info::in_ssh();
+        let in_ci = crate::util::system_info::in_ci();
+        let in_codespaces = crate::util::system_info::in_codespaces();
+
+        CurrentEnvironment {
+            shell_path,
+            shell_version,
+            cwd,
+            cli_path,
+            os,
+            terminal,
+            in_ssh,
+            in_ci,
+            in_codespaces,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Diagnostics {
+    build_details: BuildDetails,
+    system_info: SystemInfo,
+    environment: CurrentEnvironment,
+    #[serde(flatten)]
+    environment_variables: EnvVarDiagnostic,
+}
+
+impl Diagnostics {
+    pub async fn new() -> Diagnostics {
+        Diagnostics {
+            build_details: BuildDetails::new(),
+            system_info: SystemInfo::new(),
+            environment: CurrentEnvironment::new().await,
+            environment_variables: EnvVarDiagnostic::new(),
+        }
+    }
+
+    pub fn user_readable(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string(&self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_diagnostics_user_readable() {
+        let diagnostics = Diagnostics::new().await;
+        let toml = diagnostics.user_readable().unwrap();
+        assert!(!toml.is_empty());
+    }
 }

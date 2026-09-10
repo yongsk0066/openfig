@@ -1,6 +1,7 @@
 mod cli_context;
 pub mod desktop;
 pub mod spinner;
+pub mod system_info;
 
 use std::env;
 use std::ffi::OsStr;

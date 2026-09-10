@@ -26,7 +26,6 @@ crossterm.workspace = true
 ctrlc = "3.4.6"
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
 eyre.workspace = true
-fig_diagnostic.workspace = true
 fig_integrations.workspace = true
 fig_ipc.workspace = true
 fig_log.workspace = true
@@ -50,10 +49,13 @@ serde_json.workspace = true
 spinners.workspace = true
 sysinfo.workspace = true
 tempfile.workspace = true
+time.workspace = true
 tokio.workspace = true
+toml.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
+whoami.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true

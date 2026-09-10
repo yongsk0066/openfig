@@ -1400,7 +1400,6 @@ dependencies = [
  "ctrlc",
  "dialoguer",
  "eyre",
- "fig_diagnostic",
  "fig_integrations",
  "fig_ipc",
  "fig_log",
@@ -1427,10 +1426,13 @@ dependencies = [
  "spinners",
  "sysinfo 0.39.6",
  "tempfile",
+ "time",
  "tokio",
+ "toml 1.1.5+spec-1.1.0",
  "tracing",
  "uuid",
  "walkdir",
+ "whoami",
 ]
 
 [[package]]
@@ -1510,20 +1512,6 @@ dependencies = [
  "tokio",
  "tracing",
  "which",
- "whoami",
-]
-
-[[package]]
-name = "fig_diagnostic"
-version = "1.19.7"
-dependencies = [
- "fig_os_shim",
- "fig_util",
- "serde",
- "sysinfo 0.39.6",
- "time",
- "tokio",
- "toml 1.1.5+spec-1.1.0",
  "whoami",
 ]
 

@@ -67,7 +67,6 @@ use fig_util::env_var::{
     QTERM_SESSION_ID,
 };
 use fig_util::macos::BUNDLE_CONTENTS_INFO_PLIST_PATH;
-use fig_util::system_info::SupportLevel;
 use fig_util::terminal::in_special_terminal;
 use fig_util::{
     APP_BUNDLE_NAME,
@@ -94,6 +93,7 @@ use tokio::io::AsyncBufReadExt;
 use super::app::restart_fig;
 use super::diagnostics::verify_integration;
 use crate::util::desktop::desktop_app_running;
+use crate::util::system_info::SupportLevel;
 use crate::util::{
     app_path_from_bundle_id,
     is_executable_in_path,
@@ -591,7 +591,7 @@ impl DoctorCheck for FigIntegrationsCheck {
             });
         }
 
-        if fig_util::system_info::in_ci() {
+        if crate::util::system_info::in_ci() {
             return Err(DoctorError::Error {
                 reason: "Doctor can not run in CI".into(),
                 info: vec![],
@@ -1180,7 +1180,7 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
     }
 
     async fn get_type(&self, _: &SupportedTerminalCheckContext, platform: Platform) -> DoctorCheckType {
-        if fig_util::system_info::is_remote() {
+        if crate::util::system_info::is_remote() {
             DoctorCheckType::NoCheck
         } else {
             match platform {
@@ -1363,7 +1363,7 @@ impl DoctorCheck for SystemVersionCheck {
     }
 
     async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        let os_version = fig_util::system_info::os_version().wrap_err("Could not get OS Version")?;
+        let os_version = crate::util::system_info::os_version().wrap_err("Could not get OS Version")?;
         match os_version.support_level() {
             SupportLevel::Supported => Ok(()),
             SupportLevel::SupportedWithCaveat { info } => Err(DoctorError::Warning(info)),

@@ -3,7 +3,6 @@ pub mod manifest;
 mod open;
 pub mod process_info;
 mod shell;
-pub mod system_info;
 pub mod terminal;
 
 pub mod consts;

@@ -42,7 +42,6 @@ dashmap = "6.0.1"
 dirs = "7.0.0"
 eyre = "0.6.8"
 fig_desktop_api = { path = "crates/fig_desktop_api" }
-fig_diagnostic = { path = "crates/fig_diagnostic" }
 fig_integrations = { path = "crates/fig_integrations" }
 fig_ipc = { path = "crates/fig_ipc" }
 fig_log = { path = "crates/fig_log" }

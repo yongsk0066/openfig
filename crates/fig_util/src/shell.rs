@@ -89,16 +89,22 @@ impl Shell {
     }
 
     /// Get the directory for the shell that contains the dotfiles
+    ///
+    /// The home fallback goes through `env`, not `directories::home_dir()`. The latter reads the
+    /// *process* environment, so an injected [`Env`] was ignored on exactly the path that decides
+    /// which files get rewritten — which meant every test of the integration code silently
+    /// operated on the developer's own dotfiles.
     pub fn get_config_directory(&self, env: &Env) -> Result<PathBuf, directories::DirectoryError> {
+        let home = || env.home().ok_or(directories::DirectoryError::NoHomeDirectory);
         match self {
-            Shell::Bash => Ok(directories::home_dir()?),
+            Shell::Bash => home(),
             Shell::Zsh => match env
                 .get_os("ZDOTDIR")
                 .or_else(|| env.get_os(Q_ZDOTDIR))
                 .map(PathBuf::from)
             {
                 Some(dir) => Ok(dir),
-                None => Ok(directories::home_dir()?),
+                None => home(),
             },
         }
     }

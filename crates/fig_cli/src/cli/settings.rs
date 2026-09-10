@@ -15,7 +15,10 @@ use fig_ipc::local::open_ui_element;
 use fig_os_shim::Os;
 use fig_proto::local::UiElement;
 use fig_settings::JsonStore;
-use fig_util::directories;
+use fig_util::{
+    CLI_BINARY_NAME,
+    directories,
+};
 use globset::Glob;
 use serde_json::json;
 
@@ -78,7 +81,7 @@ impl SettingsArgs {
             None => match &self.key {
                 Some(key) => match (&self.value, self.delete) {
                     (Some(_), true) => Err(eyre::eyre!(
-                        "the argument '--delete' cannot be used with '[VALUE]'\n Usage: q settings --delete {key}"
+                        "the argument '--delete' cannot be used with '[VALUE]'\n Usage: {CLI_BINARY_NAME} settings --delete {key}"
                     )),
                     (None, false) => match fig_settings::settings::get_value(key)? {
                         Some(value) => {
@@ -137,7 +140,7 @@ impl SettingsArgs {
                 None => {
                     if self.delete {
                         return Err(eyre::eyre!(
-                            "the argument '--delete' requires a <KEY>\n Usage: q settings --delete <KEY>"
+                            "the argument '--delete' requires a <KEY>\n Usage: {CLI_BINARY_NAME} settings --delete <KEY>"
                         ));
                     }
 

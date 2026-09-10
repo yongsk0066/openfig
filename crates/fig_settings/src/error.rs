@@ -28,6 +28,8 @@ pub enum Error {
     DbOpenError(#[from] DbOpenError),
     #[error("{}", .0)]
     PoisonError(String),
+    #[error("history queries may only read the history table")]
+    HistoryQueryNotAllowed,
 }
 
 impl<T> From<PoisonError<T>> for Error {
@@ -53,6 +55,7 @@ mod tests {
             rusqlite::Error::SqliteSingleThreadedMode.into(),
             DbOpenError("oops".into()).into(),
             PoisonError::<()>::new(()).into(),
+            Error::HistoryQueryNotAllowed,
         ]
     }
 

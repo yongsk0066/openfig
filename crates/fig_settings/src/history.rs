@@ -3,6 +3,11 @@ use std::time::SystemTime;
 use inner::Inner;
 use parking_lot::MutexGuard;
 pub use rusqlite;
+use rusqlite::hooks::{
+    AuthAction,
+    AuthContext,
+    Authorization,
+};
 use rusqlite::types::ValueRef;
 use rusqlite::{
     Connection,
@@ -11,11 +16,33 @@ use rusqlite::{
 use serde_json::Value;
 use tracing::trace;
 
-use crate::Result;
 use crate::sqlite::{
     Db,
     database,
 };
+use crate::{
+    Error,
+    Result,
+};
+
+type Authorizer = fn(AuthContext<'_>) -> Authorization;
+
+/// Allows a statement to read the `history` table and nothing else.
+///
+/// `Read` is emitted per column with the resolved table name, so a query that reaches `state` or
+/// `auth_kv` — directly, through a view, a CTE or a subquery — is refused at prepare time. Every
+/// write action, `PRAGMA`, `ATTACH` and DDL action falls through to `Deny`. Scalar and aggregate
+/// functions are allowed: they cannot reach a table that the `Read` rule has not already
+/// authorised.
+fn history_reads_only(ctx: AuthContext<'_>) -> Authorization {
+    match ctx.action {
+        AuthAction::Select | AuthAction::Recursive | AuthAction::Function { .. } => Authorization::Allow,
+        AuthAction::Read {
+            table_name: "history", ..
+        } => Authorization::Allow,
+        _ => Authorization::Deny,
+    }
+}
 
 const ALL_COLUMNS: &str = "id, command, shell, pid, session_id, cwd, start_time, duration, hostname, exit_code";
 
@@ -126,56 +153,42 @@ impl History {
         Ok(rows_mapped)
     }
 
-    /// The Where expression is not escaped, so be careful!
+    /// Runs a read-only query against the `history` table and returns the rows as JSON objects.
     ///
-    /// Ugh i should like use sqlx or something
-    pub fn rows(
-        &self,
-        where_expr: Option<WhereExpression>,
-        order_by: Vec<OrderBy>,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<CommandInfo>> {
-        let where_expr = match where_expr {
-            Some(where_expr) => format!("WHERE {where_expr}"),
-            None => "".to_owned(),
-        };
-
-        let order_by = match order_by.is_empty() {
-            true => "".to_owned(),
-            false => format!(
-                "ORDER BY {}",
-                order_by
-                    .iter()
-                    .map(|o| o.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-        };
-
-        let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!(
-            "SELECT {ALL_COLUMNS} FROM history {where_expr} {order_by} LIMIT ? OFFSET ?",
-        ))?;
-
-        // rusqlite 0.34 dropped the lossy ToSql impls for usize/u64.
-        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-        let offset = i64::try_from(offset).unwrap_or(i64::MAX);
-        let rows = stmt.query(params![limit, offset])?;
-
-        let rows_mapped = rows.mapped(map_row).collect::<rusqlite::Result<Vec<CommandInfo>>>()?;
-
-        Ok(rows_mapped)
-    }
-
-    /// A raw sql query that returns a json array of objects
+    /// The query text comes from the autocomplete webview, which is not trusted with this
+    /// database: `history`, `state` and `auth_kv` all live in the same sqlite file, so a bare
+    /// `conn.prepare(query)` let any page loaded in that webview read the state store and the auth
+    /// table, or write to any of them.
+    ///
+    /// The restriction is enforced by sqlite's own authorizer rather than by inspecting the SQL:
+    /// it runs during statement *preparation* and sees the resolved table and column names, so it
+    /// cannot be talked around with comments, quoting, CTEs, subqueries, or a second statement.
+    /// Anything but reading `history` — a write, another table, a `PRAGMA`, an `ATTACH` of a
+    /// second database file — is refused.
     pub fn query<P: rusqlite::Params>(
         &self,
         query: &str,
         params: P,
     ) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
         let conn = self.conn()?;
+
+        conn.authorizer(Some(history_reads_only))?;
+        let result = Self::query_inner(&conn, query, params);
+        // The connection is shared with the rest of the process, so the authorizer must come off
+        // again whatever happened above.
+        conn.authorizer::<Authorizer>(None)?;
+        result
+    }
+
+    fn query_inner<P: rusqlite::Params>(
+        conn: &Connection,
+        query: &str,
+        params: P,
+    ) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
         let mut stmt = conn.prepare(query)?;
+        if !stmt.readonly() {
+            return Err(Error::HistoryQueryNotAllowed);
+        }
         let rows = stmt.query_map(params, |row| {
             let row_count = row.as_ref().column_count();
             let mut map = serde_json::Map::with_capacity(row_count);
@@ -223,123 +236,6 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CommandInfo> {
         hostname: row.get(8)?,
         exit_code: row.get(9)?,
     })
-}
-
-pub enum HistoryColumn {
-    Id,
-    Command,
-    Shell,
-    Pid,
-    SessionId,
-    Cwd,
-    StartTime,
-    Duration,
-    Hostname,
-    ExitCode,
-}
-
-impl std::fmt::Display for HistoryColumn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HistoryColumn::Id => f.write_str("id"),
-            HistoryColumn::Command => f.write_str("command"),
-            HistoryColumn::Shell => f.write_str("shell"),
-            HistoryColumn::Pid => f.write_str("pid"),
-            HistoryColumn::SessionId => f.write_str("session_id"),
-            HistoryColumn::Cwd => f.write_str("cwd"),
-            HistoryColumn::StartTime => f.write_str("start_time"),
-            HistoryColumn::Duration => f.write_str("duration"),
-            HistoryColumn::Hostname => f.write_str("hostname"),
-            HistoryColumn::ExitCode => f.write_str("exit_code"),
-        }
-    }
-}
-
-pub enum Order {
-    Asc,
-    Desc,
-}
-
-impl std::fmt::Display for Order {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Order::Asc => f.write_str("ASC"),
-            Order::Desc => f.write_str("DESC"),
-        }
-    }
-}
-
-pub struct OrderBy {
-    column: HistoryColumn,
-    order: Order,
-}
-
-impl OrderBy {
-    pub fn new(column: HistoryColumn, order: Order) -> Self {
-        Self { column, order }
-    }
-}
-
-impl std::fmt::Display for OrderBy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.column, self.order)
-    }
-}
-
-pub enum WhereExpression {
-    Eq(HistoryColumn, String),
-    Ne(HistoryColumn, String),
-    Gt(HistoryColumn, String),
-    Lt(HistoryColumn, String),
-    Ge(HistoryColumn, String),
-    Le(HistoryColumn, String),
-    Like(HistoryColumn, String),
-    NotLike(HistoryColumn, String),
-    IsNull(HistoryColumn),
-    NotNull(HistoryColumn),
-    In(HistoryColumn, Vec<String>),
-    NotIn(HistoryColumn, Vec<String>),
-    And(Box<WhereExpression>, Box<WhereExpression>),
-    Or(Box<WhereExpression>, Box<WhereExpression>),
-}
-
-impl std::fmt::Display for WhereExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WhereExpression::Eq(column, value) => write!(f, "{column} = '{value}'"),
-            WhereExpression::Ne(column, value) => write!(f, "{column} != '{value}'"),
-            WhereExpression::Gt(column, value) => write!(f, "{column} > '{value}'"),
-            WhereExpression::Lt(column, value) => write!(f, "{column} < '{value}'"),
-            WhereExpression::Ge(column, value) => write!(f, "{column} >= '{value}'"),
-            WhereExpression::Le(column, value) => write!(f, "{column} <= '{value}'"),
-            WhereExpression::Like(column, value) => write!(f, "{column} LIKE '{value}'"),
-            WhereExpression::NotLike(column, value) => write!(f, "{column} NOT LIKE '{value}'"),
-            WhereExpression::IsNull(column) => write!(f, "{column} IS NULL"),
-            WhereExpression::NotNull(column) => write!(f, "{column} IS NOT NULL"),
-            WhereExpression::In(column, values) => write!(
-                f,
-                "{} IN ({})",
-                column,
-                values
-                    .iter()
-                    .map(|v| format!("'{v}'"))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            WhereExpression::NotIn(column, values) => write!(
-                f,
-                "{} NOT IN ({})",
-                column,
-                values
-                    .iter()
-                    .map(|v| format!("'{v}'"))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            WhereExpression::And(left, right) => write!(f, "({left} AND {right})"),
-            WhereExpression::Or(left, right) => write!(f, "({left} OR {right})"),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -448,21 +344,17 @@ mod tests {
         assert_eq!(rows[2].hostname, Some("laptop".into()));
         assert_eq!(rows[2].exit_code, None);
 
+        // The dead `rows()` builder used to be exercised here; the same two queries go through
+        // `query`, which is the only surviving read path.
         let row = history
-            .rows(None, vec![OrderBy::new(HistoryColumn::Id, Order::Desc)], 1, 0)
+            .query("SELECT command FROM history ORDER BY id DESC LIMIT 1", ())
             .unwrap();
         assert_eq!(row.len(), 1);
-        assert_eq!(row[0].command, Some("cargo run".into()));
+        assert_eq!(row[0]["command"], serde_json::json!("cargo run"));
 
         let row = history
-            .rows(
-                Some(WhereExpression::NotNull(HistoryColumn::ExitCode)),
-                vec![OrderBy::new(HistoryColumn::Id, Order::Desc)],
-                10,
-                0,
-            )
+            .query("SELECT id FROM history WHERE exit_code IS NOT NULL", ())
             .unwrap();
-
         assert_eq!(row.len(), 2);
 
         // while we're here, test the `query` method
@@ -526,5 +418,61 @@ mod tests {
             .as_object()
             .unwrap()
         );
+    }
+
+    /// The query text comes from the autocomplete webview. `history`, `state` and `auth_kv` share
+    /// one sqlite file, so an unrestricted `conn.prepare(query)` handed any page loaded in that
+    /// webview the state store and the auth table.
+    #[test]
+    fn query_can_only_read_the_history_table() {
+        let history = History::mock();
+        history
+            .insert_command_history(&CommandInfo {
+                command: Some("echo hi".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        // Something to try to steal.
+        history
+            .db()
+            .unwrap()
+            .conn()
+            .execute(
+                "INSERT OR REPLACE INTO state (key, value) VALUES ('secret', '\"hunter2\"')",
+                [],
+            )
+            .unwrap();
+
+        // The query the app actually issues still works.
+        let rows = history
+            .query(
+                "SELECT command, shell, session_id, cwd, start_time, exit_code FROM history",
+                (),
+            )
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+
+        for forbidden in [
+            "SELECT * FROM state",
+            "SELECT * FROM auth_kv",
+            "SELECT * FROM sqlite_master",
+            "SELECT (SELECT value FROM state WHERE key = 'secret') AS x FROM history",
+            "WITH s AS (SELECT value FROM state) SELECT * FROM s",
+            "SELECT command FROM history UNION SELECT value FROM state",
+            "DELETE FROM history",
+            "UPDATE state SET value = '1'",
+            "INSERT INTO history (command) VALUES ('x')",
+            "DROP TABLE history",
+            "ATTACH DATABASE '/tmp/evil.sqlite3' AS evil",
+            "PRAGMA journal_mode = DELETE",
+            "CREATE TABLE evil (x)",
+        ] {
+            assert!(history.query(forbidden, ()).is_err(), "{forbidden:?} was allowed");
+        }
+
+        // Everything still works afterwards: the authorizer must not be left installed on the
+        // shared connection.
+        assert_eq!(history.all_rows().unwrap().len(), 1);
+        assert_eq!(history.query("SELECT command FROM history", ()).unwrap().len(), 1);
     }
 }

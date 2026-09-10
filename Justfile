@@ -82,11 +82,19 @@ bundle:
     cp -R "{{build}}/specs/"              "{{app}}/Contents/Resources/specs/"
 
 # Inner executables first and the bundle last, because the top level seals what is under it.
-# ad-hoc signing (01-decisions #17): no certificate, cdhash only.
+# Signing identity: any "Apple Development" / "Developer ID Application" certificate in the
+# login keychain keeps the app's designated requirement stable across rebuilds, so the
+# Accessibility (TCC) grant survives re-signing. Override with FIG_SIGN_IDENTITY. Falls back
+# to ad-hoc ("-", cdhash only) when no identity exists — then every re-sign needs
+# `q debug accessibility refresh` and a new toggle in System Settings.
 sign:
-    codesign --force --sign - --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"
-    codesign --force --sign - --identifier "$BUNDLE_ID.pty" "{{app}}/Contents/MacOS/$PTY_BIN"
-    codesign --force --sign - --identifier "$BUNDLE_ID"     "{{app}}"
+    identity="${FIG_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
+        | awk -F'"' '/Developer ID Application|Apple Development|Mac Developer/ {print $2; exit}')}"; \
+    identity="${identity:--}"; \
+    echo "codesign identity: $identity"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.pty" "{{app}}/Contents/MacOS/$PTY_BIN"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
     codesign --verify --deep --strict --verbose=2 "{{app}}"
 
 # app_bundle_path() falls back to /Applications, not ~/Applications, so the bundle goes there.

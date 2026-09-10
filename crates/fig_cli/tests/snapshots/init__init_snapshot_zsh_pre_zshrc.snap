@@ -21,7 +21,7 @@ fi
 
 # 0 = Yes, 1 = No, 2 = Fallback to Q_TERM
 if [ -z "${SHOULD_QTERM_LAUNCH:-}" ]; then
-  fig _ should-figterm-launch 1>/dev/null 2>&1
+  q _ should-figterm-launch 1>/dev/null 2>&1
   SHOULD_QTERM_LAUNCH=$?
 fi
 
@@ -35,7 +35,7 @@ if   [[ -t 1 ]] \
 then
   # Pty module sets Q_TERM or Q_TERM_TMUX to avoid running twice.
   if [ -z "${Q_SHELL:-}" ]; then
-    Q_SHELL=$(fig _ get-shell)
+    Q_SHELL=$(q _ get-shell)
   fi
   Q_IS_LOGIN_SHELL="${Q_IS_LOGIN_SHELL:='0'}"
 

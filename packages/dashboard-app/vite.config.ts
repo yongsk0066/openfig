@@ -41,14 +41,18 @@ const htmlCspPlugin: Plugin = {
 };
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [react(), tailwindcss(), htmlCspPlugin],
   server: {
     port: 3433,
+    warmup: { clientFiles: ["./src/main.tsx", "./src/App.tsx"] },
   },
   build: {
     target: "esnext",
-    sourcemap: command !== "build",
+    sourcemap: false,
+    // Six routes behind one local `figresource://` page: splitting moves bytes
+    // around without saving any. The limit keeps the warning meaningful.
+    chunkSizeWarningLimit: 700,
   },
   resolve: {
     alias: {
@@ -56,4 +60,4 @@ export default defineConfig(({ command }) => ({
       "@assets": path.resolve(import.meta.dirname, "./assets"),
     },
   },
-}));
+});

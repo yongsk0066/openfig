@@ -1,7 +1,6 @@
 import { defineConfig, loadEnv, type Plugin, type HtmlTagDescriptor } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-// import legacy from "@vitejs/plugin-legacy";
 
 const csp: Record<string, string> = {
   "default-src": "'self'",
@@ -42,47 +41,34 @@ const htmlCspPlugin: Plugin = {
 };
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode, command }) => {
+export default defineConfig(({ mode }) => {
   process.env = { ...process.env, ...loadEnv(mode, process.cwd(), "") };
 
   return {
-    plugins: [
-      react(),
-      tailwindcss(),
-      htmlCspPlugin,
-      // legacy({
-      //   targets: [
-      //     "safari >= 11",
-      //     "last 3 Chrome version",
-      //     "last 3 Firefox version",
-      //   ],
-      // }),
-    ],
-    css: {
-      modules: {
-        localsConvention: "camelCaseOnly",
-      },
-    },
+    plugins: [react(), tailwindcss(), htmlCspPlugin],
     server: {
       port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3124,
       strictPort: true,
+      warmup: {
+        clientFiles: ["./src/main.tsx", "./src/App.tsx", "./src/components/Suggestion.tsx"],
+      },
     },
     build: {
       target: "esnext",
       // TODO: re-enable prod source maps to upload them to sentry (see build CIs)
-      sourcemap: command !== "build",
-      rollupOptions: {
+      sourcemap: false,
+      // The suggestion list is one screen of a local `figresource://` page, so a
+      // single chunk is what we want; the limit is here to keep the warning
+      // meaningful rather than permanent.
+      chunkSizeWarningLimit: 700,
+      rolldownOptions: {
         external: ["?type=option", "?type=carrot", "?type=command", "?type=box"],
       },
     },
     define: {
-      __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+      // Some dependencies still read `process.env.*`; there is no `process` in
+      // the webview.
       "process.env": {},
-    },
-    resolve: {
-      alias: {
-        util: "util",
-      },
     },
   };
 });

@@ -256,7 +256,6 @@ pub async fn process_figterm_request(
 
             Ok(Some(response))
         },
-        FigtermRequest::SetBuffer(_) => Err(anyhow::anyhow!("SetBuffer is not supported in figterm")),
         FigtermRequest::UpdateShellContext(request) => {
             if request.update_environment_variables {
                 *SHELL_ENVIRONMENT_VARIABLES.lock().unwrap() = request.environment_variables;
@@ -295,29 +294,6 @@ pub async fn process_figterm_message(
     Ok(())
 }
 
-async fn send_figterm_response_hostbound(
-    response: Option<FigtermResponse>,
-    nonce: Option<u64>,
-    response_tx: &Sender<Hostbound>,
-) {
-    use hostbound::response::Response;
-
-    if let Some(response) = response {
-        let hostbound = Hostbound {
-            packet: Some(hostbound::Packet::Response(hostbound::Response {
-                nonce,
-                response: Some(match response {
-                    FigtermResponse::Diagnostics(diagnostics) => Response::Diagnostics(diagnostics),
-                }),
-            })),
-        };
-
-        if let Err(err) = response_tx.send_async(hostbound).await {
-            error!(%err, "Failed sending request response");
-        }
-    }
-}
-
 pub async fn process_remote_message(
     clientbound_message: Clientbound,
     response_tx: Sender<Hostbound>,
@@ -341,37 +317,16 @@ pub async fn process_remote_message(
             };
 
             match request.request {
+                // Neither of these produces a response: `process_figterm_request` returns `None`
+                // for both, and `Hostbound.Response` no longer has a variant that could carry
+                // one. `RunProcess` below builds its own.
                 Some(Request::InsertText(request)) => {
-                    send_figterm_response_hostbound(
-                        process_figterm_request(FigtermRequest::InsertText(request), term, pty_master, key_interceptor)
-                            .await?,
-                        nonce,
-                        &response_tx,
-                    )
-                    .await;
+                    process_figterm_request(FigtermRequest::InsertText(request), term, pty_master, key_interceptor)
+                        .await?;
                 },
                 Some(Request::Intercept(request)) => {
-                    send_figterm_response_hostbound(
-                        process_figterm_request(FigtermRequest::Intercept(request), term, pty_master, key_interceptor)
-                            .await?,
-                        nonce,
-                        &response_tx,
-                    )
-                    .await;
-                },
-                Some(Request::Diagnostics(request)) => {
-                    send_figterm_response_hostbound(
-                        process_figterm_request(
-                            FigtermRequest::Diagnostics(request),
-                            term,
-                            pty_master,
-                            key_interceptor,
-                        )
-                        .await?,
-                        nonce,
-                        &response_tx,
-                    )
-                    .await;
+                    process_figterm_request(FigtermRequest::Intercept(request), term, pty_master, key_interceptor)
+                        .await?;
                 },
                 Some(Request::RunProcess(request)) => {
                     // TODO: we can infer shell as above for execute if no executable is provided.

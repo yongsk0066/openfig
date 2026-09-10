@@ -34,12 +34,6 @@ export declare type FigtermRequestMessage = Message<"figterm.FigtermRequestMessa
     case: "insertText";
   } | {
     /**
-     * @generated from field: figterm.SetBufferRequest set_buffer = 3;
-     */
-    value: SetBufferRequest;
-    case: "setBuffer";
-  } | {
-    /**
      * @generated from field: figterm.DiagnosticsRequest diagnostics = 4;
      */
     value: DiagnosticsRequest;
@@ -253,34 +247,6 @@ export declare type InsertTextRequest = Message<"figterm.InsertTextRequest"> & {
  * Use `create(InsertTextRequestSchema)` to create a new message.
  */
 export declare const InsertTextRequestSchema: GenMessage<InsertTextRequest>;
-
-/**
- * Set buffer command
- * Used to set the line of text in the edit buffer
- *
- * @generated from message figterm.SetBufferRequest
- */
-export declare type SetBufferRequest = Message<"figterm.SetBufferRequest"> & {
-  /**
-   * The text to set
-   *
-   * @generated from field: string text = 1;
-   */
-  text: string;
-
-  /**
-   * The cursor position to set
-   *
-   * @generated from field: optional uint64 cursor_position = 2;
-   */
-  cursorPosition?: bigint | undefined;
-};
-
-/**
- * Describes the message figterm.SetBufferRequest.
- * Use `create(SetBufferRequestSchema)` to create a new message.
- */
-export declare const SetBufferRequestSchema: GenMessage<SetBufferRequest>;
 
 /**
  * @generated from message figterm.TermColor

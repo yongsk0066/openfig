@@ -26,7 +26,6 @@ use fig_proto::local::{
     ShellContext,
 };
 use fig_proto::prost::Message;
-use fig_proto::remote::clientbound;
 use fig_remote_ipc::figterm::FigtermState;
 use parking_lot::Mutex;
 use tracing::{
@@ -90,7 +89,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         hook: &EditBufferHook,
         session_id: Uuid,
         figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>> {
+    ) -> Result<()> {
         // Did figterm consider its context dirty? If so every window has to be re-told, and the
         // hook already carries the full environment.
         let hook_carried_env = hook
@@ -225,15 +224,10 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             },
         })?;
 
-        Ok(None)
+        Ok(())
     }
 
-    async fn prompt(
-        &mut self,
-        hook: &PromptHook,
-        session_id: Uuid,
-        figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>> {
+    async fn prompt(&mut self, hook: &PromptHook, session_id: Uuid, figterm_state: &Arc<FigtermState>) -> Result<()> {
         let mut cwd_changed = false;
         let mut new_cwd = None;
         figterm_state.with(&session_id, |session| {
@@ -291,7 +285,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             error!(%err, "Failed to broadcast ShellPromptReturnedNotification");
         }
 
-        Ok(None)
+        Ok(())
     }
 
     async fn pre_exec(
@@ -299,7 +293,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         hook: &PreExecHook,
         session_id: Uuid,
         figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>> {
+    ) -> Result<()> {
         figterm_state.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
@@ -330,7 +324,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             )
             .await?;
 
-        Ok(None)
+        Ok(())
     }
 
     async fn post_exec(
@@ -338,7 +332,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         hook: &PostExecHook,
         session_id: Uuid,
         figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>> {
+    ) -> Result<()> {
         figterm_state.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
@@ -365,14 +359,14 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             )
             .await?;
 
-        Ok(None)
+        Ok(())
     }
 
     async fn intercepted_key(
         &mut self,
         InterceptedKeyHook { action, context, .. }: InterceptedKeyHook,
         _session_id: Uuid,
-    ) -> Result<Option<clientbound::response::Response>> {
+    ) -> Result<()> {
         debug!(%action, "Intercepted Key Action");
 
         self.notifications_state
@@ -391,7 +385,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             )
             .await?;
 
-        Ok(None)
+        Ok(())
     }
 }
 

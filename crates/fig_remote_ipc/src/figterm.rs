@@ -17,10 +17,7 @@ use parking_lot::{
     RawFairMutex,
 };
 use serde::Serialize;
-use tokio::sync::{
-    broadcast,
-    oneshot,
-};
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 #[derive(Clone, Default, Debug)]
@@ -136,7 +133,6 @@ impl From<InterceptMode> for bool {
 #[derive(Debug, Serialize)]
 pub struct FigtermSession {
     pub id: Uuid,
-    pub(crate) secret: String,
     #[serde(skip)]
     pub sender: flume::Sender<FigtermCommand>,
     #[serde(skip)]
@@ -150,8 +146,6 @@ pub struct FigtermSession {
     pub(crate) response_map: HashMap<u64, oneshot::Sender<hostbound::response::Response>>,
     #[serde(skip)]
     pub(crate) nonce_counter: u64,
-    #[serde(skip)]
-    pub(crate) on_close_tx: broadcast::Sender<()>,
     pub intercept: InterceptMode,
     pub intercept_global: InterceptMode,
 }
@@ -191,10 +185,6 @@ pub enum FigtermCommand {
         immediate: Option<bool>,
         insertion_buffer: Option<String>,
         insert_during_command: Option<bool>,
-    },
-    SetBuffer {
-        text: String,
-        cursor_position: Option<u64>,
     },
     RunProcess {
         channel: oneshot::Sender<hostbound::response::Response>,

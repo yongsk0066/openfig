@@ -4,10 +4,10 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { Duration, Empty, EnvironmentVariable, FileData } from "./fig_common_pb.js";
-import type { DiagnosticsRequest, DiagnosticsResponse, InsertTextRequest, InterceptRequest, SetBufferRequest } from "./figterm_pb.js";
-import type { ReadFileRequest, RunProcessResponse } from "./fig_pb.js";
+import type { Duration, Empty, EnvironmentVariable } from "./fig_common_pb.js";
+import type { InsertTextRequest, InterceptRequest } from "./figterm_pb.js";
 import type { EditBufferHook, InterceptedKeyHook, PostExecHook, PreExecHook, PromptHook } from "./local_pb.js";
+import type { RunProcessResponse } from "./fig_pb.js";
 
 /**
  * Describes the file remote.proto.
@@ -75,12 +75,6 @@ export declare type Clientbound = Message<"remote.Clientbound"> & {
      */
     value: Clientbound_Request;
     case: "request";
-  } | {
-    /**
-     * @generated from field: remote.Clientbound.Response response = 103;
-     */
-    value: Clientbound_Response;
-    case: "response";
   } | { case: undefined; value?: undefined };
 };
 
@@ -132,24 +126,6 @@ export declare type Clientbound_Request = Message<"remote.Clientbound.Request"> 
     case: "insertText";
   } | {
     /**
-     * @generated from field: figterm.SetBufferRequest set_buffer = 102;
-     */
-    value: SetBufferRequest;
-    case: "setBuffer";
-  } | {
-    /**
-     * @generated from field: figterm.DiagnosticsRequest diagnostics = 103;
-     */
-    value: DiagnosticsRequest;
-    case: "diagnostics";
-  } | {
-    /**
-     * @generated from field: fig.ReadFileRequest read_file = 105;
-     */
-    value: ReadFileRequest;
-    case: "readFile";
-  } | {
-    /**
      * @generated from field: remote.RunProcessRequest run_process = 104;
      */
     value: RunProcessRequest;
@@ -162,35 +138,6 @@ export declare type Clientbound_Request = Message<"remote.Clientbound.Request"> 
  * Use `create(Clientbound_RequestSchema)` to create a new message.
  */
 export declare const Clientbound_RequestSchema: GenMessage<Clientbound_Request>;
-
-/**
- * @generated from message remote.Clientbound.Response
- */
-export declare type Clientbound_Response = Message<"remote.Clientbound.Response"> & {
-  /**
-   * @generated from field: optional uint64 nonce = 1;
-   */
-  nonce?: bigint | undefined;
-
-  /**
-   * @generated from oneof remote.Clientbound.Response.response
-   */
-  response: {
-    /**
-     * Empty message to ensure response is valid, oneof can't be empty
-     *
-     * @generated from field: fig_common.Empty empty = 103;
-     */
-    value: Empty;
-    case: "empty";
-  } | { case: undefined; value?: undefined };
-};
-
-/**
- * Describes the message remote.Clientbound.Response.
- * Use `create(Clientbound_ResponseSchema)` to create a new message.
- */
-export declare const Clientbound_ResponseSchema: GenMessage<Clientbound_Response>;
 
 /**
  * @generated from message remote.Hostbound
@@ -240,11 +187,6 @@ export declare type Hostbound_Handshake = Message<"remote.Hostbound.Handshake"> 
    * @generated from field: string id = 1;
    */
   id: string;
-
-  /**
-   * @generated from field: string secret = 2;
-   */
-  secret: string;
 };
 
 /**
@@ -324,22 +266,10 @@ export declare type Hostbound_Response = Message<"remote.Hostbound.Response"> & 
     case: "error";
   } | {
     /**
-     * @generated from field: figterm.DiagnosticsResponse diagnostics = 101;
-     */
-    value: DiagnosticsResponse;
-    case: "diagnostics";
-  } | {
-    /**
      * @generated from field: fig.RunProcessResponse run_process = 102;
      */
     value: RunProcessResponse;
     case: "runProcess";
-  } | {
-    /**
-     * @generated from field: remote.Hostbound.Response.ReadFileResponse read_file = 103;
-     */
-    value: Hostbound_Response_ReadFileResponse;
-    case: "readFile";
   } | { case: undefined; value?: undefined };
 };
 
@@ -348,20 +278,4 @@ export declare type Hostbound_Response = Message<"remote.Hostbound.Response"> & 
  * Use `create(Hostbound_ResponseSchema)` to create a new message.
  */
 export declare const Hostbound_ResponseSchema: GenMessage<Hostbound_Response>;
-
-/**
- * @generated from message remote.Hostbound.Response.ReadFileResponse
- */
-export declare type Hostbound_Response_ReadFileResponse = Message<"remote.Hostbound.Response.ReadFileResponse"> & {
-  /**
-   * @generated from field: fig_common.FileData data = 1;
-   */
-  data?: FileData | undefined;
-};
-
-/**
- * Describes the message remote.Hostbound.Response.ReadFileResponse.
- * Use `create(Hostbound_Response_ReadFileResponseSchema)` to create a new message.
- */
-export declare const Hostbound_Response_ReadFileResponseSchema: GenMessage<Hostbound_Response_ReadFileResponse>;
 

@@ -18,7 +18,6 @@ use fig_proto::local::{
     PromptHook,
     ShellContext,
 };
-use fig_proto::remote::clientbound;
 use fig_remote_ipc::RemoteHookHandler;
 use fig_remote_ipc::figterm::FigtermState;
 use fig_util::RUNTIME_DIR_NAME;
@@ -49,9 +48,9 @@ impl RemoteHookHandler for RemoteHook {
         edit_buffer_hook: &EditBufferHook,
         _session_id: Uuid,
         _figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>, Self::Error> {
+    ) -> Result<(), Self::Error> {
         *self.buffer.lock().await = Some(edit_buffer_hook.text.clone());
-        Ok(None)
+        Ok(())
     }
 
     async fn prompt(
@@ -59,8 +58,8 @@ impl RemoteHookHandler for RemoteHook {
         _prompt_hook: &PromptHook,
         _session_id: Uuid,
         _figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>, Self::Error> {
-        Ok(None)
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     async fn pre_exec(
@@ -68,8 +67,8 @@ impl RemoteHookHandler for RemoteHook {
         _pre_exec_hook: &PreExecHook,
         _session_id: Uuid,
         _figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>, Self::Error> {
-        Ok(None)
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     async fn post_exec(
@@ -77,16 +76,16 @@ impl RemoteHookHandler for RemoteHook {
         _post_exec_hook: &PostExecHook,
         _session_id: Uuid,
         _figterm_state: &Arc<FigtermState>,
-    ) -> Result<Option<clientbound::response::Response>, Self::Error> {
-        Ok(None)
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     async fn intercepted_key(
         &mut self,
         _intercepted_key: InterceptedKeyHook,
         _session_id: Uuid,
-    ) -> Result<Option<clientbound::response::Response>, Self::Error> {
-        Ok(None)
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     async fn shell_context(&mut self, context: &ShellContext, _session_id: Uuid) {

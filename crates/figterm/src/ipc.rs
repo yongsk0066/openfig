@@ -29,7 +29,6 @@ use fig_proto::remote::{
 use fig_util::{
     PTY_BINARY_NAME,
     directories,
-    gen_hex_string,
 };
 use flume::{
     Receiver,
@@ -219,7 +218,6 @@ pub async fn spawn_remote_ipc(
     tokio::spawn(async move {
         let mut interval = interval(Duration::from_secs(5));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let secret = gen_hex_string();
 
         loop {
             interval.tick().await;
@@ -241,7 +239,6 @@ pub async fn spawn_remote_ipc(
                     if let Err(err) = writer.send_message(Hostbound {
                         packet: Some(hostbound::Packet::Handshake(Handshake {
                             id: session_id.clone(),
-                            secret: secret.clone(),
                         })),
                     })
                     .await

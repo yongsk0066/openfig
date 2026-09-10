@@ -14,7 +14,6 @@ use fig_ipc::{
 use fig_proto::figterm::{
     InsertTextRequest,
     InterceptRequest,
-    SetBufferRequest,
     intercept_request,
 };
 use fig_proto::local::ShellContext;
@@ -124,36 +123,18 @@ async fn handle_remote_ipc(
                                 Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
                                     success: false,
                                 }))
-                            } else if let Some(success) = figterm_state.with_update(session_id, |session| {
-                                if session.secret == handshake.secret {
-                                    initialized = true;
-                                    session.writer = Some(clientbound_tx.clone());
-                                    session.on_close_tx = on_close_tx.clone();
-                                    debug!(
-                                        "Client auth for {} accepted because of secret match ({} = {})",
-                                        handshake.id, session.secret, handshake.secret
-                                    );
-                                    true
-                                } else {
-                                    debug!(
-                                        "Client auth for {} rejected because of secret mismatch ({} =/= {})",
-                                        handshake.id, session.secret, handshake.secret
-                                    );
-                                    false
-                                }
-                            }) {
-                                Some(clientbound::Packet::HandshakeResponse(HandshakeResponse { success }))
                             } else {
+                                // The session id is minted here, per connection
+                                // (`Uuid::new_v4()` above), so `with_update` could never find an
+                                // existing session to compare a secret against: the secret branch
+                                // was unreachable and the secret itself never verified. It is gone
+                                // from the proto.
                                 initialized = true;
                                 let (command_tx, command_rx) = flume::unbounded();
                                 tokio::spawn(handle_commands(command_rx, figterm_state.clone(), session_id));
-                                debug!(
-                                    "Client auth for {} accepted because of new id with secret {}",
-                                    handshake.id, handshake.secret
-                                );
+                                debug!("Client auth for {} accepted", handshake.id);
                                 figterm_state.insert(FigtermSession {
                                     id: session_id,
-                                    secret: handshake.secret.clone(),
                                     sender: command_tx,
                                     writer: Some(clientbound_tx.clone()),
                                     edit_buffer: EditBuffer {
@@ -164,7 +145,6 @@ async fn handle_remote_ipc(
                                     terminal_cursor_coordinates: None,
                                     response_map: HashMap::new(),
                                     nonce_counter: 0,
-                                    on_close_tx: on_close_tx.clone(),
                                     intercept: InterceptMode::Unlocked,
                                     intercept_global: InterceptMode::Unlocked
                                 });
@@ -173,7 +153,7 @@ async fn handle_remote_ipc(
                                 }))
                             }
                         },
-                        Some(hostbound::Packet::Request(hostbound::Request { request: Some(request), nonce })) => {
+                        Some(hostbound::Packet::Request(hostbound::Request { request: Some(request), .. })) => {
                             if matches!(
                                 request,
                                 hostbound::request::Request::EditBuffer(_)
@@ -233,13 +213,10 @@ async fn handle_remote_ipc(
                                     },
                                 } ;
 
-                                match res {
-                                    Ok(inner) => inner.map(|inner| clientbound::Packet::Response(clientbound::Response { nonce, response: Some(inner) })),
-                                    Err(err) => {
-                                        error!(%err, "Failed processing hook");
-                                        None
-                                    }
+                                if let Err(err) = res {
+                                    error!(%err, "Failed processing hook");
                                 }
+                                None
                             }
                         },
                         Some(hostbound::Packet::Response(hostbound::Response {
@@ -383,9 +360,6 @@ async fn handle_commands(
                 }),
                 None,
             ),
-            FigtermCommand::SetBuffer { text, cursor_position } => {
-                (Request::SetBuffer(SetBufferRequest { text, cursor_position }), None)
-            },
             FigtermCommand::RunProcess {
                 channel,
                 executable,

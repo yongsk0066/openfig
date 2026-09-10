@@ -429,7 +429,7 @@ impl WindowState {
                     // `Hide` has always checked; `Show` did not, so every keystroke re-sent
                     // `InterceptFigJSVisible` to every linked figterm session and re-called
                     // `set_visible(true)` on an already visible window.
-                    if platform::autocomplete_active() && !self.window.is_visible() {
+                    if !self.window.is_visible() {
                         for session in figterm_state.inner.lock().linked_sessions.values_mut() {
                             let _ = session
                                 .sender

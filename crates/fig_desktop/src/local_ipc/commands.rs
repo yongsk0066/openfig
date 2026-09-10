@@ -40,7 +40,6 @@ use crate::{
     AUTOCOMPLETE_ID,
     DASHBOARD_ID,
     EventLoopProxy,
-    platform,
 };
 
 pub async fn debug(command: DebugModeCommand, proxy: &EventLoopProxy) -> LocalResult {
@@ -94,7 +93,7 @@ pub async fn diagnostic(_: DiagnosticsCommand, figterm_state: &FigtermState) -> 
     };
 
     let response = DiagnosticsResponse {
-        autocomplete_active: Some(platform::autocomplete_active()),
+        autocomplete_active: Some(true),
         path_to_bundle: macos_utils::bundle::get_bundle_path()
             .and_then(|path| path.to_str().map(|s| s.to_owned()))
             .unwrap_or_default(),

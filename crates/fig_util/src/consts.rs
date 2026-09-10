@@ -6,7 +6,7 @@ pub const APP_PROCESS_NAME: &str = env!("FIG_BRAND_DESKTOP_BIN");
 pub const CLI_BINARY_NAME: &str = env!("FIG_BRAND_CLI_BIN");
 pub const PTY_BINARY_NAME: &str = env!("FIG_BRAND_PTY_BIN");
 
-pub const CLI_CRATE_NAME: &str = "q_cli";
+pub const CLI_CRATE_NAME: &str = "fig_cli";
 
 pub const URL_SCHEMA: &str = env!("FIG_BRAND_URL_SCHEME");
 

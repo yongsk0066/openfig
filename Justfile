@@ -60,14 +60,14 @@ web:
 
 # Only the three binaries that go into the bundle.
 rust:
-    cargo build --locked --release --target {{target}} -p fig_desktop -p q_cli -p figterm
+    cargo build --locked --release --target {{target}} -p fig_desktop -p fig_cli -p figterm
 
 # Assemble build/<APP_NAME>.app
 bundle:
     rm -rf "{{app}}"
     mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
     cp "{{tdir}}/fig_desktop" "{{app}}/Contents/MacOS/$DESKTOP_BIN"
-    cp "{{tdir}}/q_cli"       "{{app}}/Contents/MacOS/$CLI_BIN"
+    cp "{{tdir}}/fig_cli"     "{{app}}/Contents/MacOS/$CLI_BIN"
     cp "{{tdir}}/figterm"     "{{app}}/Contents/MacOS/$PTY_BIN"
     VERSION='{{version}}' MIN_MACOS='{{min_macos}}' \
         perl -pe 's{\@(\w+)\@}{ my $v = $ENV{$1}; die "no value for \@$1\@\n" unless defined $v; $v =~ s/&/&amp;/g; $v =~ s/</&lt;/g; $v =~ s/>/&gt;/g; $v }ge' \

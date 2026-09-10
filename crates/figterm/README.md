@@ -13,7 +13,7 @@ prompts (precmd), and right before a command is executed (preexec)
 
 ## Installation/Usage
 
-First, make sure shell integrations are installed. You can use the `q_cli` to do
+First, make sure shell integrations are installed. You can use the `fig_cli` to do
 this:
 
 ```

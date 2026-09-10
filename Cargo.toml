@@ -8,7 +8,7 @@ members = [
   "tests/fig-api/fig-api-mock",
   "tests/figterm2",
 ]
-default-members = ["crates/fig_desktop", "crates/figterm", "crates/q_cli"]
+default-members = ["crates/fig_desktop", "crates/figterm", "crates/fig_cli"]
 
 [workspace.package]
 authors = [

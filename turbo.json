@@ -7,79 +7,43 @@
     "packages/config/base.json",
     "packages/config/dom.json"
   ],
-  "globalEnv": [
-    "NODE_ENV"
-  ],
+  "globalEnv": ["NODE_ENV"],
   "boundaries": {
     "tags": {
       "app": {
         "dependents": {
-          "deny": [
-            "app",
-            "lib",
-            "proto",
-            "test"
-          ]
+          "deny": ["app", "lib", "proto", "test"]
         }
       },
       "lib": {
         "dependencies": {
-          "deny": [
-            "app",
-            "test"
-          ]
+          "deny": ["app", "test"]
         }
       },
       "proto": {
         "dependencies": {
-          "deny": [
-            "app",
-            "lib",
-            "proto",
-            "test"
-          ]
+          "deny": ["app", "lib", "proto", "test"]
         }
       },
       "test": {
         "dependents": {
-          "deny": [
-            "app",
-            "lib",
-            "proto",
-            "test"
-          ]
+          "deny": ["app", "lib", "proto", "test"]
         }
       }
     }
   },
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!**/*.md"
-      ],
-      "env": [
-        "VITE_*",
-        "PORT",
-        "npm_package_version"
-      ],
-      "outputs": [
-        "dist/**"
-      ]
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "env": ["VITE_*", "PORT", "npm_package_version"],
+      "outputs": ["dist/**"]
     },
     "typecheck": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!**/*.md"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     },
     "codegen": {
-      "dependsOn": [
-        "^codegen"
-      ],
+      "dependsOn": ["^codegen"],
       "cache": false
     },
     "clean": {
@@ -88,10 +52,7 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": [
-        "VITE_*",
-        "PORT"
-      ]
+      "env": ["VITE_*", "PORT"]
     }
   }
 }

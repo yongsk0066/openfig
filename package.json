@@ -19,8 +19,8 @@
     "preview:autocomplete": "pnpm -C packages/autocomplete-app preview",
     "preview:dashboard": "pnpm -C packages/dashboard-app preview",
     "clean": "turbo clean --parallel",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --type-aware",
+    "lint:fix": "oxlint --type-aware --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint:proto": "pnpm --filter ./proto lint",
@@ -34,6 +34,7 @@
     "jsdom": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

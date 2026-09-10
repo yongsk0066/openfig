@@ -1,13 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "react",
-    "react-hooks",
-    "jsx-a11y",
-    "import",
-    "unicorn"
-  ],
+  "plugins": ["typescript", "react", "react-hooks", "jsx-a11y", "import", "unicorn"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -50,7 +43,25 @@
     "jsx-a11y/no-static-element-interactions": "warn",
     "jsx-a11y/click-events-have-key-events": "warn",
     "jsx-a11y/prefer-tag-over-role": "warn",
-    "unicorn/no-useless-fallback-in-spread": "warn"
+    "unicorn/no-useless-fallback-in-spread": "warn",
+    "typescript/no-floating-promises": "warn",
+    "typescript/no-misused-promises": "warn",
+    "typescript/await-thenable": "warn",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/no-unnecessary-type-assertion": "off",
+    "typescript/no-unnecessary-type-parameters": "off",
+    "typescript/no-unnecessary-type-arguments": "off",
+    "typescript/no-unnecessary-type-conversion": "off",
+    "typescript/no-unnecessary-template-expression": "off",
+    "typescript/no-unnecessary-boolean-literal-compare": "off",
+    "typescript/no-unsafe-enum-comparison": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/no-extraneous-class": "off",
+    "typescript/consistent-return": "off",
+    "typescript/unbound-method": "off",
+    "typescript/no-useless-default-assignment": "off",
+    "typescript/no-misused-spread": "off",
+    "typescript/no-base-to-string": "off"
   },
   "ignorePatterns": [
     "**/dist/**",
@@ -64,12 +75,7 @@
   ],
   "overrides": [
     {
-      "files": [
-        "tests/fig-api/**",
-        "packages/*/tests/**",
-        "**/*.test.ts",
-        "**/*.test.tsx"
-      ],
+      "files": ["tests/fig-api/**", "packages/*/tests/**", "**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "no-eval": "off",
         "unicorn/prefer-module": "off",

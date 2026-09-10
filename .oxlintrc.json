@@ -1,0 +1,79 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "jsx-a11y",
+    "import",
+    "unicorn"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "caughtErrors": "all",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "unicorn/prefer-module": "error",
+    "unicorn/no-abusive-eslint-disable": "error",
+    "unicorn/no-useless-spread": "error",
+    "unicorn/prefer-blob-reading-methods": "error",
+    "unicorn/prefer-date-now": "error",
+    "unicorn/prefer-includes": "warn",
+    "unicorn/prefer-keyboard-event-key": "error",
+    "unicorn/prefer-modern-dom-apis": "error",
+    "unicorn/prefer-modern-math-apis": "error",
+    "unicorn/prefer-native-coercion-functions": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-object-from-entries": "error",
+    "unicorn/prefer-reflect-apply": "error",
+    "unicorn/prefer-string-trim-start-end": "error",
+    "unicorn/prefer-type-error": "warn",
+    "react/react-in-jsx-scope": "off",
+    "react/set-state-in-effect": "warn",
+    "react/refs": "warn",
+    "jsx-a11y/alt-text": "warn",
+    "jsx-a11y/anchor-has-content": "warn",
+    "jsx-a11y/no-static-element-interactions": "warn",
+    "jsx-a11y/click-events-have-key-events": "warn",
+    "jsx-a11y/prefer-tag-over-role": "warn",
+    "unicorn/no-useless-fallback-in-spread": "warn"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "build/**",
+    "target/**",
+    "**/*.config.js",
+    "**/*.config.ts",
+    "packages/fuzzysort/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "tests/fig-api/**",
+        "packages/*/tests/**",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
+      "rules": {
+        "no-eval": "off",
+        "unicorn/prefer-module": "off",
+        "no-import-assign": "off"
+      }
+    }
+  ]
+}

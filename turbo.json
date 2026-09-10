@@ -3,16 +3,12 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist"]
-    },
-    "lint": {
-      "dependsOn": ["@amzn/eslint-config#build"],
-      "cache": false
-    },
-    "lint:fix": {
-      "dependsOn": ["@amzn/eslint-config#build"],
-      "cache": false
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist"
+      ]
     },
     "clean": {
       "cache": false

@@ -16,8 +16,6 @@
     "dev": "tsc --watch",
     "build": "tsc",
     "test": "vitest",
-    "lint": "eslint src tests && prettier --check src tests",
-    "lint:fix": "eslint --fix src tests && prettier --write src tests",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -32,13 +30,11 @@
     "zod": "^3.25.7"
   },
   "devDependencies": {
-    "@amzn/eslint-config": "workspace:^",
     "@amzn/tsconfig": "workspace:^",
     "@amzn/types": "workspace:^",
     "@aws/amazon-q-developer-cli-shared": "workspace:^",
     "@types/semver": "^7.7.0",
     "@withfig/autocomplete-types": "^1.31.0",
-    "eslint": "^9.18.0",
     "typescript": "^5.8.3",
     "vitest": "^3.0.8"
   }

@@ -30,7 +30,9 @@ const getSubmessageTypes = (interfaceName: string) => {
     (message) => message.name === interfaceName,
   );
   return (
-    message?.fields.map((type) => type.message?.name!).filter(Boolean) ?? []
+    message?.fields.flatMap((type) =>
+      type.message?.name ? [type.message.name] : [],
+    ) ?? []
   );
 };
 

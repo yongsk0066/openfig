@@ -69,10 +69,7 @@ export async function sendPositionWindowRequest(
 ): Promise<PositionWindowResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "positionWindowRequest",
-        value: create(PositionWindowRequestSchema, request),
-      },
+      { case: "positionWindowRequest", value: create(PositionWindowRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "positionWindowResponse":
@@ -82,11 +79,7 @@ export async function sendPositionWindowRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'PositionWindowRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'PositionWindowRequest'`));
         }
       },
     );
@@ -98,10 +91,7 @@ export async function sendReadFileRequest(
 ): Promise<ReadFileResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "readFileRequest",
-        value: create(ReadFileRequestSchema, request),
-      },
+      { case: "readFileRequest", value: create(ReadFileRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "readFileResponse":
@@ -111,11 +101,7 @@ export async function sendReadFileRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'ReadFileRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'ReadFileRequest'`));
         }
       },
     );
@@ -140,11 +126,7 @@ export async function sendContentsOfDirectoryRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'ContentsOfDirectoryRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'ContentsOfDirectoryRequest'`));
         }
       },
     );
@@ -169,11 +151,7 @@ export async function sendGetSettingsPropertyRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'GetSettingsPropertyRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'GetSettingsPropertyRequest'`));
         }
       },
     );
@@ -199,9 +177,7 @@ export async function sendDestinationOfSymbolicLinkRequest(
             break;
           default:
             reject(
-              Error(
-                `Invalid response '${response?.case}' for 'DestinationOfSymbolicLinkRequest'`,
-              ),
+              Error(`Invalid response '${response?.case}' for 'DestinationOfSymbolicLinkRequest'`),
             );
         }
       },
@@ -214,10 +190,7 @@ export async function sendGetLocalStateRequest(
 ): Promise<GetLocalStateResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "getLocalStateRequest",
-        value: create(GetLocalStateRequestSchema, request),
-      },
+      { case: "getLocalStateRequest", value: create(GetLocalStateRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "getLocalStateResponse":
@@ -227,11 +200,7 @@ export async function sendGetLocalStateRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'GetLocalStateRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'GetLocalStateRequest'`));
         }
       },
     );
@@ -243,10 +212,7 @@ export async function sendRunProcessRequest(
 ): Promise<RunProcessResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "runProcessRequest",
-        value: create(RunProcessRequestSchema, request),
-      },
+      { case: "runProcessRequest", value: create(RunProcessRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "runProcessResponse":
@@ -256,11 +222,7 @@ export async function sendRunProcessRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'RunProcessRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'RunProcessRequest'`));
         }
       },
     );
@@ -282,11 +244,7 @@ export async function sendInstallRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'InstallRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'InstallRequest'`));
         }
       },
     );
@@ -298,10 +256,7 @@ export async function sendHistoryQueryRequest(
 ): Promise<HistoryQueryResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "historyQueryRequest",
-        value: create(HistoryQueryRequestSchema, request),
-      },
+      { case: "historyQueryRequest", value: create(HistoryQueryRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "historyQueryResponse":
@@ -311,11 +266,7 @@ export async function sendHistoryQueryRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'HistoryQueryRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'HistoryQueryRequest'`));
         }
       },
     );
@@ -326,23 +277,18 @@ export async function sendPingRequest(
   request: Omit<PingRequest, "$typeName" | "$unknown">,
 ): Promise<PingResponse> {
   return new Promise((resolve, reject) => {
-    sendMessage(
-      { case: "pingRequest", value: create(PingRequestSchema, request) },
-      (response) => {
-        switch (response?.case) {
-          case "pingResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(`Invalid response '${response?.case}' for 'PingRequest'`),
-            );
-        }
-      },
-    );
+    sendMessage({ case: "pingRequest", value: create(PingRequestSchema, request) }, (response) => {
+      switch (response?.case) {
+        case "pingResponse":
+          resolve(response.value);
+          break;
+        case "error":
+          reject(Error(response.value));
+          break;
+        default:
+          reject(Error(`Invalid response '${response?.case}' for 'PingRequest'`));
+      }
+    });
   });
 }
 
@@ -351,10 +297,7 @@ export async function sendGetPlatformInfoRequest(
 ): Promise<GetPlatformInfoResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "getPlatformInfoRequest",
-        value: create(GetPlatformInfoRequestSchema, request),
-      },
+      { case: "getPlatformInfoRequest", value: create(GetPlatformInfoRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "getPlatformInfoResponse":
@@ -364,11 +307,7 @@ export async function sendGetPlatformInfoRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'GetPlatformInfoRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'GetPlatformInfoRequest'`));
         }
       },
     );
@@ -380,10 +319,7 @@ export async function sendWriteFileRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "writeFileRequest",
-        value: create(WriteFileRequestSchema, request),
-      },
+      { case: "writeFileRequest", value: create(WriteFileRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -393,11 +329,7 @@ export async function sendWriteFileRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'WriteFileRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'WriteFileRequest'`));
         }
       },
     );
@@ -409,10 +341,7 @@ export async function sendNotificationRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "notificationRequest",
-        value: create(NotificationRequestSchema, request),
-      },
+      { case: "notificationRequest", value: create(NotificationRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -422,11 +351,7 @@ export async function sendNotificationRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'NotificationRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'NotificationRequest'`));
         }
       },
     );
@@ -452,9 +377,7 @@ export async function sendUpdateSettingsPropertyRequest(
             break;
           default:
             reject(
-              Error(
-                `Invalid response '${response?.case}' for 'UpdateSettingsPropertyRequest'`,
-              ),
+              Error(`Invalid response '${response?.case}' for 'UpdateSettingsPropertyRequest'`),
             );
         }
       },
@@ -467,10 +390,7 @@ export async function sendInsertTextRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "insertTextRequest",
-        value: create(InsertTextRequestSchema, request),
-      },
+      { case: "insertTextRequest", value: create(InsertTextRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -480,11 +400,7 @@ export async function sendInsertTextRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'InsertTextRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'InsertTextRequest'`));
         }
       },
     );
@@ -525,10 +441,7 @@ export async function sendOnboardingRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "onboardingRequest",
-        value: create(OnboardingRequestSchema, request),
-      },
+      { case: "onboardingRequest", value: create(OnboardingRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -538,11 +451,7 @@ export async function sendOnboardingRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'OnboardingRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'OnboardingRequest'`));
         }
       },
     );
@@ -554,10 +463,7 @@ export async function sendWindowFocusRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "windowFocusRequest",
-        value: create(WindowFocusRequestSchema, request),
-      },
+      { case: "windowFocusRequest", value: create(WindowFocusRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -567,11 +473,7 @@ export async function sendWindowFocusRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'WindowFocusRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'WindowFocusRequest'`));
         }
       },
     );
@@ -597,9 +499,7 @@ export async function sendOpenInExternalApplicationRequest(
             break;
           default:
             reject(
-              Error(
-                `Invalid response '${response?.case}' for 'OpenInExternalApplicationRequest'`,
-              ),
+              Error(`Invalid response '${response?.case}' for 'OpenInExternalApplicationRequest'`),
             );
         }
       },
@@ -612,10 +512,7 @@ export async function sendAppendToFileRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "appendToFileRequest",
-        value: create(AppendToFileRequestSchema, request),
-      },
+      { case: "appendToFileRequest", value: create(AppendToFileRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -625,11 +522,7 @@ export async function sendAppendToFileRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'AppendToFileRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'AppendToFileRequest'`));
         }
       },
     );
@@ -641,10 +534,7 @@ export async function sendUpdateLocalStateRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "updateLocalStateRequest",
-        value: create(UpdateLocalStateRequestSchema, request),
-      },
+      { case: "updateLocalStateRequest", value: create(UpdateLocalStateRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -654,11 +544,7 @@ export async function sendUpdateLocalStateRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'UpdateLocalStateRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'UpdateLocalStateRequest'`));
         }
       },
     );
@@ -670,10 +556,7 @@ export async function sendCreateDirectoryRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "createDirectoryRequest",
-        value: create(CreateDirectoryRequestSchema, request),
-      },
+      { case: "createDirectoryRequest", value: create(CreateDirectoryRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -683,11 +566,7 @@ export async function sendCreateDirectoryRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'CreateDirectoryRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'CreateDirectoryRequest'`));
         }
       },
     );
@@ -699,10 +578,7 @@ export async function sendDragWindowRequest(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
-      {
-        case: "dragWindowRequest",
-        value: create(DragWindowRequestSchema, request),
-      },
+      { case: "dragWindowRequest", value: create(DragWindowRequestSchema, request) },
       (response) => {
         switch (response?.case) {
           case "success":
@@ -712,11 +588,7 @@ export async function sendDragWindowRequest(
             reject(Error(response.value));
             break;
           default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'DragWindowRequest'`,
-              ),
-            );
+            reject(Error(`Invalid response '${response?.case}' for 'DragWindowRequest'`));
         }
       },
     );

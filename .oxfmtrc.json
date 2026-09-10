@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "tabWidth": 2,
+  "useTabs": false,
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "build/**",
+    "target/**",
+    "crates/**",
+    "tests/figterm2/**",
+    "packages/fuzzysort/**",
+    "pnpm-lock.yaml",
+    "**/*.md"
+  ]
+}

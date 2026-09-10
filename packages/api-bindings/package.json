@@ -15,23 +15,18 @@
   "scripts": {
     "clean": "rm -rf dist/",
     "build": "npm run clean && npm run generate-requests && tsc",
-    "lint": "eslint src && prettier --check src",
-    "lint:fix": "eslint --fix src && prettier --write src",
     "prepublishOnly": "npm run build",
-    "generate-requests": "tsx codegen/generate-requests.ts && prettier -w src/requests.ts"
+    "generate-requests": "tsx codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
   "dependencies": {
     "@aws/amazon-q-developer-cli-proto": "workspace:^",
     "@bufbuild/protobuf": "2.4.0"
   },
   "devDependencies": {
-    "@amzn/eslint-config": "workspace:^",
     "@amzn/tsconfig": "workspace:^",
     "@tsconfig/recommended": "^1.0.8",
     "@types/node": "^22.15.20",
     "@typescript/analyze-trace": "^0.10.1",
-    "eslint": "^9.18.0",
-    "prettier": "^3.4.2",
     "ts-morph": "^26.0.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"

@@ -94,10 +94,16 @@ async fn get_forwarded_stream() -> Result<(ReadHalf<tokio::net::UnixStream>, Wri
     Ok(tokio::io::split(stream))
 }
 
-/// Spawns a local unix socket for communicating with figterm on a local machine
+/// Spawns a local unix socket for communicating with figterm on a local machine.
+///
+/// Returns the path the socket was bound to so the caller can unlink it on shutdown; the listener
+/// task itself never terminates.
 pub async fn spawn_figterm_ipc(
     session_id: impl std::fmt::Display,
-) -> Result<Receiver<(FigtermRequestMessage, Sender<FigtermResponseMessage>)>> {
+) -> Result<(
+    std::path::PathBuf,
+    Receiver<(FigtermRequestMessage, Sender<FigtermResponseMessage>)>,
+)> {
     trace!("Spawning incoming receiver");
 
     let (incoming_tx, incoming_rx) = unbounded();
@@ -186,7 +192,7 @@ pub async fn spawn_figterm_ipc(
         }
     });
 
-    Ok(incoming_rx)
+    Ok((socket_path, incoming_rx))
 }
 
 /// Connects to the desktop app and allows for a remote connection from remote hosts

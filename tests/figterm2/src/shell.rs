@@ -33,6 +33,9 @@ use tokio::net::UnixListener;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+/// Session id handed to the pty binary; it names the socket under `<runtime dir>/t/`.
+const SESSION_ID: &str = "1234";
+
 #[derive(Debug, Clone)]
 struct RemoteHook {
     buffer: Arc<Mutex<Option<String>>>,
@@ -173,13 +176,12 @@ impl Shell {
         // Spawn a shell into the pty
         let mut cmd = CommandBuilder::new(shell);
 
-        let session_id = "1234";
         // `pre.sh` honours a pre-set `Q_TERM_PATH`; without it the shell integration would exec
         // whatever pty binary is *installed* on this machine, so the test would silently validate
         // the installed app instead of the workspace build.
         cmd.env("Q_TERM_PATH", pty_binary()?);
         cmd.env("Q_NEW_SESSION", "1");
-        cmd.env("MOCK_QTERM_SESSION_ID", session_id);
+        cmd.env("MOCK_QTERM_SESSION_ID", SESSION_ID);
         cmd.env("TMPDIR", tempdir.path());
         cmd.env("XDG_RUNTIME_DIR", tempdir.path());
 
@@ -252,6 +254,30 @@ impl Shell {
         self.typed("\n").await?;
         self.resize(80, 24)?;
         Ok(())
+    }
+
+    /// Pid of the pty binary. The shell we spawned `exec`s into it, so the pid is unchanged.
+    pub fn pty_pid(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+
+    /// True when the pty is in cooked mode (`ECHO` and `ICANON` set), i.e. the state a shell is
+    /// normally left in. The pty binary clears both while it runs and is supposed to put them back
+    /// on the way out.
+    pub fn is_cooked(&self) -> bool {
+        let fd = self.pty_pair.master.as_raw_fd().expect("no master fd");
+        let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::tcgetattr(fd, &mut termios) }, 0, "tcgetattr failed");
+        (termios.c_lflag & libc::ECHO) != 0 && (termios.c_lflag & libc::ICANON) != 0
+    }
+
+    /// Path of the session socket the pty binary binds inside this test's runtime dir.
+    pub fn session_socket(&self) -> std::path::PathBuf {
+        self.tempdir
+            .path()
+            .join(RUNTIME_DIR_NAME)
+            .join("t")
+            .join(format!("{SESSION_ID}.sock"))
     }
 
     pub async fn buffer(&mut self) -> Option<String> {

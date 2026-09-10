@@ -495,7 +495,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         let history_sender = history::spawn_history_task().await;
 
         // Spawn thread to handle figterm ipc
-        let incoming_receiver = spawn_figterm_ipc(&session_id).await?;
+        let (figterm_socket_path, incoming_receiver) = spawn_figterm_ipc(&session_id).await?;
 
         // Spawn thread to handle remote ipc
         let (remote_sender, remote_receiver, stop_ipc_tx) = spawn_remote_ipc(
@@ -536,6 +536,13 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                 error!("Failed to write title osc: {err}");
             }
         }
+
+        // SIGTERM and SIGHUP are how this process is normally asked to go away: `kill`, a closing
+        // terminal window, a logout. Their default disposition kills us outright, which skips
+        // `UnixTerminal::drop` (the terminal stays in raw mode) and leaves the session socket
+        // behind in the runtime dir. Handle them so the loop exits through the normal path.
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
 
         let mut csi_u_set = false;
 
@@ -807,6 +814,14 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                     trace!("Shell process exited");
                     break 'select_loop Ok(());
                 }
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, shutting down");
+                    break 'select_loop Ok(());
+                }
+                _ = sighup.recv() => {
+                    info!("Received SIGHUP, shutting down");
+                    break 'select_loop Ok(());
+                }
             };
 
             if let Err(err) = select_result {
@@ -816,6 +831,12 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         };
 
         let _ = stop_ipc_tx.send(());
+
+        // Nothing else unlinks this: `spawn_figterm_ipc` only clears a *stale* socket when it
+        // binds, so without this every session that ended left a dead socket in the runtime dir.
+        if let Err(err) = tokio::fs::remove_file(&figterm_socket_path).await {
+            debug!(%err, path = ?figterm_socket_path, "Failed to remove the session socket");
+        }
 
         result
     });

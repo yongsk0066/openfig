@@ -62,3 +62,49 @@ async fn bash_paste() {
 async fn zsh_paste() {
     paste_keeps_edit_buffer_alive("zsh").await;
 }
+
+/// SIGTERM and SIGHUP must go through the normal shutdown path.
+///
+/// Their default disposition kills the process outright, which skips `UnixTerminal::drop` (the
+/// user's terminal is left in raw mode) and leaves the session socket behind in the runtime dir —
+/// one dead socket per terminal window ever opened.
+async fn signal_shutdown(shell_name: &str, signal: i32) {
+    let mut shell = Shell::init(shell_name).await.unwrap();
+
+    shell.typed("echo hello").await.unwrap();
+    assert_eq!(Some("echo hello".into()), shell.buffer().await);
+
+    let socket = shell.session_socket();
+    assert!(socket.exists(), "{shell_name}: {socket:?} was never bound");
+    assert!(!shell.is_cooked(), "{shell_name}: pty is not in raw mode while running");
+
+    let pid = shell.pty_pid().expect("no pty pid") as i32;
+    assert_eq!(unsafe { libc::kill(pid, signal) }, 0, "kill failed");
+
+    let mut cleaned = false;
+    for _ in 0..50 {
+        if !socket.exists() {
+            cleaned = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        cleaned,
+        "{shell_name}: {socket:?} still present 5 s after signal {signal}"
+    );
+    assert!(
+        shell.is_cooked(),
+        "{shell_name}: pty left in raw mode after signal {signal}"
+    );
+}
+
+#[tokio::test]
+async fn bash_sigterm_cleans_up() {
+    signal_shutdown("bash", libc::SIGTERM).await;
+}
+
+#[tokio::test]
+async fn zsh_sighup_cleans_up() {
+    signal_shutdown("zsh", libc::SIGHUP).await;
+}

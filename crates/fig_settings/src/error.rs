@@ -25,8 +25,6 @@ pub enum Error {
     #[error(transparent)]
     Rusqlite(#[from] rusqlite::Error),
     #[error(transparent)]
-    R2d2(#[from] r2d2::Error),
-    #[error(transparent)]
     DbOpenError(#[from] DbOpenError),
     #[error("{}", .0)]
     PoisonError(String),
@@ -53,7 +51,6 @@ mod tests {
             directories::DirectoryError::NoHomeDirectory.into(),
             Error::MemoryBackendNotUsed,
             rusqlite::Error::SqliteSingleThreadedMode.into(),
-            // r2d2::Error
             DbOpenError("oops".into()).into(),
             PoisonError::<()>::new(()).into(),
         ]

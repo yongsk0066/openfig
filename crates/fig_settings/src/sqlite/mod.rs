@@ -3,11 +3,17 @@ use std::path::{
     Path,
     PathBuf,
 };
-use std::sync::LazyLock;
+use std::sync::{
+    Arc,
+    LazyLock,
+};
+use std::time::Duration;
 
 use fig_util::directories::fig_data_dir;
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
+use parking_lot::{
+    Mutex,
+    MutexGuard,
+};
 use rusqlite::types::FromSql;
 use rusqlite::{
     Connection,
@@ -64,9 +70,18 @@ const MIGRATIONS: &[Migration] = migrations![
     "005_auth_table"
 ];
 
+/// One connection, behind a mutex.
+///
+/// This was an r2d2 pool on its defaults, which meant `max_size(10)` with `min_idle == max_size`
+/// (so `build()` blocked until ten connections to the same local file were open), a
+/// `ScheduledThreadPool` of three worker threads, a 30 s reaper, and `test_on_check_out` firing a
+/// round trip before every single statement. Nothing here is concurrent enough to need any of
+/// that: the callers are a CLI, one desktop process and one figterm per terminal tab, all doing
+/// short key/value reads. The three pool threads also existed at figterm's `fork` (see
+/// docs/13-unsafe-review.md #21/#22).
 #[derive(Debug, Clone)]
 pub struct Db {
-    pub(crate) pool: Pool<SqliteConnectionManager>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl Db {
@@ -86,8 +101,8 @@ impl Db {
             std::fs::create_dir_all(parent)?;
         }
 
-        let conn = SqliteConnectionManager::file(path);
-        let pool = Pool::builder().build(conn)?;
+        let conn = Connection::open(path)?;
+        Self::configure(&conn)?;
 
         // Check the unix permissions of the database file, set them to 0600 if they are not
         {
@@ -100,17 +115,38 @@ impl Db {
             }
         }
 
-        Ok(Self { pool })
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    /// The database was on sqlite's defaults: `journal_mode=delete` (a rollback journal created
+    /// and deleted around every write) and `synchronous=FULL` (an fsync per transaction). WAL
+    /// lets readers run while a writer is committing — which matters now that there is one
+    /// connection per process rather than a pool — and `NORMAL` is the standard pairing: durable
+    /// against a process crash, and at worst loses the last transactions on a power cut, for
+    /// a key/value store of UI state.
+    fn configure(conn: &Connection) -> Result<()> {
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+        // Several processes share this file; wait for a writer instead of failing with SQLITE_BUSY.
+        conn.busy_timeout(Duration::from_secs(5))?;
+        Ok(())
     }
 
     pub(crate) fn mock() -> Self {
-        let conn = SqliteConnectionManager::memory();
-        let pool = Pool::builder().build(conn).unwrap();
-        Self { pool }
+        let conn = Connection::open_in_memory().unwrap();
+        Self::configure(&conn).unwrap();
+        Self {
+            conn: Arc::new(Mutex::new(conn)),
+        }
+    }
+
+    pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.conn.lock()
     }
 
     pub(crate) fn migrate(&self) -> Result<()> {
-        let mut conn = self.pool.get()?;
+        let mut conn = self.conn();
         let transaction = conn.transaction()?;
 
         let max_version = max_migration_version(&transaction);
@@ -141,8 +177,8 @@ impl Db {
     }
 
     fn get_value<T: FromSql>(&self, table: &'static str, key: impl AsRef<str>) -> Result<Option<T>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
+        let conn = self.conn();
+        let mut stmt = conn.prepare_cached(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
         match stmt.query_row([key.as_ref()], |row| row.get(0)) {
             Ok(data) => Ok(Some(data)),
             Err(Error::QueryReturnedNoRows) => Ok(None),
@@ -155,10 +191,9 @@ impl Db {
     }
 
     fn set_value<T: ToSql>(&self, table: &'static str, key: impl AsRef<str>, value: T) -> Result<()> {
-        self.pool.get()?.execute(
-            &format!("INSERT OR REPLACE INTO {table} (key, value) VALUES (?1, ?2)"),
-            params![key.as_ref(), value],
-        )?;
+        self.conn()
+            .prepare_cached(&format!("INSERT OR REPLACE INTO {table} (key, value) VALUES (?1, ?2)"))?
+            .execute(params![key.as_ref(), value])?;
         Ok(())
     }
 
@@ -167,9 +202,9 @@ impl Db {
     }
 
     fn unset_value(&self, table: &'static str, key: impl AsRef<str>) -> Result<()> {
-        self.pool
-            .get()?
-            .execute(&format!("DELETE FROM {table} WHERE key = ?1"), [key.as_ref()])?;
+        self.conn()
+            .prepare_cached(&format!("DELETE FROM {table} WHERE key = ?1"))?
+            .execute([key.as_ref()])?;
         Ok(())
     }
 
@@ -178,8 +213,8 @@ impl Db {
     }
 
     fn is_value_set(&self, table: &'static str, key: impl AsRef<str>) -> Result<bool> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
+        let conn = self.conn();
+        let mut stmt = conn.prepare_cached(&format!("SELECT value FROM {table} WHERE key = ?1"))?;
         match stmt.query_row([key.as_ref()], |_| Ok(())) {
             Ok(()) => Ok(true),
             Err(Error::QueryReturnedNoRows) => Ok(false),
@@ -192,8 +227,8 @@ impl Db {
     }
 
     fn all_values(&self, table: &'static str) -> Result<Map<String, serde_json::Value>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(&format!("SELECT key, value FROM {table}"))?;
+        let conn = self.conn();
+        let mut stmt = conn.prepare_cached(&format!("SELECT key, value FROM {table}"))?;
         let rows = stmt.query_map([], |row| {
             let key: String = row.get(0)?;
             let value: serde_json::Value = row.get(1)?;
@@ -219,7 +254,7 @@ impl Db {
         key: impl AsRef<str>,
         op: impl FnOnce(&Option<T>) -> Option<T>,
     ) -> Result<Option<T>> {
-        let mut conn = self.pool.get()?;
+        let mut conn = self.conn();
         let tx = conn.transaction()?;
 
         let value = tx.query_row::<Option<T>, _, _>(
@@ -321,7 +356,7 @@ mod tests {
         let db = mock();
 
         // assert migration count is correct
-        let max_migration = max_migration_version(&&*db.pool.get().unwrap());
+        let max_migration = max_migration_version(&&*db.conn());
         assert_eq!(max_migration, Some(MIGRATIONS.len() as i64 - 1));
     }
 

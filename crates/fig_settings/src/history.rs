@@ -1,11 +1,13 @@
 use std::time::SystemTime;
 
 use inner::Inner;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
+use parking_lot::MutexGuard;
 pub use rusqlite;
-use rusqlite::params;
 use rusqlite::types::ValueRef;
+use rusqlite::{
+    Connection,
+    params,
+};
 use serde_json::Value;
 use tracing::trace;
 
@@ -62,8 +64,8 @@ impl History {
         }
     }
 
-    fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
-        Ok(self.db()?.pool.get()?)
+    fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
+        Ok(self.db()?.conn())
     }
 
     pub fn insert_command_history(&self, command_info: &CommandInfo) -> Result<()> {

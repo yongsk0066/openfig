@@ -14,8 +14,6 @@ workspace = true
 fd-lock = "4.0.4"
 fig_util.workspace = true
 parking_lot.workspace = true
-r2d2.workspace = true
-r2d2_sqlite.workspace = true
 rusqlite = { workspace = true, features = ["bundled", "serde_json"] }
 serde_json.workspace = true
 serde.workspace = true

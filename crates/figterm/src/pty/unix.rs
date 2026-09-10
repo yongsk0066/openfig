@@ -218,11 +218,11 @@ impl SlavePty for UnixSlavePty {
         // Enumerating them after `fork` is what `portable_pty::unix::close_random_fds` does, and
         // that is the one async-signal-safety violation in this `pre_exec` closure: it calls
         // `read_dir("/dev/fd")` and builds `String`s and a `Vec`, all of which allocate. This
-        // process is multi-threaded at that point (r2d2's pool workers and tracing-appender's
-        // writer are running before the fork, and tokio's runtime starts right after), so a
-        // thread holding the allocator lock at `fork` leaves the child with a locked allocator and
-        // nobody to unlock it — the child hangs between `fork` and `exec` and the user gets a
-        // shell that never starts. See docs/13-unsafe-review.md #22.
+        // process is multi-threaded at that point (tracing-appender's writer is running before the
+        // fork, and tokio's runtime starts right after), so a thread holding the allocator lock at
+        // `fork` leaves the child with a locked allocator and nobody to unlock it — the child
+        // hangs between `fork` and `exec` and the user gets a shell that never starts. See
+        // docs/13-unsafe-review.md #22.
         //
         // Iterating a pre-built `Vec` in the child allocates nothing, and the closure is only ever
         // *called* in the child (never dropped: `exec` replaces the image, and the error path
@@ -351,9 +351,9 @@ impl SlavePty for UnixSlavePty {
         //   which would call `free` — is unreachable in the child.
         // Note this is the *parent* obligation, and the parent is multi-threaded at the fork. Contrary
         // to what docs/13-unsafe-review.md #21/#22 say, tokio is *not* what makes it multi-threaded:
-        // `Runtime::build()` runs after this fork. The threads that do exist are r2d2's connection-pool
-        // workers (3, forced by the `state::get_bool_or` read in `main`) and tracing-appender's writer
-        // (1, from `initialize_logging`), both started before `figterm_main` spawns the shell. The
+        // `Runtime::build()` runs after this fork. The thread that does exist is tracing-appender's
+        // writer, started by `initialize_logging` before `figterm_main` spawns the shell. (r2d2's three
+        // connection-pool workers used to be here too, until `fig_settings` dropped the pool.) The
         // conclusion is unchanged: this analysis cannot be skipped.
         unsafe { cmd.pre_exec(pre_exec_fn) };
 

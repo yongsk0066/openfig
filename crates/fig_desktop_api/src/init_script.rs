@@ -7,7 +7,12 @@ use std::env::{
 use camino::Utf8PathBuf;
 use fig_os_shim::Context;
 use fig_util::{
+    APP_BUNDLE_ID,
     CLI_BINARY_NAME,
+    DATA_DIR_NAME,
+    PRODUCT_NAME,
+    PTY_BINARY_NAME,
+    URL_SCHEMA,
     directories,
 };
 use serde::Serialize;
@@ -19,7 +24,14 @@ const DEFAULT_THEMES: &[&str] = &["light", "dark", "system"];
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Constants {
-    codewhisperer: bool,
+    // Brand names, injected so the web packages never hardcode one. Serialized (camelCase)
+    // as productName / cliBinaryName / ptyBinaryName / bundleId / urlSchema / dataDirName.
+    product_name: &'static str,
+    cli_binary_name: &'static str,
+    pty_binary_name: &'static str,
+    bundle_id: &'static str,
+    url_schema: &'static str,
+    data_dir_name: &'static str,
     version: &'static str,
     cli: Option<Utf8PathBuf>,
     bundle_path: Option<Utf8PathBuf>,
@@ -68,7 +80,12 @@ impl Constants {
             .unwrap_or_else(|| DEFAULT_THEMES.iter().map(|s| (*s).to_owned()).collect());
 
         Self {
-            codewhisperer: true,
+            product_name: PRODUCT_NAME,
+            cli_binary_name: CLI_BINARY_NAME,
+            pty_binary_name: PTY_BINARY_NAME,
+            bundle_id: APP_BUNDLE_ID,
+            url_schema: URL_SCHEMA,
+            data_dir_name: DATA_DIR_NAME,
             version: env!("CARGO_PKG_VERSION"),
             cli: which(CLI_BINARY_NAME)
                 .ok()
@@ -109,4 +126,27 @@ pub fn javascript_init(support_api_proto: bool) -> String {
         Constants::new(support_api_proto).script(),
     ]
     .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The web packages read these exact keys off `window.fig.constants`; a rename here
+    /// silently empties every product name in the dashboard and autocomplete UIs.
+    #[test]
+    fn brand_constants_json_keys() {
+        let value = serde_json::to_value(Constants::new(true)).unwrap();
+        for key in [
+            "productName",
+            "cliBinaryName",
+            "ptyBinaryName",
+            "bundleId",
+            "urlSchema",
+            "dataDirName",
+        ] {
+            assert!(value.get(key).is_some_and(|v| v.is_string()), "missing key {key}");
+        }
+        assert!(value.get("codewhisperer").is_none());
+    }
 }

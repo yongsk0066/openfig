@@ -6,14 +6,15 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "vitest"
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@amzn/tsconfig": "workspace:^",
     "@amzn/types": "workspace:^",
     "@aws/amazon-q-developer-cli-api-bindings": "workspace:^",
-    "@types/node": "^22.15.20",
-    "typescript": "^5.8.3",
-    "vitest": "^3.0.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

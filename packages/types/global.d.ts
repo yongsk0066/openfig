@@ -24,11 +24,14 @@ declare global {
           env?: Record<string, string>;
           newUriFormat?: boolean;
           macosVersion?: string;
+          supportApiProto?: boolean;
+          apiProtoUrl?: string;
           // TODO: add actual types
           linux?: unknown;
         }
       | undefined;
     let settings: Record<string, unknown>;
+    let quiet: boolean | undefined;
     const positioning: {
       isValidFrame: (frame: Frame, callback?: (isValid: string) => void) => void;
       setFrame: (frame: Frame, callback?: () => void) => void;

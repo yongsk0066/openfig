@@ -4,31 +4,24 @@
   "license": "MIT OR Apache-2.0",
   "author": "Amazon Web Services",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
-  "files": [
-    "dist"
-  ],
   "type": "module",
-  "exports": "./dist/index.js",
+  "exports": "./src/index.ts",
   "scripts": {
-    "clean": "rm -rf dist/",
-    "build": "npm run clean && npm run generate-requests && tsc",
-    "prepublishOnly": "npm run build",
-    "generate-requests": "tsx codegen/generate-requests.ts && oxfmt src/requests.ts"
+    "typecheck": "tsc --noEmit",
+    "codegen": "node codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
   "dependencies": {
     "@aws/amazon-q-developer-cli-proto": "workspace:^",
-    "@bufbuild/protobuf": "2.4.0"
+    "@bufbuild/protobuf": "catalog:"
   },
   "devDependencies": {
     "@amzn/tsconfig": "workspace:^",
-    "@tsconfig/recommended": "^1.0.8",
-    "@types/node": "^22.15.20",
-    "@typescript/analyze-trace": "^0.10.1",
-    "ts-morph": "^26.0.0",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "@amzn/types": "workspace:^",
+    "@types/node": "catalog:",
+    "ts-morph": "catalog:",
+    "typescript": "catalog:"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=26"
   }
 }

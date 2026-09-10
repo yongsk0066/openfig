@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin, type HtmlTagDescriptor } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 // import legacy from "@vitejs/plugin-legacy";
 
 const csp: Record<string, string> = {
@@ -47,6 +48,7 @@ export default defineConfig(({ mode, command }) => {
   return {
     plugins: [
       react(),
+      tailwindcss(),
       htmlCspPlugin,
       // legacy({
       //   targets: [
@@ -66,7 +68,7 @@ export default defineConfig(({ mode, command }) => {
       strictPort: true,
     },
     build: {
-      target: command === "build" ? "es2017" : "esnext",
+      target: "esnext",
       // TODO: re-enable prod source maps to upload them to sentry (see build CIs)
       sourcemap: command !== "build",
       rollupOptions: {
@@ -76,9 +78,6 @@ export default defineConfig(({ mode, command }) => {
     define: {
       __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
       "process.env": {},
-    },
-    esbuild: {
-      target: command === "build" ? ["es2017", "safari11"] : undefined,
     },
     resolve: {
       alias: {

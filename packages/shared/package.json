@@ -4,17 +4,13 @@
   "license": "MIT OR Apache-2.0",
   "author": "Amazon Web Services",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
-  "files": [
-    "dist"
-  ],
   "type": "module",
   "exports": {
-    "./*": "./dist/*.js"
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "build": "tsc",
     "test": "vitest",
-    "clean": "rm -rf dist"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fig/autocomplete-shared": "^1.1.2"
@@ -23,11 +19,11 @@
     "@amzn/tsconfig": "workspace:^",
     "@amzn/types": "workspace:^",
     "@aws/amazon-q-developer-cli-fuzzysort": "workspace:^",
-    "@withfig/autocomplete-types": "^1.31.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.0.8"
+    "@withfig/autocomplete-types": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=26"
   }
 }

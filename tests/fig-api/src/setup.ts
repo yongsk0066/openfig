@@ -2,7 +2,7 @@ import childProcess from "node:child_process";
 import { tempDir } from "./util.js";
 
 // Set Fig JS bindings to log less
-window.fig = { constants: undefined, quiet: true };
+window.fig = { constants: undefined, quiet: true } as unknown as typeof fig;
 
 // Build CLI so we get warnings/errors if there are any
 childProcess.execSync("cargo build -p fig-api-mock -q");

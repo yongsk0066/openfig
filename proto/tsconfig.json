@@ -1,6 +1,7 @@
 {
   "extends": "@amzn/tsconfig/base.json",
   "compilerOptions": {
-    "outDir": "dist"
+    "outDir": "dist",
+    "noEmit": false
   }
 }

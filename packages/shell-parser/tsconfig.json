@@ -1,7 +1,5 @@
 {
   "extends": ["@amzn/tsconfig/base.json", "@amzn/tsconfig/dom.json"],
-  "compilerOptions": {
-    "outDir": "dist"
-  },
+  "compilerOptions": {},
   "include": ["src"]
 }

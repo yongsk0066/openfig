@@ -9,5 +9,6 @@
   "types": "./fuzzysort.d.ts",
   "files": [
     "*"
-  ]
+  ],
+  "scripts": {}
 }

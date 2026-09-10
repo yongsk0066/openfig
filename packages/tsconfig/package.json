@@ -9,6 +9,7 @@
     "base.json",
     "dom.json"
   ],
+  "scripts": {},
   "peerDependencies": {
     "typescript": "*"
   }

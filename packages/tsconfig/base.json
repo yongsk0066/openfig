@@ -1,23 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "target": "es2020",
+    "target": "ES2024",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "lib": ["ESNext"],
-
-    "declaration": true,
-    "stripInternal": true,
-    "sourceMap": true,
+    "lib": ["ES2024"],
     "newLine": "lf",
-
-    "experimentalDecorators": true,
     "esModuleInterop": true,
-
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noEmit": true
   },
   "exclude": ["node_modules", "build", "dist"]
 }

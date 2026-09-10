@@ -27,8 +27,8 @@ deps:
     rustup show active-toolchain
     rustup target list --installed | grep -Fxq "{{target}}" || rustup target add "{{target}}"
     node_version="$(node --version | tr -d 'v')"; \
-        [ "$(printf '22.0.0\n%s\n' "$node_version" | sort -V | head -1)" = "22.0.0" ] \
-        || { echo "node >= 22 required, found $node_version (fnm use)"; exit 1; }
+        [ "$(printf '26.0.0\n%s\n' "$node_version" | sort -V | head -1)" = "26.0.0" ] \
+        || { echo "node >= 26 required, found $node_version (fnm use)"; exit 1; }
     pin="$(node -p 'require("./package.json").packageManager')"; \
         [ "pnpm@$(pnpm --version)" = "${pin%%+*}" ] \
         || { echo "${pin%%+*} required, found pnpm@$(pnpm --version)"; exit 1; }
@@ -126,9 +126,12 @@ lint:
     cargo +nightly fmt --version >/dev/null 2>&1 \
         || { echo ".rustfmt.toml uses unstable options: rustup toolchain install nightly --component rustfmt"; exit 1; }
     cargo +nightly fmt --check
+    pnpm exec oxlint
+    pnpm exec oxfmt --check
 
 test:
     cargo nextest run --locked --workspace
+    pnpm exec turbo typecheck
     pnpm exec vitest run
 
 # Run only to refresh them.

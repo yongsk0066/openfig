@@ -400,7 +400,10 @@ export const useAutocompleteStore = create<AutocompleteState>()(
             if (shellContext) {
               window.globalTerminalSessionId = shellContext.sessionId;
 
-              if (shellContext.environmentVariables) {
+              // protobuf-es decodes an absent repeated field as `[]`, which is truthy — so a
+              // hook that deliberately omits the environment (figterm only re-sends it when the
+              // shell context is dirty) would otherwise wipe the vars we already have.
+              if (shellContext.environmentVariables?.length) {
                 figState.environmentVariables = getEnvVarsMemoized(
                   shellContext.environmentVariables,
                 );

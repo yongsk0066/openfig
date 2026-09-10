@@ -87,16 +87,14 @@ mod tests {
     }
 
     fn test_message_small() -> fig_proto::local::LocalMessage {
-        fig_proto::hooks::hook_to_message(fig_proto::hooks::new_hide_hook())
+        fig_proto::hooks::hook_to_message(fig_proto::hooks::new_event_hook("event", None, vec![]))
     }
 
     fn test_message_large() -> fig_proto::local::LocalMessage {
-        fig_proto::hooks::hook_to_message(fig_proto::hooks::new_edit_buffer_hook(
-            None,
-            "A".repeat(10000),
-            0,
-            0,
-            None,
+        fig_proto::hooks::hook_to_message(fig_proto::hooks::new_event_hook(
+            "event",
+            Some("A".repeat(10000)),
+            vec![],
         ))
     }
 

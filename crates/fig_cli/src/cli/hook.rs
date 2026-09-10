@@ -1,42 +1,13 @@
 use std::process::ExitCode;
 
 use clap::Subcommand;
-use eyre::{
-    Result,
-    WrapErr,
-};
+use eyre::Result;
 use fig_ipc::local::send_hook_to_socket;
 use fig_proto::hooks;
-use fig_util::env_var::QTERM_SESSION_ID;
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 #[command(hide = true)]
 pub enum HookSubcommand {
-    Editbuffer {
-        session_id: String,
-        integration: i32,
-        tty: String,
-        pid: i32,
-        histno: i64,
-        cursor: i64,
-        text: String,
-    },
-    Hide,
-    Init {
-        pid: i32,
-        tty: String,
-    },
-    IntegrationReady {
-        integration: String,
-    },
-    PreExec {
-        pid: i32,
-        tty: String,
-    },
-    Prompt {
-        pid: i32,
-        tty: String,
-    },
     ClearAutocompleteCache {
         #[arg(long)]
         cli: Vec<String>,
@@ -53,39 +24,10 @@ impl HookSubcommand {
     }
 
     pub async fn execute_hook(&self) -> Result<()> {
-        let session_id = std::env::var(QTERM_SESSION_ID).ok();
-
         let hook = match self {
-            HookSubcommand::Editbuffer {
-                session_id,
-                tty,
-                pid,
-                histno,
-                cursor,
-                text,
-                ..
-            } => {
-                let context = hooks::generate_shell_context(*pid, tty, Some(session_id.clone()))?;
-                Ok(hooks::new_edit_buffer_hook(context, text, *histno, *cursor, None))
-            },
-            HookSubcommand::Hide => Ok(hooks::new_hide_hook()),
-            HookSubcommand::Init { pid, tty } => {
-                let context = hooks::generate_shell_context(*pid, tty, session_id)?;
-                hooks::new_init_hook(context)
-            },
-            HookSubcommand::IntegrationReady { integration } => Ok(hooks::new_integration_ready_hook(integration)),
-            HookSubcommand::PreExec { pid, tty } => {
-                let context = hooks::generate_shell_context(*pid, tty, session_id)?;
-                Ok(hooks::new_preexec_hook(context))
-            },
-            HookSubcommand::Prompt { pid, tty } => {
-                let context = hooks::generate_shell_context(*pid, tty, session_id)?;
-                Ok(hooks::new_prompt_hook(context))
-            },
-            HookSubcommand::ClearAutocompleteCache { cli } => Ok(hooks::new_clear_autocomplete_cache(cli.clone())),
+            HookSubcommand::ClearAutocompleteCache { cli } => hooks::new_clear_autocomplete_cache(cli.clone()),
         };
 
-        let hook = hook.context("Invalid input for hook")?;
         Ok(send_hook_to_socket(hook).await?)
     }
 }

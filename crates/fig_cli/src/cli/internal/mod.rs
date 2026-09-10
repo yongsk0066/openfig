@@ -3,11 +3,9 @@ pub mod should_figterm_launch;
 
 use std::collections::HashSet;
 use std::io::{
-    Read,
     Write,
     stdout,
 };
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,7 +24,6 @@ use clap::{
 use crossterm::style::Stylize;
 use eyre::{
     Context,
-    ContextCompat,
     Result,
     bail,
 };
@@ -44,10 +41,7 @@ use fig_proto::figterm::{
     FigtermRequestMessage,
     UpdateShellContextRequest,
 };
-use fig_proto::hooks::{
-    new_callback_hook,
-    new_event_hook,
-};
+use fig_proto::hooks::new_event_hook;
 use fig_proto::local::EnvironmentVariable;
 use fig_proto::util::get_shell;
 use fig_util::directories::figterm_socket_path;
@@ -55,10 +49,6 @@ use fig_util::env_var::QTERM_SESSION_ID;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
-};
-use rand::distr::{
-    Alphanumeric,
-    SampleString,
 };
 use sysinfo::System;
 use tokio::io::{
@@ -70,26 +60,9 @@ use tokio::select;
 use tracing::{
     debug,
     error,
-    info,
-    trace,
 };
 
 use crate::cli::installation::install_cli;
-
-#[derive(Debug, Args, PartialEq, Eq)]
-#[command(group(
-        ArgGroup::new("output")
-            .args(&["filename", "exit_code"])
-            .multiple(true)
-            .requires_all(&["filename", "exit_code"])
-            ))]
-pub struct CallbackArgs {
-    handler_id: String,
-    #[arg(group = "output")]
-    filename: Option<String>,
-    #[arg(group = "output")]
-    exit_code: Option<i64>,
-}
 
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct InstallArgs {
@@ -137,8 +110,6 @@ pub enum InternalSubcommand {
     },
     /// Change the local-state file
     LocalState(local_state::LocalStateArgs),
-    /// Callback used for the internal pseudoterminal
-    Callback(CallbackArgs),
     /// Install the cli
     Install(InstallArgs),
     /// Uninstall the cli
@@ -197,8 +168,6 @@ pub enum InternalSubcommand {
     },
 }
 
-const BUFFER_SIZE: usize = 1024;
-
 impl InternalSubcommand {
     pub async fn execute(self) -> Result<ExitCode> {
         let ctx = OsContext::new();
@@ -235,54 +204,6 @@ impl InternalSubcommand {
             InternalSubcommand::PreCmd { alias } => Ok(pre_cmd(alias).await),
             InternalSubcommand::LocalState(local_state) => {
                 local_state.execute().await?;
-                Ok(ExitCode::SUCCESS)
-            },
-            InternalSubcommand::Callback(CallbackArgs {
-                handler_id,
-                filename,
-                exit_code,
-            }) => {
-                trace!("handlerId: {handler_id}");
-
-                let (filename, exit_code) = match (filename, exit_code) {
-                    (Some(filename), Some(exit_code)) => {
-                        trace!("callback specified filepath ({filename}) and exitCode ({exit_code}) to output!");
-                        (filename, exit_code)
-                    },
-                    _ => {
-                        let file_id = Alphanumeric.sample_string(&mut rand::rng(), 9);
-                        let tmp_filename = format!("fig-callback-{file_id}");
-                        let tmp_path = PathBuf::from("/tmp").join(tmp_filename);
-                        let mut tmp_file = std::fs::File::create(&tmp_path)?;
-                        let mut buffer = [0u8; BUFFER_SIZE];
-                        let mut stdin = std::io::stdin();
-                        trace!("Created tmp file: {}", tmp_path.display());
-
-                        loop {
-                            let size = stdin.read(&mut buffer)?;
-                            if size == 0 {
-                                break;
-                            }
-                            tmp_file.write_all(&buffer[..size])?;
-                            trace!("Read {size} bytes\n{}", std::str::from_utf8(&buffer[..size])?);
-                        }
-
-                        let filename: String = tmp_path.to_str().context("invalid file path")?.into();
-                        trace!("Done reading from stdin!");
-                        (filename, -1)
-                    },
-                };
-                let hook = new_callback_hook(&handler_id, &filename, exit_code);
-
-                info!(
-                    "Sending 'handlerId: {handler_id}, filename: {filename}, exitcode: {exit_code}' over unix socket!\n"
-                );
-
-                match send_hook_to_socket(hook).await {
-                    Ok(()) => debug!("Successfully sent hook"),
-                    Err(e) => debug!("Couldn't send hook {e}"),
-                }
-
                 Ok(ExitCode::SUCCESS)
             },
             InternalSubcommand::GetShell => match get_shell() {

@@ -190,94 +190,16 @@ export declare type Hook = Message<"local.Hook"> & {
    */
   hook: {
     /**
-     * @generated from field: local.EditBufferHook edit_buffer = 100;
-     */
-    value: EditBufferHook;
-    case: "editBuffer";
-  } | {
-    /**
-     * @generated from field: local.InitHook init = 101;
-     */
-    value: InitHook;
-    case: "init";
-  } | {
-    /**
-     * @generated from field: local.PromptHook prompt = 102;
-     */
-    value: PromptHook;
-    case: "prompt";
-  } | {
-    /**
-     * @generated from field: local.PreExecHook pre_exec = 103;
-     */
-    value: PreExecHook;
-    case: "preExec";
-  } | {
-    /**
-     * @generated from field: local.PostExecHook post_exec = 104;
-     */
-    value: PostExecHook;
-    case: "postExec";
-  } | {
-    /**
-     * @generated from field: local.TmuxPaneChangedHook tmux_pane_changed = 106;
-     */
-    value: TmuxPaneChangedHook;
-    case: "tmuxPaneChanged";
-  } | {
-    /**
-     * @generated from field: local.CallbackHook callback = 108;
-     */
-    value: CallbackHook;
-    case: "callback";
-  } | {
-    /**
-     * @generated from field: local.IntegrationReadyHook integration_ready = 109;
-     */
-    value: IntegrationReadyHook;
-    case: "integrationReady";
-  } | {
-    /**
-     * @generated from field: local.HideHook hide = 110;
-     */
-    value: HideHook;
-    case: "hide";
-  } | {
-    /**
      * @generated from field: local.EventHook event = 111;
      */
     value: EventHook;
     case: "event";
   } | {
     /**
-     * @generated from field: local.FileChangedHook file_changed = 112;
-     */
-    value: FileChangedHook;
-    case: "fileChanged";
-  } | {
-    /**
-     * @generated from field: local.CaretPositionHook caret_position = 113;
-     */
-    value: CaretPositionHook;
-    case: "caretPosition";
-  } | {
-    /**
      * @generated from field: local.FocusChangeHook focus_change = 114;
      */
     value: FocusChangeHook;
     case: "focusChange";
-  } | {
-    /**
-     * @generated from field: local.InterceptedKeyHook intercepted_key = 115;
-     */
-    value: InterceptedKeyHook;
-    case: "interceptedKey";
-  } | {
-    /**
-     * @generated from field: local.FocusedWindowDataHook focused_window_data = 116;
-     */
-    value: FocusedWindowDataHook;
-    case: "focusedWindowData";
   } | {
     /**
      * @generated from field: local.ClearAutocompleteCacheHook clear_autocomplete_cache = 117;
@@ -700,37 +622,6 @@ export declare type EditBufferHook = Message<"local.EditBufferHook"> & {
 export declare const EditBufferHookSchema: GenMessage<EditBufferHook>;
 
 /**
- * @generated from message local.InitHook
- */
-export declare type InitHook = Message<"local.InitHook"> & {
-  /**
-   * @generated from field: fig_common.ShellContext context = 1;
-   */
-  context?: ShellContext | undefined;
-
-  /**
-   * @generated from field: bool called_direct = 2;
-   */
-  calledDirect: boolean;
-
-  /**
-   * @generated from field: string bundle = 3;
-   */
-  bundle: string;
-
-  /**
-   * @generated from field: map<string, string> env = 100;
-   */
-  env: { [key: string]: string };
-};
-
-/**
- * Describes the message local.InitHook.
- * Use `create(InitHookSchema)` to create a new message.
- */
-export declare const InitHookSchema: GenMessage<InitHook>;
-
-/**
  * @generated from message local.PromptHook
  */
 export declare type PromptHook = Message<"local.PromptHook"> & {
@@ -800,76 +691,6 @@ export declare type PostExecHook = Message<"local.PostExecHook"> & {
 export declare const PostExecHookSchema: GenMessage<PostExecHook>;
 
 /**
- * @generated from message local.TmuxPaneChangedHook
- */
-export declare type TmuxPaneChangedHook = Message<"local.TmuxPaneChangedHook"> & {
-  /**
-   * @generated from field: int32 pane_identifier = 1;
-   */
-  paneIdentifier: number;
-};
-
-/**
- * Describes the message local.TmuxPaneChangedHook.
- * Use `create(TmuxPaneChangedHookSchema)` to create a new message.
- */
-export declare const TmuxPaneChangedHookSchema: GenMessage<TmuxPaneChangedHook>;
-
-/**
- * @generated from message local.CallbackHook
- */
-export declare type CallbackHook = Message<"local.CallbackHook"> & {
-  /**
-   * @generated from field: string handler_id = 1;
-   */
-  handlerId: string;
-
-  /**
-   * @generated from field: string filepath = 2;
-   */
-  filepath: string;
-
-  /**
-   * @generated from field: string exit_code = 3;
-   */
-  exitCode: string;
-};
-
-/**
- * Describes the message local.CallbackHook.
- * Use `create(CallbackHookSchema)` to create a new message.
- */
-export declare const CallbackHookSchema: GenMessage<CallbackHook>;
-
-/**
- * @generated from message local.IntegrationReadyHook
- */
-export declare type IntegrationReadyHook = Message<"local.IntegrationReadyHook"> & {
-  /**
-   * @generated from field: string identifier = 1;
-   */
-  identifier: string;
-};
-
-/**
- * Describes the message local.IntegrationReadyHook.
- * Use `create(IntegrationReadyHookSchema)` to create a new message.
- */
-export declare const IntegrationReadyHookSchema: GenMessage<IntegrationReadyHook>;
-
-/**
- * @generated from message local.HideHook
- */
-export declare type HideHook = Message<"local.HideHook"> & {
-};
-
-/**
- * Describes the message local.HideHook.
- * Use `create(HideHookSchema)` to create a new message.
- */
-export declare const HideHookSchema: GenMessage<HideHook>;
-
-/**
  * @generated from message local.EventHook
  */
 export declare type EventHook = Message<"local.EventHook"> & {
@@ -894,105 +715,6 @@ export declare type EventHook = Message<"local.EventHook"> & {
  * Use `create(EventHookSchema)` to create a new message.
  */
 export declare const EventHookSchema: GenMessage<EventHook>;
-
-/**
- * @generated from message local.FileChangedHook
- */
-export declare type FileChangedHook = Message<"local.FileChangedHook"> & {
-  /**
-   * @generated from field: local.FileChangedHook.FileChanged file_changed = 1;
-   */
-  fileChanged: FileChangedHook_FileChanged;
-
-  /**
-   * @generated from field: optional string filepath = 2;
-   */
-  filepath?: string | undefined;
-};
-
-/**
- * Describes the message local.FileChangedHook.
- * Use `create(FileChangedHookSchema)` to create a new message.
- */
-export declare const FileChangedHookSchema: GenMessage<FileChangedHook>;
-
-/**
- * @generated from enum local.FileChangedHook.FileChanged
- */
-export enum FileChangedHook_FileChanged {
-  /**
-   * @generated from enum value: FILE_CHANGED_SETTINGS = 0;
-   */
-  SETTINGS = 0,
-
-  /**
-   * @generated from enum value: FILE_CHANGED_STATE = 1;
-   */
-  STATE = 1,
-}
-
-/**
- * Describes the enum local.FileChangedHook.FileChanged.
- */
-export declare const FileChangedHook_FileChangedSchema: GenEnum<FileChangedHook_FileChanged>;
-
-/**
- * @generated from message local.CaretPositionHook
- */
-export declare type CaretPositionHook = Message<"local.CaretPositionHook"> & {
-  /**
-   * TODO(grant): support physical size
-   *
-   * @generated from field: double x = 1;
-   */
-  x: number;
-
-  /**
-   * @generated from field: double y = 2;
-   */
-  y: number;
-
-  /**
-   * @generated from field: double width = 3;
-   */
-  width: number;
-
-  /**
-   * @generated from field: double height = 4;
-   */
-  height: number;
-
-  /**
-   * @generated from field: optional local.CaretPositionHook.Origin origin = 5;
-   */
-  origin?: CaretPositionHook_Origin | undefined;
-};
-
-/**
- * Describes the message local.CaretPositionHook.
- * Use `create(CaretPositionHookSchema)` to create a new message.
- */
-export declare const CaretPositionHookSchema: GenMessage<CaretPositionHook>;
-
-/**
- * @generated from enum local.CaretPositionHook.Origin
- */
-export enum CaretPositionHook_Origin {
-  /**
-   * @generated from enum value: ORIGIN_TOP_LEFT = 0;
-   */
-  TOP_LEFT = 0,
-
-  /**
-   * @generated from enum value: ORIGIN_BOTTOM_LEFT = 1;
-   */
-  BOTTOM_LEFT = 1,
-}
-
-/**
- * Describes the enum local.CaretPositionHook.Origin.
- */
-export declare const CaretPositionHook_OriginSchema: GenEnum<CaretPositionHook_Origin>;
 
 /**
  * @generated from message local.FocusChangeHook
@@ -1031,78 +753,6 @@ export declare type InterceptedKeyHook = Message<"local.InterceptedKeyHook"> & {
  * Use `create(InterceptedKeyHookSchema)` to create a new message.
  */
 export declare const InterceptedKeyHookSchema: GenMessage<InterceptedKeyHook>;
-
-/**
- * @generated from message local.BoundingBox
- */
-export declare type BoundingBox = Message<"local.BoundingBox"> & {
-  /**
-   * @generated from field: int32 x = 1;
-   */
-  x: number;
-
-  /**
-   * @generated from field: int32 y = 2;
-   */
-  y: number;
-
-  /**
-   * @generated from field: int32 width = 3;
-   */
-  width: number;
-
-  /**
-   * @generated from field: int32 height = 4;
-   */
-  height: number;
-};
-
-/**
- * Describes the message local.BoundingBox.
- * Use `create(BoundingBoxSchema)` to create a new message.
- */
-export declare const BoundingBoxSchema: GenMessage<BoundingBox>;
-
-/**
- * @generated from message local.FocusedWindowDataHook
- */
-export declare type FocusedWindowDataHook = Message<"local.FocusedWindowDataHook"> & {
-  /**
-   * @generated from field: string source = 1;
-   */
-  source: string;
-
-  /**
-   * @generated from field: string id = 2;
-   */
-  id: string;
-
-  /**
-   * @generated from field: local.BoundingBox inner = 3;
-   */
-  inner?: BoundingBox | undefined;
-
-  /**
-   * @generated from field: local.BoundingBox outer = 4;
-   */
-  outer?: BoundingBox | undefined;
-
-  /**
-   * @generated from field: optional bool hide = 5;
-   */
-  hide?: boolean | undefined;
-
-  /**
-   * @generated from field: float scale = 6;
-   */
-  scale: number;
-};
-
-/**
- * Describes the message local.FocusedWindowDataHook.
- * Use `create(FocusedWindowDataHookSchema)` to create a new message.
- */
-export declare const FocusedWindowDataHookSchema: GenMessage<FocusedWindowDataHook>;
 
 /**
  * @generated from message local.ClearAutocompleteCacheHook

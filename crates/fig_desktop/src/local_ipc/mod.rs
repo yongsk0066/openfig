@@ -269,42 +269,16 @@ async fn handle_local_ipc<Ctx>(
                 }
             },
             Some(LocalMessageType::Hook(hook)) => {
-                use fig_proto::ReflectMessage;
                 use fig_proto::local::hook::Hook::{
-                    Callback,
-                    CaretPosition,
                     ClearAutocompleteCache,
-                    EditBuffer,
                     Event,
-                    FileChanged,
                     FocusChange,
-                    FocusedWindowData,
-                    Hide,
-                    Init,
-                    IntegrationReady,
-                    InterceptedKey,
-                    PostExec,
-                    PreExec,
-                    Prompt,
-                    TmuxPaneChanged,
                 };
 
                 if let Err(err) = match hook.hook {
-                    Some(CaretPosition(request)) => hooks::caret_position(request, &proxy).await,
                     Some(FocusChange(_)) => hooks::focus_change(&proxy).await,
-                    Some(FileChanged(request)) => hooks::file_changed(request).await,
-                    Some(FocusedWindowData(request)) => {
-                        hooks::focused_window_data(request, &platform_state, &proxy).await
-                    },
                     Some(Event(event)) => hooks::event(event, &proxy).await,
                     Some(ClearAutocompleteCache(event)) => hooks::clear_autocomplete_cache(event, &proxy).await,
-                    Some(
-                        Init(_) | PostExec(_) | TmuxPaneChanged(_) | Callback(_) | IntegrationReady(_) | Hide(_)
-                        | PreExec(_) | InterceptedKey(_) | EditBuffer(_) | Prompt(_),
-                    ) => {
-                        warn!("received legacy hook `{}`", hook.descriptor().name());
-                        Ok(())
-                    },
                     None => {
                         warn!("Received unknown or empty hook");
                         Ok(())

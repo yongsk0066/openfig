@@ -35,7 +35,6 @@ use fig_proto::fig::{
     Notification,
     NotificationType,
 };
-use fig_proto::local::caret_position_hook::Origin;
 use fig_util::Terminal;
 use fig_util::consts::APP_BUNDLE_ID;
 use macos_utils::accessibility::accessibility_is_enabled;
@@ -934,7 +933,6 @@ impl PlatformStateImpl {
                 position: Some(WindowPosition::RelativeToCaret {
                     caret_position: caret.position,
                     caret_size: caret.size,
-                    origin: Origin::TopLeft,
                 }),
                 size: None,
                 anchor: None,

@@ -42,22 +42,14 @@ message Command {
 }
 
 message Hook {
+  // 100, 101, 102, 103, 104, 106, 108, 109, 110, 115: legacy hooks the desktop answered with
+  // `warn!("received legacy hook")`. 112, 113, 116: input-method hooks with no sender left after
+  // fig_input_method was removed.
+  reserved 100, 101, 102, 103, 104, 106, 108, 109, 110, 112, 113, 115, 116;
+
   oneof hook {
-    EditBufferHook edit_buffer = 100;
-    InitHook init = 101;
-    PromptHook prompt = 102;
-    PreExecHook pre_exec = 103;
-    PostExecHook post_exec = 104;
-    TmuxPaneChangedHook tmux_pane_changed = 106;
-    CallbackHook callback = 108;
-    IntegrationReadyHook integration_ready = 109;
-    HideHook hide = 110;
     EventHook event = 111;
-    FileChangedHook file_changed = 112;
-    CaretPositionHook caret_position = 113;
     FocusChangeHook focus_change = 114;
-    InterceptedKeyHook intercepted_key = 115;
-    FocusedWindowDataHook focused_window_data = 116;
     ClearAutocompleteCacheHook clear_autocomplete_cache = 117;
   }
 }
@@ -165,15 +157,6 @@ message EditBufferHook {
   optional TerminalCursorCoordinates terminal_cursor_coordinates = 5;
 }
 
-message InitHook {
-  fig_common.ShellContext context = 1;
-
-  bool called_direct = 2;
-  string bundle = 3;
-
-  map<string, string> env = 100;
-}
-
 message PromptHook {
   fig_common.ShellContext context = 1;
 }
@@ -191,51 +174,10 @@ message PostExecHook {
   optional int32 exit_code = 3; // the exit code of the command
 }
 
-message TmuxPaneChangedHook {
-  int32 pane_identifier = 1;
-}
-
-message CallbackHook {
-  string handler_id = 1;
-  string filepath = 2;
-  string exit_code = 3;
-}
-
-message IntegrationReadyHook {
-  string identifier = 1;
-}
-
-message HideHook {}
-
 message EventHook {
   string event_name = 1;
   optional string payload = 2;
   repeated string apps = 3;
-}
-
-message FileChangedHook {
-  enum FileChanged {
-    FILE_CHANGED_SETTINGS = 0;
-    FILE_CHANGED_STATE = 1;
-  }
-
-  FileChanged file_changed = 1;
-  optional string filepath = 2;
-}
-
-message CaretPositionHook {
-  enum Origin {
-    ORIGIN_TOP_LEFT = 0;
-    ORIGIN_BOTTOM_LEFT = 1;
-  }
-
-  // TODO(grant): support physical size
-  double x = 1;
-  double y = 2;
-  double width = 3;
-  double height = 4;
-
-  optional Origin origin = 5;
 }
 
 message FocusChangeHook {}
@@ -244,22 +186,6 @@ message InterceptedKeyHook {
   fig_common.ShellContext context = 1;
   string key = 2;
   string action = 3;
-}
-
-message BoundingBox {
-  int32 x = 1;
-  int32 y = 2;
-  int32 width = 3;
-  int32 height = 4;
-}
-
-message FocusedWindowDataHook {
-  string source = 1;
-  string id = 2;
-  BoundingBox inner = 3;
-  BoundingBox outer = 4;
-  optional bool hide = 5;
-  float scale = 6;
 }
 
 message ClearAutocompleteCacheHook {

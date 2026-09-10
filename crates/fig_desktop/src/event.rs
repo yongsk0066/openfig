@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use fig_proto::local::caret_position_hook::Origin;
 use tao::dpi::{
     LogicalSize,
     Position,
@@ -77,11 +76,7 @@ impl std::fmt::Display for EmitEventName {
 pub enum WindowPosition {
     Absolute(Position),
     Centered,
-    RelativeToCaret {
-        caret_position: Position,
-        caret_size: Size,
-        origin: Origin,
-    },
+    RelativeToCaret { caret_position: Position, caret_size: Size },
 }
 
 pub struct WindowGeometryResult {

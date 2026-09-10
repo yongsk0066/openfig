@@ -11,7 +11,6 @@ use fig_proto::fig::{
     NotificationType,
     ServerOriginatedMessage,
 };
-use fig_proto::local::caret_position_hook::Origin;
 use fig_proto::prost::Message;
 use fig_remote_ipc::figterm::{
     FigtermCommand,
@@ -178,18 +177,11 @@ impl WindowState {
             WindowPosition::RelativeToCaret {
                 caret_position,
                 caret_size,
-                origin,
             } => {
                 let max_height = fig_settings::settings::get_int_or("autocomplete.height", 140) as f64;
 
                 let primary_monitor = window.primary_monitor();
                 let primary_scale_factor = primary_monitor.as_ref().map(|monitor| monitor.scale_factor());
-                let primary_monitor_size: Option<LogicalSize<f64>> = primary_monitor
-                    .as_ref()
-                    .and_then(|monitor| Some(monitor.size().to_logical(primary_scale_factor?)));
-                let primary_monitor_position: Option<LogicalPosition<f64>> = primary_monitor
-                    .as_ref()
-                    .and_then(|monitor| Some(monitor.position().to_logical(primary_scale_factor?)));
 
                 let (
                     caret_position,
@@ -207,23 +199,10 @@ impl WindowState {
                             size: monitor.size().into(),
                         };
 
-                        let mut logical_caret_position: LogicalPosition<f64> =
+                        let logical_caret_position: LogicalPosition<f64> =
                             caret_position.to_logical(primary_scale_factor.unwrap_or(monitor_scale_factor));
                         let logical_caret_size: LogicalSize<f64> =
                             caret_size.to_logical(primary_scale_factor.unwrap_or(monitor_scale_factor));
-
-                        match origin {
-                            Origin::BottomLeft => {
-                                logical_caret_position.y =
-                                    primary_monitor_position.map(|position| position.y).unwrap_or_default()
-                                        + primary_monitor_size.map(|size| size.height).unwrap_or_default()
-                                        - logical_caret_position.y
-                                        - logical_caret_size.height;
-                            },
-                            Origin::TopLeft => {
-                                // This is the default
-                            },
-                        }
 
                         monitor_frame
                             .contains(logical_caret_position.into(), monitor_scale_factor)

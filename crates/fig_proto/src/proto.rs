@@ -29,9 +29,3 @@ pub(crate) mod figterm {
 pub(crate) mod remote {
     include!(concat!(env!("OUT_DIR"), "/remote.rs"));
 }
-
-/// Stress Testing Protocol Buffers
-pub(crate) mod stress {
-    #![allow(dead_code)]
-    include!(concat!(env!("OUT_DIR"), "/stress.rs"));
-}

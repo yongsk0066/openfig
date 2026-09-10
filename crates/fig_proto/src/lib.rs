@@ -263,23 +263,7 @@ mod tests {
     use super::*;
 
     fn test_message() -> local::LocalMessage {
-        let ctx = local::ShellContext {
-            pid: Some(123),
-            ttys: Some("/dev/pty123".into()),
-            process_name: Some("/bin/bash".into()),
-            current_working_directory: Some("/home/user".into()),
-            session_id: None,
-            terminal: None,
-            hostname: None,
-            shell_path: Some("/bin/bash".into()),
-            wsl_distro: None,
-            environment_variables: vec![],
-            qterm_version: None,
-            preexec: Some(false),
-            osc_lock: Some(true),
-            alias: Some("alias abc='abc d'\n".into()),
-        };
-        let hook = hooks::new_edit_buffer_hook(Some(ctx), "test", 2, 3, None);
+        let hook = hooks::new_event_hook("event-name", Some("payload".to_string()), vec!["app".to_string()]);
         hooks::hook_to_message(hook)
     }
 
@@ -312,11 +296,10 @@ mod tests {
             inner: Bytes::from(
                 serde_json::to_vec(&json!({
                     "hook": {
-                        "caretPosition": {
-                          "x": 123.0,
-                          "y": 456,
-                          "width": 34.0,
-                          "height": 61
+                        "event": {
+                          "eventName": "event-name",
+                          "payload": "payload",
+                          "apps": ["app"]
                         }
                     }
                 }))
@@ -332,15 +315,14 @@ mod tests {
             local::local_message::Type::Command(_) => panic!(),
         };
 
-        let caret_position = match hook.hook.unwrap() {
-            local::hook::Hook::CaretPosition(caret_position) => caret_position,
-            _ => panic!(),
+        let event = match hook.hook.unwrap() {
+            local::hook::Hook::Event(event) => event,
+            other => panic!("expected an event hook, got {other:?}"),
         };
 
-        assert_eq!(caret_position.x, 123.0);
-        assert_eq!(caret_position.y, 456.0);
-        assert_eq!(caret_position.width, 34.0);
-        assert_eq!(caret_position.height, 61.0);
+        assert_eq!(event.event_name, "event-name");
+        assert_eq!(event.payload.as_deref(), Some("payload"));
+        assert_eq!(event.apps, vec!["app".to_string()]);
     }
 
     #[test]

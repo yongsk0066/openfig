@@ -227,6 +227,18 @@ fn main_loop_channel() -> (flume::Sender<MainLoopEvent>, flume::Receiver<MainLoo
     flume::unbounded()
 }
 
+/// The last `(buffer, cursor)` pair actually handed to the desktop.
+///
+/// `can_send_edit_buffer` runs after *every* read from the pty, not just after a keystroke, so a
+/// command printing in the background re-sent a byte-identical edit buffer for each chunk of its
+/// output. Cleared whenever the desktop (re)connects so the first hook of a session always goes
+/// out.
+static LAST_SENT_EDIT_BUFFER: Mutex<Option<(String, i64)>> = Mutex::new(None);
+
+pub(crate) fn forget_last_sent_edit_buffer() {
+    *LAST_SENT_EDIT_BUFFER.lock_ignore_poison() = None;
+}
+
 /// Set when the shell pushes a new environment/alias snapshot (`UpdateShellContextRequest`),
 /// cleared by the next edit-buffer hook that carries one.
 ///
@@ -420,6 +432,18 @@ async fn send_edit_buffer(
     trace!("buffer bytes: {:02X?}", edit_buffer.buffer.as_bytes());
     trace!("buffer chars: {:?}", edit_buffer.buffer.chars().collect::<Vec<_>>());
 
+    {
+        let mut last_sent = LAST_SENT_EDIT_BUFFER.lock_ignore_poison();
+        if last_sent
+            .as_ref()
+            .is_some_and(|(buffer, cursor)| buffer == &edit_buffer.buffer && *cursor == cursor_idx)
+        {
+            trace!("Not sending edit buffer: unchanged since the last hook");
+            return Ok(());
+        }
+        *last_sent = Some((edit_buffer.buffer.clone(), cursor_idx));
+    }
+
     let (context, was_dirty) = shell_state_to_edit_buffer_context(shell_state);
 
     let edit_buffer_hook = new_edit_buffer_hook(Some(context), edit_buffer.buffer, cursor_idx, 0, cursor_coordinates);
@@ -428,10 +452,11 @@ async fn send_edit_buffer(
     trace!("Sending: {message:?}");
 
     if let Err(err) = sender.send_async(message).await {
-        // The snapshot never reached the desktop, so the next hook has to carry it again.
+        // Nothing reached the desktop, so the next hook has to carry all of it again.
         if was_dirty {
             CONTEXT_DIRTY.store(true, Ordering::Release);
         }
+        forget_last_sent_edit_buffer();
         return Err(err.into());
     }
     Ok(())
@@ -1045,6 +1070,53 @@ mod tests {
                 .expect("send to a live receiver must not fail");
         }
         assert_eq!(rx.len(), 10_000);
+    }
+
+    /// `can_send_edit_buffer` runs after every read from the pty, so a command printing in the
+    /// background used to re-send a byte-identical edit buffer for each chunk of its output.
+    #[tokio::test]
+    async fn identical_edit_buffers_are_sent_once() {
+        let (tx, rx) = flume::unbounded();
+        let shell_state = ShellState::default();
+        let buffer = |text: &str, cursor: usize| TextBuffer {
+            buffer: text.into(),
+            cursor_idx: Some(cursor),
+        };
+
+        crate::ipc::set_desktop_connected(true);
+        forget_last_sent_edit_buffer();
+
+        send_edit_buffer(&shell_state, buffer("git st", 6), &tx, None)
+            .await
+            .unwrap();
+        assert_eq!(rx.len(), 1, "the first hook must always go out");
+
+        for _ in 0..100 {
+            send_edit_buffer(&shell_state, buffer("git st", 6), &tx, None)
+                .await
+                .unwrap();
+        }
+        assert_eq!(rx.len(), 1, "identical buffers must be suppressed");
+
+        // A moved cursor is a different edit buffer even with the same text.
+        send_edit_buffer(&shell_state, buffer("git st", 3), &tx, None)
+            .await
+            .unwrap();
+        assert_eq!(rx.len(), 2);
+
+        send_edit_buffer(&shell_state, buffer("git sta", 7), &tx, None)
+            .await
+            .unwrap();
+        assert_eq!(rx.len(), 3);
+
+        // A reconnect must not suppress the first hook of the new session.
+        forget_last_sent_edit_buffer();
+        send_edit_buffer(&shell_state, buffer("git sta", 7), &tx, None)
+            .await
+            .unwrap();
+        assert_eq!(rx.len(), 4);
+
+        crate::ipc::set_desktop_connected(false);
     }
 
     #[test]

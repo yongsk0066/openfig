@@ -255,6 +255,9 @@ pub async fn spawn_remote_ipc(
                     // send outgoing messages
                     outgoing_rx.drain();
                     set_desktop_connected(true);
+                    // A fresh desktop knows nothing about this session, so the edit-buffer
+                    // de-duplication must not suppress the first hook after a reconnect.
+                    crate::forget_last_sent_edit_buffer();
                     let outgoing_rx = outgoing_rx.clone();
                     let main_loop_sender = main_loop_sender.clone();
                     let outgoing_task = tokio::spawn(async move {
@@ -294,6 +297,7 @@ pub async fn spawn_remote_ipc(
 
                     let _ = join!(outgoing_task, incoming_task);
                     set_desktop_connected(false);
+                    crate::forget_last_sent_edit_buffer();
                 }
             }
         }

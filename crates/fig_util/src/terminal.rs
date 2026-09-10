@@ -7,6 +7,10 @@ use serde::{
     Deserialize,
     Serialize,
 };
+use strum::{
+    EnumIter,
+    IntoEnumIterator,
+};
 
 /// Terminals that macOS supports
 pub const MACOS_TERMINALS: &[Terminal] = &[
@@ -27,6 +31,26 @@ pub const MACOS_TERMINALS: &[Terminal] = &[
 /// Other terminals that figterm should launch within that are not full terminal emulators
 pub const SPECIAL_TERMINALS: &[Terminal] = &[Terminal::Tmux, Terminal::Nvim, Terminal::Vim, Terminal::Zellij];
 
+/// Bundle ids of every [`Terminal`] that draws its UI in a webview ([`Terminal::is_xterm`])
+/// and therefore needs `AXManualAccessibility` switched on before the caret can be read.
+///
+/// Derived from the enum rather than written out, so it cannot drift from
+/// [`Terminal::is_xterm`]. `macos-utils` owns the window server but cannot depend on this
+/// crate (cycle), so `fig_desktop` injects this list into `WindowServer::new`.
+pub fn xterm_bundle_ids() -> &'static [&'static str] {
+    static IDS: OnceLock<Vec<&'static str>> = OnceLock::new();
+    IDS.get_or_init(|| {
+        Terminal::iter()
+            .filter(Terminal::is_xterm)
+            .filter_map(|terminal| match terminal.to_bundle_id() {
+                // every `to_bundle_id` arm is a string literal, so this never drops one
+                Some(Cow::Borrowed(id)) => Some(id),
+                Some(Cow::Owned(_)) | None => None,
+            })
+            .collect()
+    })
+}
+
 pub fn current_terminal() -> Option<&'static Terminal> {
     static CURRENT_TERMINAL: OnceLock<Option<Terminal>> = OnceLock::new();
     CURRENT_TERMINAL
@@ -46,7 +70,7 @@ pub fn in_special_terminal(ctx: &Context) -> Option<Terminal> {
 }
 
 /// All supported terminals
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 #[serde(rename_all = "kebab-case")]
 pub enum Terminal {
     /// iTerm 2
@@ -333,5 +357,15 @@ mod tests {
     #[test]
     fn test_from_process_info() {
         Terminal::from_process_info(&Context::new(), &MACOS_TERMINALS.to_vec());
+    }
+
+    #[test]
+    fn test_xterm_bundle_ids() {
+        let ids = xterm_bundle_ids();
+        // every xterm terminal has a bundle id, so nothing is silently dropped
+        assert_eq!(ids.len(), Terminal::iter().filter(Terminal::is_xterm).count());
+        for id in ids {
+            assert!(Terminal::from_bundle_id(id).is_some_and(|t| t.is_xterm()));
+        }
     }
 }

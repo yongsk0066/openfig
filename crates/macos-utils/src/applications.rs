@@ -73,12 +73,3 @@ mod tests {
 }
 
 // launch_application("/Applications/Alacritty.app")
-
-// #[test]
-// fn test_terminate() {
-//     // let out = dbg!(running_applications());
-//     running_applications_matching("com.amazon.codewhisperercursor").into_iter().for_each(|app| {
-//         println!("Terminating {}", app.process_identifier);
-//         app.terminate()
-//     })
-// }

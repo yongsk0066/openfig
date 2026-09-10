@@ -72,24 +72,15 @@ pub use ui_element::{
 use crate::util::NotificationCenter;
 use crate::util::notification_center::get_app_from_notification;
 
+/// System processes that never host a shell. Our own bundle id is *not* here: it is
+/// injected through [`WindowServer::new`] because this crate cannot depend on
+/// `fig_util` (`fig_util` already depends on this crate on macOS).
 const BLOCKED_BUNDLE_IDS: &[&str] = &[
     "com.apple.ViewBridgeAuxiliary",
     "com.apple.notificationcenterui",
     "com.apple.WebKit.WebContent",
     "com.apple.WebKit.Networking",
     "com.apple.controlcenter",
-    "com.mschrage.fig",
-    "com.amazon.codewhisperer",
-];
-
-// TODO: -- should this use fig_util crate Terminal struct?
-pub const XTERM_BUNDLE_IDS: &[&str] = &[
-    "com.microsoft.VSCodeInsiders",
-    "com.microsoft.VSCode",
-    "com.todesktop.230313mzl4w4u92",
-    "com.todesktop.23052492jqa5xjo",
-    "co.zeit.hyper",
-    "org.tabby",
 ];
 
 const TRACKED_NOTIFICATIONS: &[&str] = &[
@@ -144,11 +135,24 @@ unsafe impl Sync for WindowServer {}
 pub struct WindowServerInner {
     observers: DashMap<ApplicationSpecifier, AXObserver<AccessibilityCallbackData>, fnv::FnvBuildHasher>,
     sender: Sender<WindowServerEvent>,
+    /// The bundle id of the process we are running in, so the app never observes its own
+    /// autocomplete window.
+    own_bundle_id: &'static str,
+    /// Bundle ids of terminals that draw their UI in a webview and need
+    /// `AXManualAccessibility` switched on before the caret can be read.
+    xterm_bundle_ids: &'static [&'static str],
 }
 
 impl WindowServer {
-    pub fn new(sender: Sender<WindowServerEvent>) -> Self {
-        let (mut inner, observer) = WindowServerInner::new_with_observer(sender);
+    /// `own_bundle_id` and `xterm_bundle_ids` are injected rather than read from
+    /// `fig_util::consts` / `fig_util::Terminal`: `fig_util` depends on this crate on
+    /// macOS, so depending back on it would be a cycle.
+    pub fn new(
+        sender: Sender<WindowServerEvent>,
+        own_bundle_id: &'static str,
+        xterm_bundle_ids: &'static [&'static str],
+    ) -> Self {
+        let (mut inner, observer) = WindowServerInner::new_with_observer(sender, own_bundle_id, xterm_bundle_ids);
 
         let mut center = NotificationCenter::workspace_center();
 
@@ -204,7 +208,7 @@ trait WindowServerHandler {
     fn did_launch_application(&mut self, notif: &NSNotification);
 }
 
-const OBSERVER_CLASS_NAME: &str = "CodeWhisperer_WindowServerObserver";
+const OBSERVER_CLASS_NAME: &str = "Fig_WindowServerObserver";
 
 pub struct Ivars {
     handler: *mut c_void,
@@ -272,17 +276,16 @@ impl ObserverClass {
 }
 
 impl WindowServerInner {
-    pub fn new(sender: Sender<WindowServerEvent>) -> Self {
-        Self {
-            observers: Default::default(),
-            sender,
-        }
-    }
-
-    pub fn new_with_observer(sender: Sender<WindowServerEvent>) -> (Pin<Box<Self>>, Retained<ObserverClass>) {
+    pub fn new_with_observer(
+        sender: Sender<WindowServerEvent>,
+        own_bundle_id: &'static str,
+        xterm_bundle_ids: &'static [&'static str],
+    ) -> (Pin<Box<Self>>, Retained<ObserverClass>) {
         let pin = Box::pin(Self {
             observers: Default::default(),
             sender,
+            own_bundle_id,
+            xterm_bundle_ids,
         });
         let handler = &*pin as *const Self as *mut c_void;
         let r = ObserverClass::new(handler);
@@ -312,11 +315,9 @@ impl WindowServerInner {
 
         let ax_ref = AXUIElementCreateApplication(pid);
 
-        for blocked_bundle in BLOCKED_BUNDLE_IDS {
-            if *blocked_bundle == bundle_id {
-                debug!("Ignoring bundle id {:?}", bundle_id);
-                return;
-            }
+        if bundle_id == self.own_bundle_id || BLOCKED_BUNDLE_IDS.contains(&bundle_id.as_str()) {
+            debug!("Ignoring bundle id {:?}", bundle_id);
+            return;
         }
 
         if ns_app.activationPolicy() == NSApplicationActivationPolicy::Prohibited {
@@ -344,7 +345,7 @@ impl WindowServerInner {
             });
         }
 
-        if XTERM_BUNDLE_IDS.contains(&key.bundle_id.as_str()) {
+        if self.xterm_bundle_ids.contains(&key.bundle_id.as_str()) {
             UIElement::from(ax_ref).enable_screen_reader_accessibility().ok();
         }
 

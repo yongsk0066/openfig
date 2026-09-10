@@ -38,6 +38,7 @@ use fig_proto::fig::{
 };
 use fig_proto::local::caret_position_hook::Origin;
 use fig_util::Terminal;
+use fig_util::consts::APP_BUNDLE_ID;
 use macos_utils::accessibility::accessibility_is_enabled;
 use macos_utils::caret_position::{
     CaretPosition,
@@ -323,7 +324,11 @@ impl PlatformStateImpl {
                     .window_server
                     .write()
                     .unwrap()
-                    .replace(Arc::new(Mutex::new(WindowServer::new(tx))));
+                    .replace(Arc::new(Mutex::new(WindowServer::new(
+                        tx,
+                        APP_BUNDLE_ID,
+                        fig_util::terminal::xterm_bundle_ids(),
+                    ))));
 
                 let accessibility_proxy = self.proxy.clone();
                 let mut distributed = NotificationCenter::distributed_center();

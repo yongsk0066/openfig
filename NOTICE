@@ -1,0 +1,21 @@
+Fig
+===
+
+This repository is a personal, offline-only fork of
+aws/amazon-q-developer-cli-autocomplete, which is itself derived from the
+autocomplete engine originally built by Fig (withfig). All of the AI, network,
+telemetry and account features of the upstream project have been removed; what
+remains is the terminal autocomplete dropdown and the shell integration that
+feeds it. The upstream dual license is retained in full: this work is licensed
+under either of LICENSE.APACHE (Apache License, Version 2.0) or LICENSE.MIT
+(MIT license) at your option, and the upstream copyright notice in LICENSE.MIT
+is kept as required by that license.
+
+Vendored third-party code carries its own license alongside it:
+
+  crates/alacritty_terminal/                    Apache-2.0, The Alacritty Project
+  crates/fig_integrations/src/shell/scripts/    MIT, Ryan Caloras and contributors
+    bash-preexec.sh                             (LICENSE.bash-preexec)
+  crates/macos-utils/accessibility-master/      MIT OR Apache-2.0, as declared
+                                                in its own Cargo.toml
+  packages/fuzzysort/                           MIT, Stephen Kamenar (LICENSE)

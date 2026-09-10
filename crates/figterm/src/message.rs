@@ -48,6 +48,8 @@ use crate::pty::AsyncMasterPty;
 use crate::{
     EXPECTED_BUFFER,
     INSERTION_LOCKED_AT,
+    LockIgnorePoison as _,
+    RwLockIgnorePoison as _,
     SHELL_ALIAS,
     SHELL_ENVIRONMENT_VARIABLES,
     shell_state_to_context,
@@ -80,7 +82,7 @@ fn working_directory(path: Option<&str>, shell_state: &ShellState) -> PathBuf {
 }
 
 fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Path>) -> Command {
-    let env = (*SHELL_ENVIRONMENT_VARIABLES.lock().unwrap())
+    let env = (*SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison())
         .clone()
         .into_iter()
         .filter_map(|EnvironmentVariable { key, value }| value.map(|value| (key, value)))
@@ -179,10 +181,10 @@ pub async fn process_figterm_request(
                     // // split text by cursor
                     // let (left, right) = buffer.split_at(position);
 
-                    INSERTION_LOCKED_AT.write().unwrap().replace(SystemTime::now());
+                    INSERTION_LOCKED_AT.write_ignore_poison().replace(SystemTime::now());
                     let expected = format!("{buffer}{text_to_insert}");
                     trace!(?expected, "lock set, expected buffer");
-                    *EXPECTED_BUFFER.lock().unwrap() = expected;
+                    *EXPECTED_BUFFER.lock_ignore_poison() = expected;
                 }
                 if let Some(ref insertion_buffer) = request.insertion_buffer
                     && buffer.ne(insertion_buffer)
@@ -258,10 +260,10 @@ pub async fn process_figterm_request(
         },
         FigtermRequest::UpdateShellContext(request) => {
             if request.update_environment_variables {
-                *SHELL_ENVIRONMENT_VARIABLES.lock().unwrap() = request.environment_variables;
+                *SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison() = request.environment_variables;
             }
             if request.update_alias {
-                *SHELL_ALIAS.lock().unwrap() = request.alias;
+                *SHELL_ALIAS.lock_ignore_poison() = request.alias;
             }
             Ok(None)
         },

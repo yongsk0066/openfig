@@ -132,6 +132,62 @@ static EXPECTED_BUFFER: Mutex<String> = Mutex::new(String::new());
 static SHELL_ENVIRONMENT_VARIABLES: Mutex<Vec<EnvironmentVariable>> = Mutex::new(Vec::new());
 static SHELL_ALIAS: Mutex<Option<String>> = Mutex::new(None);
 
+/// Lock helpers that ignore poisoning.
+///
+/// All four statics above hold plain data that is fully overwritten by whoever takes the lock, so
+/// a panic elsewhere cannot leave them in a state a later reader has to care about. Poisoning them
+/// only converts one crash into a cascade of `unwrap` panics on the main loop, which SIGHUPs the
+/// user's shell.
+pub(crate) trait LockIgnorePoison {
+    type Guard<'a>
+    where
+        Self: 'a;
+
+    fn lock_ignore_poison(&self) -> Self::Guard<'_>;
+}
+
+pub(crate) trait RwLockIgnorePoison {
+    type ReadGuard<'a>
+    where
+        Self: 'a;
+    type WriteGuard<'a>
+    where
+        Self: 'a;
+
+    fn read_ignore_poison(&self) -> Self::ReadGuard<'_>;
+    fn write_ignore_poison(&self) -> Self::WriteGuard<'_>;
+}
+
+impl<T> LockIgnorePoison for Mutex<T> {
+    type Guard<'a>
+        = std::sync::MutexGuard<'a, T>
+    where
+        T: 'a;
+
+    fn lock_ignore_poison(&self) -> Self::Guard<'_> {
+        self.lock().unwrap_or_else(|err| err.into_inner())
+    }
+}
+
+impl<T> RwLockIgnorePoison for RwLock<T> {
+    type ReadGuard<'a>
+        = std::sync::RwLockReadGuard<'a, T>
+    where
+        T: 'a;
+    type WriteGuard<'a>
+        = std::sync::RwLockWriteGuard<'a, T>
+    where
+        T: 'a;
+
+    fn read_ignore_poison(&self) -> Self::ReadGuard<'_> {
+        self.read().unwrap_or_else(|err| err.into_inner())
+    }
+
+    fn write_ignore_poison(&self) -> Self::WriteGuard<'_> {
+        self.write().unwrap_or_else(|err| err.into_inner())
+    }
+}
+
 static USER_ENABLED_SHELLS: LazyLock<Vec<String>> = LazyLock::new(|| {
     fig_settings::state::get("user.enabled-shells")
         .ok()
@@ -192,11 +248,11 @@ fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
             .username
             .as_deref()
             .and_then(|username| HOSTNAME.as_deref().map(|hostname| format!("{username}@{hostname}"))),
-        environment_variables: SHELL_ENVIRONMENT_VARIABLES.lock().unwrap().clone(),
+        environment_variables: SHELL_ENVIRONMENT_VARIABLES.lock_ignore_poison().clone(),
         qterm_version: Some(env!("CARGO_PKG_VERSION").into()),
         preexec: Some(shell_state.preexec),
         osc_lock: Some(shell_state.osc_lock),
-        alias: SHELL_ALIAS.lock().unwrap().clone(),
+        alias: SHELL_ALIAS.lock_ignore_poison().clone(),
     }
 }
 
@@ -219,14 +275,14 @@ where
         });
     let preexec = term.shell_state().preexec;
 
-    let mut handle = INSERTION_LOCKED_AT.write().unwrap();
+    let mut handle = INSERTION_LOCKED_AT.write_ignore_poison();
     let insertion_locked = match handle.as_ref() {
         Some(at) => {
             let lock_expired = at.elapsed().unwrap_or(Duration::ZERO) > Duration::from_millis(16);
             let should_unlock = lock_expired
                 || term
                     .get_current_buffer()
-                    .is_none_or(|buff| &buff.buffer == (&EXPECTED_BUFFER.lock().unwrap() as &String));
+                    .is_none_or(|buff| &buff.buffer == (&EXPECTED_BUFFER.lock_ignore_poison() as &String));
             if should_unlock {
                 handle.take();
                 if lock_expired {
@@ -803,7 +859,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                 }
                 // Check if to send the edit buffer because of timeout
                 _ = edit_buffer_interval.tick() => {
-                    let send_eb = INSERTION_LOCKED_AT.read().unwrap().is_some();
+                    let send_eb = INSERTION_LOCKED_AT.read_ignore_poison().is_some();
                     if send_eb && can_send_edit_buffer(&term)
                         && let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                             warn!(%err, "Failed to send edit buffer");

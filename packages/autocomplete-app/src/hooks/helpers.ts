@@ -1,28 +1,36 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { ResizeObserver } from "@juggle/resize-observer";
-
-import useResizeObserver from "use-resize-observer";
-
-if ("ResizeObserver" in window === false) {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  window.ResizeObserver = ResizeObserver;
-}
+import { useState, useEffect, useMemo, useCallback, RefCallback, RefObject } from "react";
+import { useResizeObserver, ResizeObserverBoxOptions } from "use-resize-observer";
 
 type Dimensions = {
   height?: number;
   width?: number;
 };
 
-// Like resizeObserver but re-calls onResize callback when onResize changes.
-export const useDynamicResizeObserver: typeof useResizeObserver = (opts) => {
-  const { onResize, ...otherOpts } = opts || {};
+type DynamicResizeObserverOptions<T extends Element> = {
+  ref?: RefObject<T | null> | T | null;
+  onResize?: (size: Dimensions) => void;
+  box?: ResizeObserverBoxOptions;
+  round?: (n: number) => number;
+};
+
+type DynamicResizeObserverResponse<T extends Element> = Dimensions & {
+  ref: RefCallback<T>;
+};
+
+// Like useResizeObserver but re-calls onResize callback when onResize changes.
+export const useDynamicResizeObserver = <T extends Element = HTMLDivElement>(
+  opts?: DynamicResizeObserverOptions<T>,
+): DynamicResizeObserverResponse<T> => {
+  const { onResize, ...otherOpts } = opts ?? {};
   const [{ height, width }, setDimensions] = useState<Dimensions>({
     height: 0,
     width: 0,
   });
 
-  const { ref } = useResizeObserver({ ...otherOpts, onResize: setDimensions });
+  const { ref } = useResizeObserver<T>({
+    ...otherOpts,
+    onResize: ({ height: h, width: w }) => setDimensions({ height: h, width: w }),
+  });
 
   useEffect(() => {
     if (onResize) {
@@ -53,15 +61,8 @@ export const useSystemTheme = (): [SystemTheme] => {
   useEffect(() => {
     const listener = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? "dark" : "light");
     const query = window.matchMedia("(prefers-color-scheme: dark)");
-    if (query.addEventListener) {
-      query.addEventListener("change", listener);
-    } else {
-      query.addListener(listener);
-    }
-    return () =>
-      query.removeEventListener
-        ? query.removeEventListener("change", listener)
-        : query.removeListener(listener);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
   }, []);
   return [systemTheme];
 };

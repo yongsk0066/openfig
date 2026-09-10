@@ -1,6 +1,7 @@
 import { WindowPosition, Settings } from "@aws/amazon-q-developer-cli-api-bindings";
 import { SETTINGS } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import React, { useState, useEffect, useCallback, useRef, useMemo, MutableRefObject } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { RowComponentProps } from "react-window";
 
 import logger from "loglevel";
 import { getCWDForFilesAndFolders } from "@aws/amazon-q-developer-cli-shared/utils";
@@ -37,6 +38,40 @@ window.React = React;
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 window.figApiBindings = figApiBindings;
+
+type SuggestionProps = React.ComponentProps<typeof Suggestion>;
+
+type SuggestionRowProps = Omit<SuggestionProps, "style" | "suggestion" | "isActive"> & {
+  suggestions: SuggestionProps["suggestion"][];
+  selectedIndex: number;
+};
+
+function SuggestionRow({
+  index,
+  style,
+  suggestions,
+  selectedIndex,
+  commonPrefix,
+  onClick,
+  searchTerm,
+  fuzzySearchEnabled,
+  iconPath,
+  iconSize,
+}: RowComponentProps<SuggestionRowProps>) {
+  return (
+    <Suggestion
+      style={style}
+      suggestion={suggestions[index]}
+      commonPrefix={commonPrefix}
+      onClick={onClick}
+      isActive={selectedIndex === index}
+      searchTerm={searchTerm}
+      fuzzySearchEnabled={fuzzySearchEnabled}
+      iconPath={iconPath}
+      iconSize={iconSize}
+    />
+  );
+}
 
 const getIconPath = (cwd: string): string => {
   const { home } = fig.constants ?? {};
@@ -234,7 +269,7 @@ function App() {
     setFontFamily(fontFamily as string);
   }, [fontFamily]);
   // Scroll when selectedIndex changes.
-  const listRef = useRef<AutoSizedHandleRef>() as MutableRefObject<AutoSizedHandleRef>;
+  const listRef = useRef<AutoSizedHandleRef>(null);
 
   const scrollToItemCallback = useCallback(() => {
     logger.info("Scrolling to", { selectedIndex });
@@ -417,24 +452,21 @@ function App() {
               className={listClasses.filter((x) => !!x).join(" ")}
               onResize={scrollToItemCallback}
               ref={listRef}
-              itemSize={size.itemSize}
+              rowHeight={size.itemSize}
               width="100%"
-              itemCount={Math.round(suggestions.length)}
-            >
-              {({ index, style }) => (
-                <Suggestion
-                  style={style}
-                  suggestion={suggestions[index]}
-                  commonPrefix={commonPrefix || ""}
-                  onClick={insertTextForItem}
-                  isActive={selectedIndex === index}
-                  searchTerm={searchTerm}
-                  fuzzySearchEnabled={fuzzySearchEnabled}
-                  iconPath={iconPath}
-                  iconSize={size.itemSize * 0.75}
-                />
-              )}
-            </AutoSizedList>
+              rowCount={Math.round(suggestions.length)}
+              rowComponent={SuggestionRow}
+              rowProps={{
+                suggestions,
+                selectedIndex,
+                commonPrefix: commonPrefix || "",
+                onClick: insertTextForItem,
+                searchTerm,
+                fuzzySearchEnabled,
+                iconPath,
+                iconSize: size.itemSize * 0.75,
+              }}
+            />
             <div className="scrollbar-none flex flex-shrink-0 flex-row">
               {descriptionPosition === "unknown" && description}
               {isLoading && (

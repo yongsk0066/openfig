@@ -151,6 +151,19 @@ const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => 
   return filtered;
 };
 
+// zustand 5 types `replace` as a literal: `set(partial)` or `set(state, true)`.
+const applySet = <T>(
+  set: StoreApi<T>["setState"],
+  value: T | Partial<T> | ((s: T) => T | Partial<T>),
+  replace?: boolean,
+) => {
+  if (replace) {
+    set(value as T | ((s: T) => T), true);
+  } else {
+    set(value as Partial<T> | ((s: T) => Partial<T>));
+  }
+};
+
 const updateSuggestions =
   (creator: StateCreator<AutocompleteState>): StateCreator<AutocompleteState> =>
   (set, get, api) =>
@@ -182,7 +195,7 @@ const updateSuggestions =
           updatedState.visibleState === Visibility.HIDDEN_UNTIL_KEYPRESS ||
           (willBeVisible === wasVisible && !suggestionsMayChange)
         ) {
-          set(updatedState, replace);
+          applySet(set, updatedState, replace);
           return;
         }
 
@@ -213,7 +226,11 @@ const updateSuggestions =
           }
         }
 
-        set({ ...state, ...update, suggestions, selectedIndex, hasChangedIndex }, replace);
+        applySet(
+          set,
+          { ...state, ...update, suggestions, selectedIndex, hasChangedIndex },
+          replace,
+        );
       },
       get,
       api,
@@ -232,7 +249,7 @@ const log =
     const namedSet: NamedSetState<T> = (name, partial, replace) => {
       console.groupCollapsed(`applying update: ${name}`);
       logger.info({ name, partial, replace });
-      set(partial, replace);
+      applySet(set, partial, replace);
       console.groupEnd();
     };
     return config(namedSet, get, api);

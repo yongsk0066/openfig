@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 
 const defaultStyles =
   "p-2 h-10 hover:bg-dusk-100 dark:hover:bg-zinc-900 text-zinc-500 dark:text-zinc-400 dark:hover:text-white/80 transition-colors w-full rounded-lg flex flex-row items-center justify-between font-light [&>span]:bg-zinc-500 [&>span]:text-white hover:text-dusk-600 [&:hover>span]:bg-dusk-600 border border-transparent";

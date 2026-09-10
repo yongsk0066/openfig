@@ -1,17 +1,16 @@
-import {
-  useRef,
-  MutableRefObject,
-  useImperativeHandle,
-  ForwardRefRenderFunction,
-  forwardRef,
-} from "react";
-import { FixedSizeList as List } from "react-window";
+import { useImperativeHandle, Ref } from "react";
+import { List, ListProps, useListRef } from "react-window";
 import { twMerge } from "tailwind-merge";
 import { useDynamicResizeObserver } from "../hooks/helpers";
 
 type ResizeHandler = (size: { width?: number; height?: number }) => void;
 
-type AutoSizedListProps = Omit<List["props"], "height" | "width"> & {
+type AutoSizedListProps<RowProps extends object> = Omit<
+  ListProps<RowProps>,
+  "style" | "listRef" | "onResize" | "rowHeight"
+> & {
+  ref?: Ref<AutoSizedHandleRef>;
+  rowHeight: number;
   width: number | string | undefined;
   onResize: ResizeHandler | undefined;
 };
@@ -20,45 +19,51 @@ export type AutoSizedHandleRef = {
   scrollToItem: (index: number) => void;
 };
 
-// List will attempt to be size (itemCount * itemSize) but will shrink and
+// List will attempt to be size (rowCount * rowHeight) but will shrink and
 // scroll if necessary.
-const AutoSizedList: ForwardRefRenderFunction<AutoSizedHandleRef, AutoSizedListProps> = (
-  {
-    onResize = undefined,
-    width: desiredWidth = undefined,
-    className,
-    ...props
-  }: AutoSizedListProps,
+export default function AutoSizedList<RowProps extends object>({
   ref,
-) => {
-  const { itemCount, itemSize } = props;
+  onResize = undefined,
+  width: desiredWidth = undefined,
+  className,
+  rowCount,
+  rowHeight,
+  ...props
+}: AutoSizedListProps<RowProps>) {
   const { ref: wrapperRef, height, width } = useDynamicResizeObserver({ onResize });
+  const listRef = useListRef(null);
 
-  // Scroll when selectedIndex changes.
-  const listRef = useRef<List>() as MutableRefObject<List>;
-  useImperativeHandle(ref, () => ({
-    scrollToItem: (index) => listRef.current.scrollToItem(index, "smart"),
-  }));
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToItem: (index) => {
+        if (index >= 0 && index < rowCount) {
+          listRef.current?.scrollToRow({ index, align: "smart" });
+        }
+      },
+    }),
+    [listRef, rowCount],
+  );
 
   return (
     <div
       ref={wrapperRef}
       style={{
-        flexBasis: itemCount * itemSize,
+        flexBasis: rowCount * rowHeight,
       }}
       className="min-h-0 min-w-0 flex-shrink"
     >
       <List
-        width={desiredWidth === undefined ? width || 0 : desiredWidth}
-        ref={listRef}
-        height={height || 0}
+        listRef={listRef}
+        rowCount={rowCount}
+        rowHeight={rowHeight}
         className={twMerge("scrollbar-none", className)}
+        style={{
+          height: height || 0,
+          width: desiredWidth === undefined ? width || 0 : desiredWidth,
+        }}
         {...props}
       />
     </div>
   );
-};
-
-const AutoSizedListWrapped = forwardRef(AutoSizedList);
-
-export default AutoSizedListWrapped;
+}

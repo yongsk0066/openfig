@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router";
 import { cn } from "@/lib/utils";
 import ExternalLink from "../util/external-link";
 import { cva, type VariantProps } from "class-variance-authority";

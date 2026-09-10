@@ -1,6 +1,4 @@
 import { fs } from "@aws/amazon-q-developer-cli-api-bindings";
-// eslint-disable-next-line unicorn/prefer-node-protocol
-import util from "util";
 import { isInDevMode } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 
 // Logging functions
@@ -12,9 +10,21 @@ const DEFAULT_CONSOLE = {
 
 export const LOG_DIR = window.fig?.constants?.logsDir;
 
+const formatLogValue = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.stack ?? value.message;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const formatLog = (content: unknown[]): string => content.map(formatLogValue).join(" ");
+
 const NEW_LOG_FN = (...content: unknown[]) => {
-  fs.append(`${LOG_DIR}/logs/specs.log`, `\n${util.format(...content)}`).finally(() =>
-    DEFAULT_CONSOLE.warn("SPEC LOG:", util.format(...content)),
+  fs.append(`${LOG_DIR}/logs/specs.log`, `\n${formatLog(content)}`).finally(() =>
+    DEFAULT_CONSOLE.warn("SPEC LOG:", formatLog(content)),
   );
 };
 

@@ -253,7 +253,8 @@ pub trait FigProtobufEncodable: Debug + Send + Sync {
     fn encode_fig_protobuf(&self) -> Result<Bytes, FigMessageEncodeError>;
 }
 
-impl<T: Message> FigProtobufEncodable for T {
+// prost 0.14 dropped the Debug supertrait from Message, so it has to be spelled out here.
+impl<T: Message + Debug> FigProtobufEncodable for T {
     fn encode_fig_protobuf(&self) -> Result<Bytes, FigMessageEncodeError> {
         FigMessage::encode(FigMessageType::Protobuf, self.encode_to_vec().into())
     }

@@ -15,16 +15,16 @@ arbitrary = { version = "1.4.1", optional = true, features = ["derive"] }
 bytes.workspace = true
 fig_util.workspace = true
 hex.workspace = true
-prost = "0.13.5"
-prost-reflect = { version = "0.15.2", features = ["serde", "derive"] }
+prost = "0.14.4"
+prost-reflect = { version = "0.16.5", features = ["serde", "derive"] }
 rmp-serde = "1.3.0"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
 [build-dependencies]
-prost-build = "0.13.5"
-prost-reflect-build = "0.15.1"
+prost-build = "0.14.4"
+prost-reflect-build = "0.16.1"
 
 [package.metadata.cargo-machete]
 # build.rs drives prost-build/prost-reflect-build and injects the arbitrary derive.

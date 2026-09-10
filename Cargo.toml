@@ -11,13 +11,10 @@ members = [
 default-members = ["crates/fig_desktop", "crates/figterm", "crates/fig_cli"]
 
 [workspace.package]
-authors = [
-  "Amazon Q CLI Team (q-cli@amazon.com)",
-  "Chay Nabors (nabochay@amazon.com)",
-  "Brandon Kiser (bskiser@amazon.com)",
-]
+authors = ["OpenFig contributors"]
 edition = "2024"
-homepage = "https://aws.amazon.com/q/"
+homepage = ""
+repository = ""
 publish = false
 version = "1.19.7"
 license = "MIT OR Apache-2.0"

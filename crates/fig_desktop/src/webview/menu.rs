@@ -6,6 +6,7 @@ use muda::{
     MenuEvent,
     Submenu,
 };
+use tao::event_loop::ControlFlow;
 
 use crate::event::{
     Event,
@@ -17,7 +18,8 @@ use crate::{
     EventLoopProxy,
 };
 
-const DASHBOARD_QUIT: &str = "dashboard-quit";
+const DASHBOARD_CLOSE: &str = "dashboard-close";
+const APP_QUIT: &str = "app-quit";
 const DASHBOARD_RELOAD: &str = "dashboard-reload";
 const DASHBOARD_BACK: &str = "dashboard-back";
 const DASHBOARD_FORWARD: &str = "dashboard-forward";
@@ -57,14 +59,14 @@ pub fn menu_bar() -> Menu {
                 .build(),
             &MenuItemBuilder::new()
                 .text("Close Window")
-                .id(DASHBOARD_QUIT.into())
+                .id(DASHBOARD_CLOSE.into())
                 .enabled(true)
                 .accelerator(Some("super+w"))
                 .unwrap()
                 .build(),
             &MenuItemBuilder::new()
-                .text(format!("Quit {PRODUCT_NAME} (UI)"))
-                .id(DASHBOARD_QUIT.into())
+                .text(format!("Quit {PRODUCT_NAME}"))
+                .id(APP_QUIT.into())
                 .enabled(true)
                 .accelerator(Some("super+q"))
                 .unwrap()
@@ -103,10 +105,14 @@ pub fn menu_bar() -> Menu {
 
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &menu_event.id().0 {
-        menu_id if menu_id == DASHBOARD_QUIT => proxy.send_event_or_log(Event::WindowEvent {
+        // "Close Window" and "Quit" shared one id, so ⌘Q only hid the dashboard. With
+        // `LSUIElement = true` there is no Dock icon, which left the tray, `q quit` and
+        // `launchctl` as the only ways to actually stop the app.
+        menu_id if menu_id == DASHBOARD_CLOSE => proxy.send_event_or_log(Event::WindowEvent {
             window_id: DASHBOARD_ID,
             window_event: WindowEvent::Hide,
         }),
+        menu_id if menu_id == APP_QUIT => proxy.send_event_or_log(Event::ControlFlow(ControlFlow::Exit)),
         menu_id if menu_id == DASHBOARD_RELOAD => proxy.send_event_or_log(Event::WindowEvent {
             window_id: DASHBOARD_ID,
             window_event: WindowEvent::Reload,

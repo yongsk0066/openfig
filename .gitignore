@@ -49,3 +49,6 @@ book/
 .env*
 
 run-build.sh
+
+# Local Claude Code scratch (skills, session settings) - never part of the build
+.claude/

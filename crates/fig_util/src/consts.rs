@@ -20,24 +20,16 @@ pub const DATA_DIR_NAME: &str = env!("FIG_BRAND_DATA_DIR_NAME");
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = env!("FIG_BRAND_BACKUP_DIR_NAME");
 
-// These are the old "CodeWhisperer" branding, used anywhere we will not update to Amazon Q
-pub const OLD_PRODUCT_NAME: &str = "CodeWhisperer";
-pub const OLD_CLI_BINARY_NAMES: &[&str] = &["cw"];
-pub const OLD_PTY_BINARY_NAMES: &[&str] = &["cwterm"];
-
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
-    pub const TARGET_TRIPLE: Option<&str> = option_env!("AMAZON_Q_BUILD_TARGET_TRIPLE");
-
-    /// The variant of the current build
-    pub const VARIANT: Option<&str> = option_env!("AMAZON_Q_BUILD_VARIANT");
+    pub const TARGET_TRIPLE: Option<&str> = option_env!("FIG_BUILD_TARGET_TRIPLE");
 
     /// A git full sha hash of the current build
-    pub const HASH: Option<&str> = option_env!("AMAZON_Q_BUILD_HASH");
+    pub const HASH: Option<&str> = option_env!("FIG_BUILD_HASH");
 
     /// The datetime in rfc3339 format of the current build
-    pub const DATETIME: Option<&str> = option_env!("AMAZON_Q_BUILD_DATETIME");
+    pub const DATETIME: Option<&str> = option_env!("FIG_BUILD_DATETIME");
 }
 
 /// macOS specific constants
@@ -60,10 +52,10 @@ pub mod env_var {
     }
 
     define_env_vars! {
-        /// The UUID of the current parent qterm instance
+        /// The UUID of the current parent pty session
         QTERM_SESSION_ID = "QTERM_SESSION_ID",
 
-        /// Set if qterm is running, contains the version
+        /// Set if the pty wrapper is running, contains the version
         Q_TERM = "Q_TERM",
 
         /// Sets the current log level
@@ -72,10 +64,10 @@ pub mod env_var {
         /// Overrides the ZDOTDIR environment variable
         Q_ZDOTDIR = "Q_ZDOTDIR",
 
-        /// Indicates a process was launched by Amazon Q
+        /// Indicates a process was launched by the desktop app
         PROCESS_LAUNCHED_BY_Q = "PROCESS_LAUNCHED_BY_Q",
 
-        /// The shell to use in qterm
+        /// The shell to use in the pty wrapper
         Q_SHELL = "Q_SHELL",
 
         /// Indicates the user is debugging the shell

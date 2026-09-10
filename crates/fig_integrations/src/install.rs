@@ -13,8 +13,6 @@ use fig_os_shim::{
 };
 use fig_util::{
     CLI_BINARY_NAME,
-    OLD_CLI_BINARY_NAMES,
-    OLD_PTY_BINARY_NAMES,
     PTY_BINARY_NAME,
     Shell,
     directories,
@@ -32,7 +30,8 @@ bitflags::bitflags! {
     pub struct InstallComponents: u64 {
         /// Removal of the integrations from user's dotfiles
         const SHELL_INTEGRATIONS    = 0b00000001;
-        /// This handles the removal of the CLI and pty binaries as well as legacy copies
+        /// This handles the removal of the CLI and pty binaries as well as the per shell
+        /// pty copies
         const BINARY                = 0b00000010;
         const DESKTOP_APP           = 0b00001000;
     }
@@ -59,24 +58,17 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
 
         let folders = [directories::home_local_bin()?];
 
-        let mut all_binary_names = vec![CLI_BINARY_NAME, PTY_BINARY_NAME];
-        all_binary_names.extend(OLD_CLI_BINARY_NAMES);
-        all_binary_names.extend(OLD_PTY_BINARY_NAMES);
-
-        let mut pty_names = vec![PTY_BINARY_NAME];
-        pty_names.extend(OLD_PTY_BINARY_NAMES);
+        let all_binary_names = [CLI_BINARY_NAME, PTY_BINARY_NAME];
 
         for folder in folders {
-            for binary_name in &all_binary_names {
+            for binary_name in all_binary_names {
                 let binary_path = folder.join(binary_name);
                 remove_binary(binary_path).await;
             }
 
             for shell in Shell::all() {
-                for pty_name in &pty_names {
-                    let pty_path = folder.join(format!("{shell} ({pty_name})"));
-                    remove_binary(pty_path).await;
-                }
+                let pty_path = folder.join(format!("{shell} ({PTY_BINARY_NAME})"));
+                remove_binary(pty_path).await;
             }
         }
     }
@@ -128,10 +120,7 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
 async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
     use fig_util::consts::APP_BUNDLE_ID;
     use tokio::fs;
-    use tracing::{
-        error,
-        warn,
-    };
+    use tracing::warn;
 
     // Remove launch agents
     if let Ok(home) = directories::home_dir() {
@@ -144,13 +133,6 @@ async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
     // Delete defaults
     tokio::process::Command::new("defaults")
         .args(["delete", APP_BUNDLE_ID])
-        .output()
-        .await
-        .map_err(|err| warn!("Failed to delete defaults: {err}"))
-        .ok();
-
-    tokio::process::Command::new("defaults")
-        .args(["delete", "com.amazon.codewhisperer.shared"])
         .output()
         .await
         .map_err(|err| warn!("Failed to delete defaults: {err}"))
@@ -181,20 +163,6 @@ async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
             .await
             .map_err(|err| warn!("Failed to remove {app_path:?}: {err}"))
             .ok();
-    }
-
-    // Remove the previous codewhisperer data dir only if it is a symlink.
-    if let Ok(old_fig_data_dir) = directories::old_fig_data_dir() {
-        if old_fig_data_dir.exists() {
-            if let Ok(metadata) = fs::symlink_metadata(&old_fig_data_dir).await {
-                if metadata.is_symlink() {
-                    fs::remove_file(&old_fig_data_dir)
-                        .await
-                        .map_err(|err| error!("Failed to remove the old fig data dir {old_fig_data_dir:?}: {err}"))
-                        .ok();
-                }
-            }
-        }
     }
 
     Ok(())

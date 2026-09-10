@@ -124,8 +124,8 @@ fn self_check() {
         ("APP_NAME=\"Fig\" # brand", Some(("APP_NAME", "Fig"))),
         ("export APP_NAME=Fig", Some(("APP_NAME", "Fig"))),
         ("APP_NAME=Fig", Some(("APP_NAME", "Fig"))),
-        ("APP_NAME=\"Amazon Q\"", Some(("APP_NAME", "Amazon Q"))),
-        ("APP_NAME='Amazon Q'", Some(("APP_NAME", "Amazon Q"))),
+        ("APP_NAME=\"Fig Dev\"", Some(("APP_NAME", "Fig Dev"))),
+        ("APP_NAME='Fig Dev'", Some(("APP_NAME", "Fig Dev"))),
         ("APP_NAME = Fig", Some(("APP_NAME", "Fig"))),
         ("APP_NAME=  Fig  ", Some(("APP_NAME", "Fig"))),
         (

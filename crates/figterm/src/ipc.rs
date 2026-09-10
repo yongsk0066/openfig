@@ -49,6 +49,7 @@ use tracing::{
     error,
     info,
     trace,
+    warn,
 };
 
 use crate::MainLoopEvent;
@@ -119,60 +120,69 @@ pub async fn spawn_figterm_ipc(
 
     tokio::spawn(async move {
         loop {
-            if let Ok((stream, _)) = socket_listener.accept().await {
-                let incoming_tx = incoming_tx.clone();
+            let stream = match socket_listener.accept().await {
+                Ok((stream, _)) => stream,
+                Err(err) => {
+                    // `accept` fails transiently (EMFILE, ECONNABORTED). Retrying immediately
+                    // spun this task at 100% CPU for as long as the condition lasted.
+                    warn!(%err, "Failed to accept on the {PTY_BINARY_NAME} socket");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                },
+            };
 
-                let (read_half, mut write_half) = tokio::io::split(stream);
-                let (response_tx, response_rx) = unbounded::<FigtermResponseMessage>();
+            let incoming_tx = incoming_tx.clone();
 
-                tokio::spawn(async move {
-                    let mut read_half = BufferedReader::new(read_half);
-                    let mut rx_thread = tokio::spawn(async move {
-                        loop {
-                            match read_half.recv_message::<FigtermRequestMessage>().await {
-                                Ok(Some(message)) => {
-                                    // debug!("Received message: {message:?}");
-                                    if let Err(err) = incoming_tx.send_async((message, response_tx.clone())).await {
-                                        error!(%err, "No more listeners for incoming messages");
-                                        break;
-                                    }
-                                },
-                                Ok(None) => {
-                                    debug!("Received EOF");
-                                    break;
-                                },
-                                Err(err) => {
-                                    error!("Error receiving message: {err}");
-                                    break;
-                                },
-                            }
-                        }
-                    });
+            let (read_half, mut write_half) = tokio::io::split(stream);
+            let (response_tx, response_rx) = unbounded::<FigtermResponseMessage>();
 
+            tokio::spawn(async move {
+                let mut read_half = BufferedReader::new(read_half);
+                let mut rx_thread = tokio::spawn(async move {
                     loop {
-                        tokio::select! {
-                            // Break once the rx_thread quits
-                            _ = &mut rx_thread => break,
-                            res = response_rx.recv_async() => {
-                                match res {
-                                    Ok(response) => {
-                                        match response.encode_fig_protobuf() {
-                                            Ok(protobuf) => {
-                                                if let Err(err) = write_half.write_all(&protobuf).await {
-                                                    error!(%err, "Failed to send response");
-                                                    break;
-                                                }
-                                            },
-                                            Err(err) => error!(%err, "Failed to encode protobuf")
-                                        }
-                                    }
-                                    Err(_) => break,
+                        match read_half.recv_message::<FigtermRequestMessage>().await {
+                            Ok(Some(message)) => {
+                                // debug!("Received message: {message:?}");
+                                if let Err(err) = incoming_tx.send_async((message, response_tx.clone())).await {
+                                    error!(%err, "No more listeners for incoming messages");
+                                    break;
                                 }
-                            }
+                            },
+                            Ok(None) => {
+                                debug!("Received EOF");
+                                break;
+                            },
+                            Err(err) => {
+                                error!("Error receiving message: {err}");
+                                break;
+                            },
                         }
                     }
                 });
-            }
+
+                loop {
+                    tokio::select! {
+                        // Break once the rx_thread quits
+                        _ = &mut rx_thread => break,
+                        res = response_rx.recv_async() => {
+                            match res {
+                                Ok(response) => {
+                                    match response.encode_fig_protobuf() {
+                                        Ok(protobuf) => {
+                                            if let Err(err) = write_half.write_all(&protobuf).await {
+                                                error!(%err, "Failed to send response");
+                                                break;
+                                            }
+                                        },
+                                        Err(err) => error!(%err, "Failed to encode protobuf")
+                                    }
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                    }
+                }
+            });
         }
     });
 

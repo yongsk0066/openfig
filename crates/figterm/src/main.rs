@@ -268,6 +268,14 @@ where
         return Ok(());
     }
 
+    // Nothing drains the outgoing channel while the desktop app is away, and everything queued is
+    // thrown away by `outgoing_rx.drain()` at the next handshake anyway, so a hook sent now is
+    // pure memory growth: one per keystroke, for as long as the app is closed.
+    if !ipc::desktop_connected() {
+        trace!("Not sending edit buffer: desktop app is not connected");
+        return Ok(());
+    }
+
     match term.get_current_buffer() {
         Some(edit_buffer) => {
             if let Some(cursor_idx) = edit_buffer.cursor_idx.and_then(|i| i.try_into().ok()) {

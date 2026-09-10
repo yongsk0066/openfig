@@ -1,5 +1,9 @@
 //! Utiities for IPC with Tauri App
 
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -48,6 +52,25 @@ use tracing::{
 };
 
 use crate::MainLoopEvent;
+
+/// Whether a desktop app is currently attached to the outgoing channel.
+///
+/// The outgoing channel has to stay unbounded — it also carries request *responses*
+/// (`message.rs`) and a blocking `send` from the main loop, and dropping either of those leaves the
+/// desktop side waiting on a oneshot forever. But while nothing is attached, nothing drains it
+/// either, so every keystroke used to pile an edit-buffer hook onto a queue that is discarded
+/// wholesale by `outgoing_rx.drain()` at the next handshake. Gating the *hooks* on this flag keeps
+/// the queue empty without touching the messages that must not be dropped.
+static DESKTOP_CONNECTED: AtomicBool = AtomicBool::new(false);
+
+/// True while a handshake has succeeded and the sending task is still alive.
+pub fn desktop_connected() -> bool {
+    DESKTOP_CONNECTED.load(Ordering::Acquire)
+}
+
+pub(crate) fn set_desktop_connected(connected: bool) {
+    DESKTOP_CONNECTED.store(connected, Ordering::Release);
+}
 
 /// Connect to the desktop's remote socket.
 ///
@@ -207,6 +230,7 @@ pub async fn spawn_remote_ipc(
 
                     // send outgoing messages
                     outgoing_rx.drain();
+                    set_desktop_connected(true);
                     let outgoing_rx = outgoing_rx.clone();
                     let main_loop_sender = main_loop_sender.clone();
                     let outgoing_task = tokio::spawn(async move {
@@ -250,6 +274,7 @@ pub async fn spawn_remote_ipc(
                     });
 
                     let _ = join!(outgoing_task, incoming_task);
+                    set_desktop_connected(false);
                 }
             }
         }

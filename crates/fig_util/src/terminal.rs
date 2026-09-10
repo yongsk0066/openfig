@@ -31,7 +31,7 @@ pub const MACOS_TERMINALS: &[Terminal] = &[
 /// Other terminals that figterm should launch within that are not full terminal emulators
 pub const SPECIAL_TERMINALS: &[Terminal] = &[Terminal::Tmux, Terminal::Nvim, Terminal::Vim, Terminal::Zellij];
 
-/// Bundle ids of every [`Terminal`] that draws its UI in a webview ([`Terminal::is_xterm`])
+/// Bundle ids of every [`Terminal`] that renders its UI in a webview ([`Terminal::is_xterm`])
 /// and therefore needs `AXManualAccessibility` switched on before the caret can be read.
 ///
 /// Derived from the enum rather than written out, so it cannot drift from

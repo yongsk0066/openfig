@@ -138,7 +138,7 @@ pub struct WindowServerInner {
     /// The bundle id of the process we are running in, so the app never observes its own
     /// autocomplete window.
     own_bundle_id: &'static str,
-    /// Bundle ids of terminals that draw their UI in a webview and need
+    /// Bundle ids of terminals that render their UI in a webview and need
     /// `AXManualAccessibility` switched on before the caret can be read.
     xterm_bundle_ids: &'static [&'static str],
 }

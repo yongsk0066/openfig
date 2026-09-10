@@ -225,7 +225,6 @@ impl CurrentEnvironment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Diagnostics {
-    #[serde(rename = "q-details")]
     pub build_details: BuildDetails,
     pub system_info: SystemInfo,
     pub environment: CurrentEnvironment,

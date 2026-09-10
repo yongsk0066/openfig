@@ -602,8 +602,7 @@ impl DoctorCheck for FigIntegrationsCheck {
             });
         }
 
-        // Check that ~/.local/bin/qterm exists
-        // TODO(grant): Check figterm exe exists
+        // TODO(grant): check that the figterm exe exists in ~/.local/bin
         // let figterm_path = fig_directories::fig_dir()
         //    .context("Could not find ~/.fig")?
         //    .join("bin")
@@ -655,11 +654,11 @@ impl DoctorCheck for PtySocketCheck {
             Ok(session) => session,
             Err(_) => {
                 return Err(doctor_error!(
-                    "Qterm is not running, please restart your terminal. QTERM_SESSION_ID is unset."
+                    "{PTY_BINARY_NAME} is not running, please restart your terminal. {QTERM_SESSION_ID} is unset."
                 ));
             },
         };
-        let socket_path = fig_util::directories::figterm_socket_path(term_session).context("No qterm path")?;
+        let socket_path = fig_util::directories::figterm_socket_path(term_session).context("No figterm socket path")?;
 
         check_socket_perms(&socket_path).await?;
 

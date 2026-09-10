@@ -103,7 +103,7 @@ pub fn config_dir() -> Result<PathBuf> {
     dirs::config_dir().ok_or(DirectoryError::NoHomeDirectory)
 }
 
-/// The q data directory
+/// The app data directory
 ///
 /// - MacOS: `$HOME/Library/Application Support/{data_dir}`
 pub fn fig_data_dir() -> Result<PathBuf> {
@@ -123,7 +123,7 @@ pub fn local_data_dir<Ctx: FsProvider + EnvProvider>(ctx: &Ctx) -> Result<PathBu
     Ok(home_dir_ctx(ctx)?.join("Library/Application Support"))
 }
 
-/// The q cache directory
+/// The app cache directory
 ///
 /// - MacOS: `$HOME/Library/Caches/{data_dir}`
 pub fn cache_dir() -> Result<PathBuf> {
@@ -155,16 +155,16 @@ pub fn runtime_dir() -> Result<PathBuf> {
     dir.ok_or(DirectoryError::NoRuntimeDirectory)
 }
 
-/// The q sockets directory of the local q installation
+/// The sockets directory of the local installation
 ///
-/// - MacOS: $TMPDIR/cwrun
+/// - MacOS: `$TMPDIR/{runtime_dir}`
 pub fn sockets_dir() -> Result<PathBuf> {
     Ok(runtime_dir()?.join(RUNTIME_DIR_NAME))
 }
 
 /// The directory on the host machine where socket files are stored
 ///
-/// - MacOS: $TMPDIR/cwrun
+/// - MacOS: `$TMPDIR/{runtime_dir}`
 pub fn host_sockets_dir() -> Result<PathBuf> {
     sockets_dir()
 }
@@ -184,8 +184,9 @@ pub fn autocomplete_specs_dir() -> Result<PathBuf> {
     Ok(autocomplete_dir()?.join("specs"))
 }
 
-/// The directory to all the fig logs
-/// - MacOS: `$TMPDIR/logs`
+/// The directory holding all of the logs
+///
+/// - MacOS: `$TMPDIR/{cli_binary_name}log`
 pub fn logs_dir() -> Result<PathBuf> {
     use crate::CLI_BINARY_NAME;
     Ok(runtime_dir()?.join(format!("{CLI_BINARY_NAME}log")))
@@ -211,21 +212,21 @@ pub fn utc_backup_dir() -> Result<PathBuf> {
 
 /// The desktop app socket path
 ///
-/// - MacOS: `$TMPDIR/cwrun/desktop.sock`
+/// - MacOS: `$TMPDIR/{runtime_dir}/desktop.sock`
 pub fn desktop_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("desktop.sock"))
 }
 
 /// The path to local remote socket
 ///
-/// - MacOS: `$TMPDIR/cwrun/remote.sock`
+/// - MacOS: `$TMPDIR/{runtime_dir}/remote.sock`
 pub fn local_remote_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("remote.sock"))
 }
 
 /// Get path to a figterm socket
 ///
-/// - MacOS: `$TMPDIR/cwrun/t/$SESSION_ID.sock`
+/// - MacOS: `$TMPDIR/{runtime_dir}/t/$SESSION_ID.sock`
 pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
     Ok(sockets_dir()?.join("t").join(format!("{session_id}.sock")))
 }
@@ -296,7 +297,7 @@ mod tests {
     fn test_socket_paths() {
         assert_eq!(
             host_sockets_dir().unwrap().file_name().unwrap().to_str().unwrap(),
-            format!("cwrun")
+            RUNTIME_DIR_NAME
         );
 
         assert_eq!(

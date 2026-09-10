@@ -19,6 +19,7 @@ use std::io::{
     stdout,
 };
 use std::process::ExitCode;
+use std::sync::LazyLock;
 
 use anstream::{
     eprintln,
@@ -93,7 +94,7 @@ pub enum Processes {
     App,
 }
 
-/// The Amazon Q CLI
+/// The CLI subcommands
 #[deny(missing_docs)]
 #[derive(Debug, PartialEq, Subcommand)]
 pub enum CliRootCommands {
@@ -109,7 +110,7 @@ pub enum CliRootCommands {
     /// Setup cli components
     #[command(alias("install"))]
     Setup(internal::InstallArgs),
-    /// Uninstall Amazon Q
+    /// Uninstall the desktop app and its integrations
     #[command(hide = true)]
     Uninstall {
         /// Force uninstall
@@ -151,24 +152,36 @@ pub enum CliRootCommands {
     Dashboard,
 }
 
-const HELP_TEXT: &str = color_print::cstr! {"
-
-<magenta,em>q</magenta,em> (Amazon Q CLI)
-
-<magenta,em>Popular Subcommands</magenta,em>              <black!><em>Usage:</em> q [subcommand]</black!>
-╭──────────────────────────────────────────────╮
-│ <em>doctor</em>       <black!>Debug installation issues</black!>       │
-│ <em>settings</em>     <black!>Customize appearance & behavior</black!> │
-│ <em>quit</em>         <black!>Quit the app</black!>                    │
-╰──────────────────────────────────────────────╯
-
-<black!>To see all subcommands, use:</black!>
- <black!>❯</black!> q --help-all
-ㅤ
-"};
+/// The root help screen.
+///
+/// `PRODUCT_NAME` and `CLI_BINARY_NAME` come from `branding.env` and are not string
+/// literals, so this is built on first use rather than being a `cstr!` constant. The box
+/// is drawn to a fixed width and the two interpolated names only ever appear at the end of
+/// a line, so a longer binary name cannot misalign it.
+static HELP_TEXT: LazyLock<String> = LazyLock::new(|| {
+    color_print::cformat!(
+        "\n\
+<magenta,em>{cli}</magenta,em> ({product} CLI)\n\
+\n\
+<magenta,em>Popular Subcommands</magenta,em>              <black!><em>Usage:</em> {cli} [subcommand]</black!>\n\
+╭──────────────────────────────────────────────╮\n\
+│ <em>doctor</em>       <black!>Debug installation issues</black!>       │\n\
+│ <em>settings</em>     <black!>Customize appearance & behavior</black!> │\n\
+│ <em>integrations</em> <black!>Manage system integrations</black!>      │\n\
+│ <em>theme</em>        <black!>Get or set the theme</black!>            │\n\
+│ <em>quit</em>         <black!>Quit the app</black!>                    │\n\
+╰──────────────────────────────────────────────╯\n\
+\n\
+<black!>To see all subcommands, use:</black!>\n\
+\x20<black!>❯</black!> {cli} --help-all\n\
+ㅤ\n",
+        cli = CLI_BINARY_NAME,
+        product = PRODUCT_NAME,
+    )
+});
 
 #[derive(Debug, Parser, PartialEq, Default)]
-#[command(version, about, name = CLI_BINARY_NAME, help_template = HELP_TEXT)]
+#[command(version, about, name = CLI_BINARY_NAME, help_template = HELP_TEXT.as_str())]
 pub struct Cli {
     #[command(subcommand)]
     pub subcommand: Option<CliRootCommands>,

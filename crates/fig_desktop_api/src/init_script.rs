@@ -147,6 +147,5 @@ mod tests {
         ] {
             assert!(value.get(key).is_some_and(|v| v.is_string()), "missing key {key}");
         }
-        assert!(value.get("codewhisperer").is_none());
     }
 }

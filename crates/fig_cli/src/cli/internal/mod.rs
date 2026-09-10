@@ -99,10 +99,10 @@ pub struct InstallArgs {
     /// Don't confirm automatic installation.
     #[arg(long)]
     pub no_confirm: bool,
-    /// Force installation of q
+    /// Force installation
     #[arg(long)]
     pub force: bool,
-    /// Install q globally
+    /// Install globally
     #[arg(long)]
     pub global: bool,
 }
@@ -130,8 +130,7 @@ pub enum StateComponent {
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 #[command(hide = true, alias = "_")]
 pub enum InternalSubcommand {
-    /// Command that is run during the PreCmd section of
-    /// the Amazon Q integrations.
+    /// Command that is run during the PreCmd section of the shell integrations.
     PreCmd {
         #[arg(long, allow_hyphen_values = true)]
         alias: Option<String>,
@@ -140,9 +139,9 @@ pub enum InternalSubcommand {
     LocalState(local_state::LocalStateArgs),
     /// Callback used for the internal pseudoterminal
     Callback(CallbackArgs),
-    /// Install the Amazon Q cli
+    /// Install the cli
     Install(InstallArgs),
-    /// Uninstall the Amazon Q cli
+    /// Uninstall the cli
     Uninstall {
         /// Uninstall only the shell integrations
         #[arg(long)]

@@ -12,15 +12,20 @@ pub enum HistoryCommand {
 
 pub type HistorySender = Sender<HistoryCommand>;
 
-pub async fn spawn_history_task() -> HistorySender {
+/// Spawns the task that writes finished commands to the history database.
+///
+/// It runs on the blocking pool, not the runtime: `fig_settings::history` is synchronous rusqlite,
+/// so both opening the database and every insert would otherwise stall whatever else the runtime
+/// thread was doing — which, now that figterm is single-threaded, is the pty select loop.
+pub fn spawn_history_task() -> HistorySender {
     trace!("Spawning history task");
 
     let (sender, receiver) = flume::bounded::<HistoryCommand>(64);
 
-    tokio::task::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         let history = fig_settings::history::History::new();
 
-        while let Ok(command) = receiver.recv_async().await {
+        while let Ok(command) = receiver.recv() {
             match command {
                 HistoryCommand::Insert(command) => {
                     let command_info = fig_settings::history::CommandInfo {

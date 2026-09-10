@@ -646,7 +646,11 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     info!("Pid: {}", Pid::current());
     info!("Pty name: {pty_name}");
 
-    let runtime = runtime::Builder::new_multi_thread()
+    // Single-threaded on purpose: figterm is one `select!` loop plus a handful of I/O tasks, and
+    // everything in that loop is awaited inline anyway, so worker-per-core bought nothing but
+    // threads (one per core, per terminal tab). The one genuinely blocking consumer — the history
+    // database — runs on the blocking pool instead; see `history::spawn_history_task`.
+    let runtime = runtime::Builder::new_current_thread()
         .enable_all()
         .thread_name_fn(|| {
             static ATOMIC_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -660,7 +664,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
 
         let (main_loop_tx, main_loop_rx) = main_loop_channel();
 
-        let history_sender = history::spawn_history_task().await;
+        let history_sender = history::spawn_history_task();
 
         // Spawn thread to handle figterm ipc
         let (figterm_socket_path, incoming_receiver) = spawn_figterm_ipc(&session_id).await?;

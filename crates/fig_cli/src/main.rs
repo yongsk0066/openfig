@@ -24,13 +24,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 fn main() -> Result<ExitCode> {
     color_eyre::install()?;
 
-    let mut args = std::env::args();
-    let subcommand = args.nth(1);
-    let multithread = matches!(
-        subcommand.as_deref(),
-        Some("init" | "_" | "internal" | "completion" | "hook" | "chat")
-    );
-
     let parsed = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(err) => {
@@ -58,13 +51,11 @@ fn main() -> Result<ExitCode> {
 
     let verbose = parsed.verbose > 0;
 
-    let runtime = if multithread {
-        tokio::runtime::Builder::new_multi_thread()
-    } else {
-        tokio::runtime::Builder::new_current_thread()
-    }
-    .enable_all()
-    .build()?;
+    // Single-threaded on purpose. Every subcommand is a short-lived, sequential CLI run: there is
+    // no `block_in_place` anywhere in the crate and nothing here fans out work across cores, so a
+    // worker-per-core runtime only cost thread spawns on the shell's hot path (`q init` and
+    // `q _ pre-cmd` run on every prompt).
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
 
     let result = runtime.block_on(parsed.execute());
 

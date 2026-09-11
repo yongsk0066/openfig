@@ -27,12 +27,12 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
       },
     ];
   }
-  const sortFnStrings = (a, b) => {
+  const sortFnStrings = (a: string, b: string) => {
     return a.localeCompare(b);
   };
-  const alphabeticalSortFilesAndFolders = (arr) => {
-    const dots_arr = [];
-    const other_arr = [];
+  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+    const dots_arr: string[] = [];
+    const other_arr: string[] = [];
     arr.map((elm) => {
       if (elm.toLowerCase() == ".ds_store") return;
       if (elm.slice(0, 1) === ".") dots_arr.push(elm);
@@ -45,7 +45,7 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
     ];
   };
   const temp_array = alphabeticalSortFilesAndFolders(out.split("\n"));
-  const final_array = [];
+  const final_array: Fig.Suggestion[] = [];
   temp_array.forEach((item) => {
     if (!(item === "" || item === null || item === undefined)) {
       const outputType = item.slice(-1) === "/" ? "folder" : "file";

@@ -60,13 +60,13 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
 };
 
 const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
-  const sortFnStrings = (a, b) => {
+  const sortFnStrings = (a: string, b: string) => {
     return a.localeCompare(b);
   };
 
-  const alphabeticalSortFilesAndFolders = (arr) => {
-    const dots_arr = [];
-    const other_arr = [];
+  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+    const dots_arr: string[] = [];
+    const other_arr: string[] = [];
 
     arr.map((fsObject) => {
       if (fsObject.toLowerCase() == ".ds_store") return;
@@ -93,7 +93,7 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
 
   const temp_array = alphabeticalSortFilesAndFolders(arr);
 
-  const final_array = [];
+  const final_array: Fig.Suggestion[] = [];
 
   temp_array.forEach((item) => {
     if (item !== "" && item !== null) {

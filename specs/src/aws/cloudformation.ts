@@ -158,12 +158,12 @@ const filterWithPrefix = (token: string, prefix: string): string => {
   return token.slice(token.lastIndexOf("/") + 1);
 };
 const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
-  const sortFnStrings = (a, b) => {
+  const sortFnStrings = (a: string, b: string) => {
     return a.localeCompare(b);
   };
-  const alphabeticalSortFilesAndFolders = (arr) => {
-    const dots_arr = [];
-    const other_arr = [];
+  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+    const dots_arr: string[] = [];
+    const other_arr: string[] = [];
     arr.map((fsObject) => {
       if (fsObject.toLowerCase() == ".ds_store") return;
       if (fsObject.slice(0, 1) === ".") {
@@ -185,7 +185,7 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
     ];
   };
   const temp_array = alphabeticalSortFilesAndFolders(arr);
-  const final_array = [];
+  const final_array: Fig.Suggestion[] = [];
   temp_array.forEach((item) => {
     if (item !== "" && item !== null) {
       const outputType = item.slice(-1) === "/" ? "folder" : "file";

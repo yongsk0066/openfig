@@ -1,4 +1,4 @@
-const categoryKeysMapping = {
+const categoryKeysMapping: Record<string, string[]> = {
   group: ["name", "gid"],
   host: ["name", "ip_address"],
   mount: ["name"],
@@ -14,7 +14,7 @@ interface PostProcessQuery {
 }
 
 const postProcessQuery =
-  (options: PostProcessQuery): Fig.Generator["postProcess"] =>
+  (options: PostProcessQuery): NonNullable<Fig.Generator["postProcess"]> =>
   (out) => {
     const { attributeKey } = options;
     const values = new Set<string>();
@@ -27,7 +27,7 @@ const postProcessQuery =
       });
     });
 
-    const suggestions = [];
+    const suggestions: Fig.Suggestion[] = [];
     values.forEach((value) => suggestions.push({ name: value }));
 
     return suggestions;

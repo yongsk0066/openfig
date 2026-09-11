@@ -1,3 +1,13 @@
+// `youtube-dl -J`, limited to the fields this spec reads
+interface PlaylistEntry {
+  title: string;
+  uploader: string;
+}
+
+interface Playlist {
+  entries: PlaylistEntry[];
+}
+
 const youtubeDlGenerators: Record<string, Fig.Generator> = {
   listVideos: {
     script: (context) => [
@@ -9,7 +19,8 @@ const youtubeDlGenerators: Record<string, Fig.Generator> = {
 
     postProcess: function (out) {
       try {
-        return JSON.parse(out)["entries"].map((video, index) => {
+        const playlist: Playlist = JSON.parse(out);
+        return playlist["entries"].map((video, index) => {
           return {
             name: `${index + 1} - ${video.title}`,
             description: video.uploader,
@@ -41,8 +52,8 @@ const youtubeDlGenerators: Record<string, Fig.Generator> = {
           ];
       } catch (e) {
         console.error(e);
-        return [];
       }
+      return [];
     },
   },
 };

@@ -40,7 +40,7 @@ const completionSpec: Fig.Spec = {
       command: "php",
       args: ["bin/console", "list", "--format=json"],
     });
-    let subcommands = [];
+    let subcommands: Fig.Subcommand[] = [];
 
     try {
       const commandDefinitions = JSON.parse(stdout) as BinConsoleJSON;

@@ -3,7 +3,9 @@ interface PostProcessPkgFilenames {
 }
 
 const postProcessPkgFilenames =
-  (options: PostProcessPkgFilenames = {}): Fig.Generator["postProcess"] =>
+  (
+    options: PostProcessPkgFilenames = {}
+  ): NonNullable<Fig.Generator["postProcess"]> =>
   (out) => {
     const { pathPrefix = "" } = options;
     const names = new Set<string>();
@@ -16,7 +18,7 @@ const postProcessPkgFilenames =
       }
     });
 
-    const suggestions = [];
+    const suggestions: Fig.Suggestion[] = [];
     names.forEach((name) => suggestions.push({ name }));
 
     return suggestions;

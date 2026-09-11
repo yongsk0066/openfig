@@ -21,10 +21,19 @@ const workerGenerator = {
     }));
   },
 };
+// `xcodebuild -list -json`, limited to the fields this spec reads
+interface XcodeProjectList {
+  project: {
+    configurations: string[];
+    schemes: string[];
+  };
+}
+
 const xcodeConfigGenerator = {
   script: ["bash", "-c", "xcodebuild -project ios/*.xcodeproj  -list -json"],
   postProcess: (scriptOutput: string) => {
-    const configurations = JSON.parse(scriptOutput).project.configurations;
+    const { project }: XcodeProjectList = JSON.parse(scriptOutput);
+    const configurations = project.configurations;
 
     return configurations.map((name) => ({ name }));
   },
@@ -33,7 +42,8 @@ const xcodeConfigGenerator = {
 const xcodeSchemeGenerator = {
   script: ["bash", "-c", "xcodebuild -project ios/*.xcodeproj  -list -json"],
   postProcess: (scriptOutput: string) => {
-    const configurations = JSON.parse(scriptOutput).project.schemes;
+    const { project }: XcodeProjectList = JSON.parse(scriptOutput);
+    const configurations = project.schemes;
 
     return configurations.map((name) => ({ name }));
   },
@@ -60,18 +70,13 @@ type IosRecordType = { name: string };
 const iosGetDevicesSimulatorGenerator = {
   script: ["xcrun", "simctl", "list", "--json", "devices", "available"],
   postProcess: (scriptOutput: string) => {
-    const devices = JSON.parse(scriptOutput).devices;
+    const devices: Record<string, IosRecordType[]> =
+      JSON.parse(scriptOutput).devices;
 
     return Object.entries(devices)
       .map(([_, data]) => data)
-      .reduce<Array<IosRecordType>>(
-        (
-          a: Array<IosRecordType>,
-          b: Array<IosRecordType>
-        ): Array<IosRecordType> => [...a, ...b],
-        []
-      )
-      .map(({ name }: IosRecordType) => ({ name, icon: APPLE_ICON }));
+      .reduce<Array<IosRecordType>>((a, b) => [...a, ...b], [])
+      .map(({ name }) => ({ name, icon: APPLE_ICON }));
   },
 };
 

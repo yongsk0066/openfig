@@ -35,7 +35,7 @@ const parseNodejsVersion = (raw: string): NodejsVersion => {
   };
 };
 const uniqBy = <T = unknown>(arr: T[], callback: (a: T, b: T) => boolean) =>
-  arr.reduce((acc, v) => {
+  arr.reduce<T[]>((acc, v) => {
     if (!acc.some((x) => callback(v, x))) acc.push(v);
     return acc;
   }, []);
@@ -58,9 +58,9 @@ const remoteVersionGenerator: Fig.Generator = {
       .map(parseNodejsVersion);
 
     // The last even major release, that's to say the last LTS.
-    const lastLtsMajor = parsed.find(
-      (version) => version.major % 2 === 0
-    ).major;
+    const lastLts = parsed.find((version) => version.major % 2 === 0);
+    if (!lastLts) return [];
+    const lastLtsMajor = lastLts.major;
     const latests = new Map<number, NodejsVersion>();
 
     const nodeVersion = parsed
@@ -75,7 +75,7 @@ const remoteVersionGenerator: Fig.Generator = {
         if (version.major === lastLtsMajor) return true;
 
         const isLatestRelease =
-          version.original === latests.get(version.major).original;
+          version.original === latests.get(version.major)?.original;
         // If any other LTS, show only its latest release.
         if (version.major % 2 === 0) return isLatestRelease;
         // Otherwise (beta), show only if it is right before or after
@@ -93,7 +93,7 @@ const remoteVersionGenerator: Fig.Generator = {
       (a, b) => a.original === b.original
     ).map((version) =>
       version.ltsName &&
-      latests.get(version.major).original === version.original
+      latests.get(version.major)?.original === version.original
         ? {
             name: `lts/${version.ltsName}`,
             displayName: version.original,

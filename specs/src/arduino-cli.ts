@@ -1,11 +1,27 @@
+// `arduino-cli board list --format json`, limited to the fields this spec reads
+interface MatchingBoard {
+  fqbn: string;
+  name: string;
+}
+
+interface BoardListEntry {
+  matching_boards?: MatchingBoard[];
+  port: { address: string };
+}
+
+type MatchedBoardEntry = BoardListEntry & { matching_boards: MatchingBoard[] };
+
+const hasMatchingBoards = (entry: BoardListEntry): entry is MatchedBoardEntry =>
+  Boolean(entry.matching_boards);
+
 const FQBNs: Fig.Generator = {
   script: ["arduino-cli", "board", "list", "--format", "json"],
   postProcess: (output) => {
     try {
-      const parsedOutput = JSON.parse(output);
+      const parsedOutput: BoardListEntry[] = JSON.parse(output);
 
       const result = parsedOutput
-        .filter((entry) => entry.matching_boards)
+        .filter(hasMatchingBoards)
         .map((entry) => ({
           name: entry.matching_boards[0].fqbn,
           description: `${entry.matching_boards[0].name} on port ${entry.port.address}`,
@@ -21,10 +37,10 @@ const Ports: Fig.Generator = {
   script: ["arduino-cli", "board", "list", "--format", "json"],
   postProcess: (output) => {
     try {
-      const parsedOutput = JSON.parse(output);
+      const parsedOutput: BoardListEntry[] = JSON.parse(output);
 
       const result = parsedOutput
-        .filter((entry) => entry.matching_boards)
+        .filter(hasMatchingBoards)
         .map((entry) => ({
           name: entry.port.address,
           description: `${entry.matching_boards[0].name} port connection`,

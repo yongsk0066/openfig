@@ -12,7 +12,7 @@ const toolchainLocalGenertor: (
       .split("\n")
       .map((toolchain) => toolchain.split(" ")[0]);
 
-    let shortToolchains = [];
+    let shortToolchains: string[] = [];
     if (!excludeShort) {
       shortToolchains = toolchains.map((toolchain) => toolchain.split("-")[0]);
       // dedupe

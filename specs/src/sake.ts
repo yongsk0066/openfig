@@ -40,6 +40,16 @@ const commonCommandSpecificOptions: Fig.Option[] = [
   },
 ];
 
+// `sake list --json` output, limited to the fields this spec reads
+interface SakeCommand {
+  name: string;
+  description?: string;
+}
+
+interface SakeCommandList {
+  groups: Record<string, SakeCommand[]>;
+}
+
 const completionSpec: Fig.Spec = {
   name: "sake",
   description:
@@ -49,13 +59,13 @@ const completionSpec: Fig.Spec = {
       command: "sake",
       args: ["list", "--json"],
     });
-    const commands = JSON.parse(stdout);
-    const subcommands = Object.keys(commands.groups).reduce(
+    const commands: SakeCommandList = JSON.parse(stdout);
+    const subcommands = Object.keys(commands.groups).reduce<Fig.Subcommand[]>(
       (acc, groupName) => {
         const group = commands.groups[groupName];
         return [
           ...acc,
-          ...group.map((command: { name: string; description: string }) => {
+          ...group.map((command) => {
             return {
               name: command.name,
               description: command.description || "The command to run",
@@ -125,21 +135,24 @@ const completionSpec: Fig.Spec = {
         generators: {
           script: ["sake", "list", "--json"],
           postProcess: (output) => {
-            const commands = JSON.parse(output);
-            return Object.keys(commands.groups).reduce((acc, groupName) => {
-              const group = commands.groups[groupName];
-              return [
-                ...acc,
-                ...group.map((command) => {
-                  return {
-                    name: command.name,
-                    description: command.description,
-                    priority: 76,
-                    icon: "🍶",
-                  };
-                }),
-              ];
-            }, []);
+            const commands: SakeCommandList = JSON.parse(output);
+            return Object.keys(commands.groups).reduce<Fig.Suggestion[]>(
+              (acc, groupName) => {
+                const group = commands.groups[groupName];
+                return [
+                  ...acc,
+                  ...group.map((command) => {
+                    return {
+                      name: command.name,
+                      description: command.description,
+                      priority: 76,
+                      icon: "🍶",
+                    };
+                  }),
+                ];
+              },
+              []
+            );
           },
         },
       },

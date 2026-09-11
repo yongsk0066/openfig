@@ -1,3 +1,9 @@
+// https://package.elm-lang.org/search.json, limited to the fields read here
+interface ElmPackage {
+  name: string;
+  summary: string;
+}
+
 const packageList: Fig.Generator = {
   script: [
     "curl",
@@ -10,7 +16,8 @@ const packageList: Fig.Generator = {
     ttl: 1000 * 24 * 60 * 60 * 3, // 3 days
   },
   postProcess: (output) => {
-    return JSON.parse(output).map((package_) => ({
+    const packages: ElmPackage[] = JSON.parse(output);
+    return packages.map((package_) => ({
       name: package_.name,
       description: package_.summary,
     }));

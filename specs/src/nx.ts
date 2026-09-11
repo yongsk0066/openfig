@@ -160,7 +160,7 @@ const preProcessProjects = async (
 
     if (!projectJson) {
       try {
-        projectJson = JSON.parse(
+        const parsed: NxProject = JSON.parse(
           (
             await executeShellCommand({
               command: "cat",
@@ -169,8 +169,9 @@ const preProcessProjects = async (
             })
           ).stdout
         );
+        projectJson = parsed;
 
-        nxProjectPathWithJsonCache.set(projectJsonPath, projectJson);
+        nxProjectPathWithJsonCache.set(projectJsonPath, parsed);
       } catch (error) {
         console.log(error);
       }
@@ -212,7 +213,7 @@ const listMapKeysGenerator = (map: Map<string, unknown>): Fig.Generator => {
     cache: oneDayCache,
     trigger: (newToken, oldToken) =>
       newToken.split(",").length !== oldToken.split(",").length,
-    getQueryTerm: (token) => token.split(",").pop(),
+    getQueryTerm: (token) => token.split(",").pop() ?? "",
     custom: async (
       tokens: string[],
       executeShellCommand: Fig.ExecuteCommandFunction,
@@ -258,7 +259,7 @@ const nxGenerators: NxGenerators = {
       // push all configuration names to the suggestions
       for (const name of nxProjectTargetWithConfigurationsCache.get(
         `${project}:${target}`
-      )) {
+      ) ?? []) {
         suggestions.push({ name });
       }
 
@@ -276,7 +277,7 @@ const nxGenerators: NxGenerators = {
     },
     trigger: (newToken, oldToken) =>
       newToken.split(":").length !== oldToken.split(":").length,
-    getQueryTerm: (token) => token.split(":").pop(),
+    getQueryTerm: (token) => token.split(":").pop() ?? "",
     cache: oneDayCache,
     postProcess: (out) => {
       if (out.indexOf("Installed plugins") > -1) {
@@ -295,6 +296,7 @@ const nxGenerators: NxGenerators = {
           .filter((line) => line.trim().indexOf(" : ") > -1)
           .map((line) => ({ name: line.trim().split(" : ")[0] }));
       }
+      return [];
     },
   },
   list: {
@@ -311,6 +313,7 @@ const nxGenerators: NxGenerators = {
           name: pluginEntry.trim().split(" ")[0],
         }));
       }
+      return [];
     },
   },
   project: {
@@ -343,7 +346,7 @@ const nxGenerators: NxGenerators = {
     trigger: (newToken, oldToken) =>
       newToken.split(":").length !== oldToken.split(":").length,
     // query just the last segment
-    getQueryTerm: (token) => token.split(":").pop(),
+    getQueryTerm: (token) => token.split(":").pop() ?? "",
     // the custom generator
     custom: async (
       tokens: string[],
@@ -371,7 +374,7 @@ const nxGenerators: NxGenerators = {
         }
       } else if (!target) {
         // push all target names to the suggestions and append the seperator if configurations are present
-        for (const name of nxProjectWithTargetsCache.get(project)) {
+        for (const name of nxProjectWithTargetsCache.get(project) ?? []) {
           if (
             nxProjectTargetWithConfigurationsCache.get(`${project}:${name}`)
           ) {
@@ -384,7 +387,7 @@ const nxGenerators: NxGenerators = {
         // push all configuration names to the suggestions
         for (const name of nxProjectTargetWithConfigurationsCache.get(
           `${project}:${target}`
-        )) {
+        ) ?? []) {
           suggestions.push({ name });
         }
       }

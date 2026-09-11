@@ -1,19 +1,26 @@
 // Internal scripts for this spec, not to be confused with the script property
 const scripts = {
   types: ["kubectl", "api-resources", "-o", "name"],
-  typeWithoutName: function (type) {
+  typeWithoutName: function (type: string) {
     return ["kubectl", "get", type, "-o", "custom-columns=:.metadata.name"];
   },
 };
 
 const sharedPostProcessChecks = {
-  connectedToCluster: (out) => {
+  connectedToCluster: (out: string) => {
     return out.includes("The connection to the server");
   },
-  generalError: (out) => {
+  generalError: (out: string) => {
     return out.includes("error:");
   },
 };
+
+// `kubectl get pod -o json`, limited to the fields this spec reads
+interface Pod {
+  spec: {
+    containers: { name: string; image: string }[];
+  };
+}
 
 const sharedPostProcess: Fig.Generator["postProcess"] = (out) => {
   if (
@@ -198,7 +205,8 @@ const sharedArgs: Record<string, Fig.Arg> = {
         ) {
           return [];
         }
-        return JSON.parse(out).spec.containers.map((item) => ({
+        const pod: Pod = JSON.parse(out);
+        return pod.spec.containers.map((item) => ({
           name: item.name,
           description: item.image,
           icon: "fig://icon?type=kubernetes",

@@ -1,5 +1,16 @@
 import sshSpec from "./ssh";
 
+// `tsh clusters --format=json`, limited to the fields this spec reads
+interface TshCluster {
+  cluster_name: string;
+}
+
+// `tsh ls --format=json`, limited to the fields this spec reads
+interface TshNode {
+  spec: { hostname: string };
+  metadata: { expires: string };
+}
+
 const globalOptions: Fig.Option[] = [
   { name: ["-l", "--login"], description: "Remote host login" },
   {
@@ -9,7 +20,10 @@ const globalOptions: Fig.Option[] = [
       name: "Teleport proxy address",
       generators: {
         script: ["tsh", "clusters", "--format=json"],
-        postProcess: (out) => JSON.parse(out).map((elm) => elm.cluster_name),
+        postProcess: (out) => {
+          const clusters: TshCluster[] = JSON.parse(out);
+          return clusters.map((elm) => ({ name: elm.cluster_name }));
+        },
       },
     },
   },
@@ -95,7 +109,8 @@ const completionSpec: Fig.Spec = {
         generators: {
           script: ["tsh", "ls", "--format=json"],
           postProcess: (out) => {
-            return JSON.parse(out).map((elm) => {
+            const nodes: TshNode[] = JSON.parse(out);
+            return nodes.map((elm) => {
               return {
                 name: elm.spec.hostname,
                 description: `Access expires: ${elm.metadata.expires}`,

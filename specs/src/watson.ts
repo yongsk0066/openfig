@@ -19,10 +19,18 @@ const listTags: Fig.Generator = {
   },
 };
 
+// `watson log --json`, limited to the fields this spec reads
+interface WatsonFrame {
+  id: string;
+  project: string;
+  start: string;
+}
+
 const listFrames: Fig.Generator = {
   script: ["watson", "log", "--json", "--reverse"],
   postProcess: (output) => {
-    return JSON.parse(output).map((frame) => ({
+    const frames: WatsonFrame[] = JSON.parse(output);
+    return frames.map((frame) => ({
       name: frame.id.substring(0, 7),
       icon: "⏲",
       displayName: `${frame.id.substring(0, 7)} - ${frame.project} - ${

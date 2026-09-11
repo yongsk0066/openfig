@@ -1,3 +1,6 @@
+// a folder suggestion carrying the full path used to de-duplicate the list
+type FolderSuggestion = Fig.Suggestion & { path: string };
+
 interface ZSuggestion {
   name: string;
   path: string;
@@ -185,7 +188,10 @@ const zoxideCompletionSpec: Fig.Spec = {
         }));
 
         // Prefer zoxide suggestions over cwd suggestions
-        const uniqueFolders = [...zoxideFolders, ...cwdFolders].reduce(
+        const uniqueFolders = [
+          ...zoxideFolders,
+          ...cwdFolders,
+        ].reduce<FolderSuggestion[]>(
           (acc, folder) => {
             if (!acc.some(({ path }) => path === folder.path)) {
               acc.push(folder);

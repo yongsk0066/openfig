@@ -1,3 +1,29 @@
+// `php artisan list --format=json`, limited to the fields this spec reads
+interface Argument {
+  name: string;
+  description: string;
+  is_required: boolean;
+}
+
+interface Option {
+  name: string;
+  shortcut: string;
+  description: string;
+}
+
+interface Command {
+  name: string;
+  description: string;
+  definition: {
+    arguments: Record<string, Argument>;
+    options: Record<string, Option>;
+  };
+}
+
+interface CommandList {
+  commands: Command[];
+}
+
 const completionSpec: Fig.Spec = {
   name: "artisan",
   description: "Laravel Artisan Command",
@@ -6,10 +32,10 @@ const completionSpec: Fig.Spec = {
       command: "php",
       args: ["artisan", "list", "--format=json"],
     });
-    const subcommands = [];
+    const subcommands: Fig.Subcommand[] = [];
 
     try {
-      const commandDefinition = JSON.parse(stdout);
+      const commandDefinition: CommandList = JSON.parse(stdout);
 
       commandDefinition.commands
         .filter((command) => command.name !== "_complete")

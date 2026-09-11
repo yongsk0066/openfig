@@ -16,6 +16,19 @@ interface Option {
   default: string;
 }
 
+interface Command {
+  name: string;
+  description: string;
+  definition: {
+    arguments: Record<string, Argument>;
+    options: Record<string, Option>;
+  };
+}
+
+interface CommandList {
+  commands: Command[];
+}
+
 const completionSpec: Fig.Spec = {
   name: "please",
   description: "Statamic Please command",
@@ -24,10 +37,10 @@ const completionSpec: Fig.Spec = {
       command: "php",
       args: ["please", "list", "--format=json"],
     });
-    const subcommands = [];
+    const subcommands: Fig.Subcommand[] = [];
 
     try {
-      const commandDefinition = JSON.parse(stdout);
+      const commandDefinition: CommandList = JSON.parse(stdout);
 
       commandDefinition.commands.map((command) => {
         subcommands.push({
@@ -35,7 +48,7 @@ const completionSpec: Fig.Spec = {
           description: command.description,
 
           args: Object.values(command.definition.arguments).map(
-            (argument: Argument) => {
+            (argument) => {
               return {
                 name: argument.name,
                 description: argument.description,
@@ -44,7 +57,7 @@ const completionSpec: Fig.Spec = {
             }
           ),
           options: Object.values(command.definition.options).map(
-            (option: Option) => {
+            (option) => {
               const names = [option.name];
 
               if (option.shortcut !== "") {

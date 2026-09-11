@@ -1,10 +1,22 @@
 import { filepaths } from "@fig/spec-generators";
 
+// `dapr list -o json`, limited to the fields this spec reads
+interface DaprApp {
+  appId: string;
+  httpPort: number;
+  age: string;
+}
+
+// docker hub tag search results, limited to the fields this spec reads
+interface DockerTagResults {
+  results: { name: string; last_updated: string }[];
+}
+
 const runningAppsGenerator: Fig.Generator = {
   script: ["dapr", "list", "-A", "-o", "json"],
   postProcess: function (out) {
     try {
-      const appList = JSON.parse(out);
+      const appList: DaprApp[] = JSON.parse(out);
       return appList.map((app) => {
         return {
           name: app.appId,
@@ -36,7 +48,7 @@ const runtimeVersionsGenerator: Fig.Generator = {
       });
 
     try {
-      const data = JSON.parse((await out()).stdout);
+      const data: DockerTagResults = JSON.parse((await out()).stdout);
 
       const results = data.results;
 

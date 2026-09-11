@@ -2,14 +2,27 @@ type HostsGeneratorOptions = {
   append?: string;
 };
 
+// `tailscale status --json`, limited to the fields this spec reads
+interface TailscalePeer {
+  DNSName: string;
+  HostName: string;
+  OS: string;
+}
+
+interface TailscaleStatus {
+  Peer: Record<string, TailscalePeer>;
+}
+
 const hostsGenerator = ({ append }: HostsGeneratorOptions = {}) => ({
   script: ["tailscale", "status", "--json"],
-  postProcess: (output: string) =>
-    Object.values(JSON.parse(output)["Peer"]).map((peer) => ({
+  postProcess: (output: string) => {
+    const status: TailscaleStatus = JSON.parse(output);
+    return Object.values(status["Peer"]).map((peer) => ({
       name: `${peer["DNSName"].split(".")[0]}${append ?? ""}`,
       displayName: peer["HostName"],
       description: peer["OS"],
-    })),
+    }));
+  },
 });
 
 const spec: Fig.Spec = {

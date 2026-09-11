@@ -2,18 +2,16 @@ interface ProjectDetails {
   projectType: string;
 }
 
-const projectsGenerator = {
+const projectsGenerator: Fig.Generator = {
   script: ["ng", "config", "projects"],
   postProcess: function (out) {
     try {
-      const projects = JSON.parse(out);
+      const projects: Record<string, ProjectDetails> = JSON.parse(out);
 
-      return Object.entries(projects).map(
-        ([projectName, details]: [string, ProjectDetails]) => ({
-          name: projectName,
-          description: details.projectType,
-        })
-      );
+      return Object.entries(projects).map(([projectName, details]) => ({
+        name: projectName,
+        description: details.projectType,
+      }));
     } catch (e) {}
     return [];
   },

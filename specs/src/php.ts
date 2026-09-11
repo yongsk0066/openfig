@@ -14,7 +14,7 @@ const completionSpec: Fig.Spec = {
   name: "php",
   description: "Run the PHP interpreter",
   generateSpec: async (tokens, executeShellCommand) => {
-    const subcommands = [];
+    const subcommands: Fig.Subcommand[] = [];
 
     await Promise.all([
       (async () => {
@@ -47,7 +47,7 @@ const completionSpec: Fig.Spec = {
             return suggestions.filter((suggestion) => {
               return (
                 // suggestion.name.endsWith(".php") ||
-                suggestion.name.indexOf(".") === -1
+                suggestion.name?.indexOf(".") === -1
               );
             });
           },

@@ -1,3 +1,8 @@
+// `heroku apps --json`, limited to the fields this spec reads
+interface HerokuApp {
+  name: string;
+}
+
 export const getAppGenerator: Fig.Generator = {
   script: ["heroku", "apps", "--all", "--json"],
   cache: {
@@ -6,7 +11,8 @@ export const getAppGenerator: Fig.Generator = {
   scriptTimeout: 15000,
   postProcess: function (out) {
     try {
-      return JSON.parse(out).map((app) => {
+      const apps: HerokuApp[] = JSON.parse(out);
+      return apps.map((app) => {
         return {
           name: app.name,
           description: app.name,

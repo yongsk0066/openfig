@@ -554,7 +554,8 @@ const createCommand: Fig.Subcommand = {
             ttl: 100 * 24 * 60 * 60 * 1000, // 100days
           },
           postProcess: (output) => {
-            return JSON.parse(output).map((branch) => {
+            const entries: { name?: string }[] = JSON.parse(output);
+            return entries.map((branch) => {
               const template = branch?.name;
               return {
                 name: `@nativescript/${template}`,

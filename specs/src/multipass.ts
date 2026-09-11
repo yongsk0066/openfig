@@ -42,6 +42,17 @@ const sharedOpts: Record<string, Fig.Option> = {
   },
 };
 
+// `multipass list --format=json`, limited to the fields this spec reads
+interface MultipassInstance {
+  name: string;
+  state: string;
+  release: string;
+}
+
+interface MultipassInstanceList {
+  list: MultipassInstance[];
+}
+
 const multipassGenerators: Record<string, Fig.Generator> = {
   allAvailableImages: {
     script: ["multipass", "find", "--format=json"],
@@ -58,53 +69,45 @@ const multipassGenerators: Record<string, Fig.Generator> = {
   allAvailableInstances: {
     script: ["multipass", "list", "--format=json"],
     postProcess: (out) => {
-      return JSON.parse(out).list.map((instance) => {
-        if (instance.state !== "Deleted") {
-          return {
-            name: instance.name,
-            description: instance.release,
-          };
-        }
-      });
+      const { list }: MultipassInstanceList = JSON.parse(out);
+      return list.flatMap((instance) =>
+        instance.state !== "Deleted"
+          ? [{ name: instance.name, description: instance.release }]
+          : []
+      );
     },
   },
   allRunningInstances: {
     script: ["multipass", "list", "--format=json"],
     postProcess: (out) => {
-      return JSON.parse(out).list.map((instance) => {
-        if (instance.state === "Running") {
-          return {
-            name: instance.name,
-            description: instance.release,
-          };
-        }
-      });
+      const { list }: MultipassInstanceList = JSON.parse(out);
+      return list.flatMap((instance) =>
+        instance.state === "Running"
+          ? [{ name: instance.name, description: instance.release }]
+          : []
+      );
     },
   },
   allStoppedInstances: {
     script: ["multipass", "list", "--format=json"],
     postProcess: (out) => {
-      return JSON.parse(out).list.map((instance) => {
-        if (instance.state === "Stopped") {
-          return {
-            name: instance.name,
-            description: instance.release,
-          };
-        }
-      });
+      const { list }: MultipassInstanceList = JSON.parse(out);
+      return list.flatMap((instance) =>
+        instance.state === "Stopped"
+          ? [{ name: instance.name, description: instance.release }]
+          : []
+      );
     },
   },
   allDeletedInstances: {
     script: ["multipass", "list", "--format=json"],
     postProcess: (out) => {
-      return JSON.parse(out).list.map((instance) => {
-        if (instance.state === "Deleted") {
-          return {
-            name: instance.name,
-            description: instance.release,
-          };
-        }
-      });
+      const { list }: MultipassInstanceList = JSON.parse(out);
+      return list.flatMap((instance) =>
+        instance.state === "Deleted"
+          ? [{ name: instance.name, description: instance.release }]
+          : []
+      );
     },
   },
 };

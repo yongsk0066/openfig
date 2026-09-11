@@ -516,10 +516,12 @@ const defaultCommands: Fig.Subcommand[] = [
 
             type GeneratorCommand = [string, string[]];
 
-            const dict: GeneratorCommand[] = ["Rails:", ...lines].reduce(
+            const dict = ["Rails:", ...lines].reduce<GeneratorCommand[]>(
               (arr, line) => {
-                if (line.endsWith(":"))
-                  return [...arr, [line.replace(":", ""), []]];
+                if (line.endsWith(":")) {
+                  const entry: GeneratorCommand = [line.replace(":", ""), []];
+                  return [...arr, entry];
+                }
 
                 const trimmed = line.trim();
                 if (!trimmed.length) return arr;

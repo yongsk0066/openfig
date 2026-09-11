@@ -1,3 +1,9 @@
+// `pulumi stack ls --json`, limited to the fields this spec reads
+interface PulumiStack {
+  name: string;
+  description?: string;
+}
+
 const stacksGenerator: Fig.Generator = {
   cache: {
     cacheByDirectory: true,
@@ -5,7 +11,8 @@ const stacksGenerator: Fig.Generator = {
   script: ["pulumi", "stack", "ls", "--json"],
   postProcess: (out) => {
     try {
-      return JSON.parse(out).map((stack) => ({
+      const stacks: PulumiStack[] = JSON.parse(out);
+      return stacks.map((stack) => ({
         name: stack.name,
         description: stack.description,
       }));

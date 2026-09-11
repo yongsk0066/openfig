@@ -38,6 +38,11 @@ interface ComposerListOutput {
 
 const PACKAGE_REGEXP = new RegExp("^.*/.*$");
 
+// packagist.org/search.json, limited to the fields this spec reads
+interface PackagistSearchResults {
+  results: { name: string; description: string }[];
+}
+
 const searchGenerator: Fig.Generator = {
   script: function (context) {
     if (context[context.length - 1] === "") return undefined;
@@ -52,7 +57,8 @@ const searchGenerator: Fig.Generator = {
   },
   postProcess: function (out) {
     try {
-      return JSON.parse(out).results.map(
+      const { results }: PackagistSearchResults = JSON.parse(out);
+      return results.map(
         (item) =>
           ({
             name: item.name,
@@ -93,7 +99,7 @@ const packagesGenerator: Fig.Generator = {
   },
 };
 
-function filterRealDependencies(dependencies) {
+function filterRealDependencies(dependencies: Record<string, string>) {
   return Object.keys(dependencies).filter((dependency) =>
     dependency.match(PACKAGE_REGEXP)
   );

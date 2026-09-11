@@ -93,10 +93,10 @@ const condaSearchGenerator: Fig.Generator = {
   postProcess(out) {
     let searchResults: Array<Fig.Suggestion> = [];
     try {
-      const parsed = JSON.parse(out);
+      const parsed: Record<string, SearchItem[]> = JSON.parse(out);
       // just get the names of the packages
       searchResults = Object.entries(parsed).map(
-        ([key, value]: [string, SearchItem[]]) => {
+        ([key, value]) => {
           return <Fig.Suggestion>{
             name: key,
             icon: "fig://icon?type=package",

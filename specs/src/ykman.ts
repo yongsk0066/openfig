@@ -1,4 +1,4 @@
-const configModeGenerator = {
+const configModeGenerator: Fig.Generator = {
   trigger: "+",
   custom: async (tokens, _) => {
     const previouslyAdded = tokens[tokens.length - 1].split("+");

@@ -57,15 +57,15 @@ var customArgument: Fig.Arg = {
         ];
       }
       // Sorting function for files and folders. Just alphabetical
-      const sortFnStrings = (a, b) => {
+      const sortFnStrings = (a: string, b: string) => {
         // Use localeCompare.
         return a.localeCompare(b);
       };
 
       // Sort files and folders by putting non dot files first then "../", then dot files
-      const alphabeticalSortFilesAndFolders = (arr) => {
-        var dots_arr = [];
-        var other_arr = [];
+      const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+        const dots_arr: string[] = [];
+        const other_arr: string[] = [];
 
         arr.map((elm) => {
           if (elm.toLowerCase() == ".ds_store") return;
@@ -84,7 +84,7 @@ var customArgument: Fig.Arg = {
       // Create array from output
       var temp_array = alphabeticalSortFilesAndFolders(out.split("\n"));
 
-      var final_array = [];
+      const final_array: Fig.Suggestion[] = [];
 
       // Then loop through them and add them to the final_array depending on the template type
       temp_array.forEach((item) => {

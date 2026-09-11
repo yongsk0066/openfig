@@ -1,4 +1,4 @@
-const FAVICONS = {
+const FAVICONS: Record<string, string> = {
   vanilla:
     "https://upload.wikimedia.org/wikipedia/commons/6/6a/JavaScript-logo.png?20120221235433",
   "vanilla-ts": "https://www.typescriptlang.org/favicon-32x32.png",

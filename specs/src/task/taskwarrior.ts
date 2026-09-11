@@ -25,23 +25,37 @@ const RECURRING_STRINGS = [
 
 const icon = "https://f-droid.org/repo/icons-640/kvj.taskw.3.png";
 
+// the subset of `task export` JSON fields this spec reads
+interface ExportedTask {
+  id: number;
+  description: string;
+  status: string;
+  project?: string;
+  tags?: string[];
+}
+
+const toSuggestions = (names: string[]): Fig.Suggestion[] =>
+  names.map((name) => ({ name }));
+
 // build out the available recurring strings
-const buildRecurringSuggestions = () => {
-  return RECURRING_STRINGS.map((recur) => `recur:${recur}`);
+const buildRecurringSuggestions = (): Fig.Suggestion[] => {
+  return toSuggestions(RECURRING_STRINGS.map((recur) => `recur:${recur}`));
 };
 
 // build out the available project suggestions
-const buildProjectSuggestions = (tasks) => {
+const buildProjectSuggestions = (tasks: ExportedTask[]): Fig.Suggestion[] => {
   const projects = tasks
     .filter((task) => task.status !== "completed")
-    .reduce((acc, task) => {
-      return (
-        acc[task.project] ? ++acc[task.project] : (acc[task.project] = 1), acc
-      );
+    .reduce<Record<string, number>>((acc, task) => {
+      const { project } = task;
+      if (project) {
+        acc[project] = (acc[project] ?? 0) + 1;
+      }
+      return acc;
     }, {});
 
-  const projectFilters = [];
-  for (var project in projects) {
+  const projectFilters: Fig.Suggestion[] = [];
+  for (const project in projects) {
     projectFilters.push({
       name: `project:${project}`,
       displayName: `Project: ${project}`,
@@ -88,7 +102,7 @@ const DEFAULT_TAGS = [
 ];
 
 // build out list of the default tags for the filters
-const buildDefaultTagSuggestions = () => {
+const buildDefaultTagSuggestions = (): Fig.Suggestion[] => {
   return DEFAULT_TAGS.map((tag) => {
     return {
       name: `+${tag}`,
@@ -99,15 +113,8 @@ const buildDefaultTagSuggestions = () => {
 };
 
 // build the available tag suggestions
-const buildTagSuggestions = (tasks) => {
-  const tags = [
-    ...new Set(
-      tasks
-        .filter((task) => task.hasOwnProperty("tags"))
-        .map((task) => task.tags)
-        .flat()
-    ),
-  ];
+const buildTagSuggestions = (tasks: ExportedTask[]): Fig.Suggestion[] => {
+  const tags = [...new Set(tasks.flatMap((task) => task.tags ?? []))];
 
   return tags.map((tag) => {
     return {
@@ -119,15 +126,8 @@ const buildTagSuggestions = (tasks) => {
 };
 
 // build the available untag suggestions
-const buildUnTagSuggestions = (tasks) => {
-  const tags = [
-    ...new Set(
-      tasks
-        .filter((task) => task.hasOwnProperty("tags"))
-        .map((task) => task.tags)
-        .flat()
-    ),
-  ];
+const buildUnTagSuggestions = (tasks: ExportedTask[]): Fig.Suggestion[] => {
+  const tags = [...new Set(tasks.flatMap((task) => task.tags ?? []))];
 
   return tags.map((tag) => {
     return {
@@ -139,7 +139,7 @@ const buildUnTagSuggestions = (tasks) => {
 };
 
 // build out the task suggestions
-const buildTaskSuggestions = (tasks) => {
+const buildTaskSuggestions = (tasks: ExportedTask[]): Fig.Suggestion[] => {
   return tasks
     .filter((task) => task.status !== "completed")
     .map((task) => {
@@ -195,8 +195,8 @@ const DATE_STRINGS = [
 ];
 
 // build the date suggestion attributes
-const buildDateSuggestions = () => {
-  return [
+const buildDateSuggestions = (): Fig.Suggestion[] => {
+  return toSuggestions([
     ...DATE_STRINGS.map((date) => `due:${date}`),
     ...DATE_STRINGS.map((date) => `due.by:${date}`),
     ...DATE_STRINGS.map((date) => `due.before:${date}`),
@@ -217,26 +217,26 @@ const buildDateSuggestions = () => {
     ...DATE_STRINGS.map((date) => `entry.by:${date}`),
     ...DATE_STRINGS.map((date) => `entry.before:${date}`),
     ...DATE_STRINGS.map((date) => `entry.after:${date}`),
-  ];
+  ]);
 };
 
 const PRIORITIES = ["H", "M", "L"];
 
 // build the available priorites
-const buildPrioritiesSuggestions = () => {
-  return [
+const buildPrioritiesSuggestions = (): Fig.Suggestion[] => {
+  return toSuggestions([
     ...PRIORITIES.map((pr) => `priority:${pr}`),
     ...PRIORITIES.map((pr) => `priority.is:${pr}`),
     ...PRIORITIES.map((pr) => `priority.not:${pr}`),
     "priority.none:",
-  ];
+  ]);
 };
 
 // build the filter list with tasks
 const filtersWithTasks: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
-    const tasks = JSON.parse(output);
+    const tasks: ExportedTask[] = JSON.parse(output);
     const filters = [
       ...buildTaskSuggestions(tasks),
       ...buildProjectSuggestions(tasks),
@@ -253,7 +253,7 @@ const filtersWithTasks: Fig.Generator = {
 const listTasks: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
-    const tasks = JSON.parse(output);
+    const tasks: ExportedTask[] = JSON.parse(output);
     return buildTaskSuggestions(tasks);
   },
 };
@@ -262,7 +262,7 @@ const listTasks: Fig.Generator = {
 const filters: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
-    const tasks = JSON.parse(output);
+    const tasks: ExportedTask[] = JSON.parse(output);
     const filters = [
       ...buildProjectSuggestions(tasks),
       ...buildTagSuggestions(tasks),
@@ -278,7 +278,7 @@ const filters: Fig.Generator = {
 const modifications: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
-    const tasks = JSON.parse(output);
+    const tasks: ExportedTask[] = JSON.parse(output);
     const filters = [
       ...buildProjectSuggestions(tasks),
       ...buildTagSuggestions(tasks),

@@ -168,7 +168,12 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "iam", "list-roles"],
     postProcess: (out) => {
       try {
-        const list = JSON.parse(out)["Roles"];
+        const list: {
+          Arn: string;
+          AssumeRolePolicyDocument: {
+            Statement: { Principal: { Service: string } }[];
+          };
+        }[] = JSON.parse(out)["Roles"];
         return list
           .filter((elm) => {
             const policyDocument = elm["AssumeRolePolicyDocument"];
@@ -309,7 +314,8 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "amplify", "list-apps"],
     postProcess: (out) => {
       try {
-        const list = JSON.parse(out)["Roles"];
+        const list: { productionBranch?: { branchName: string } }[] =
+          JSON.parse(out)["Roles"];
         return list.map((elm) => {
           const prodBranch = elm["productionBranch"];
           if (prodBranch) {

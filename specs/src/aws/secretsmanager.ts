@@ -90,7 +90,7 @@ const generators: Record<string, Fig.Generator> = {
     ],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["SecretList"];
+        const list: { Name: string }[] = JSON.parse(out)["SecretList"];
         return list.map((item) => ({
           name: item["Name"],
         }));
@@ -109,7 +109,7 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "kms", "list-keys", "--page-size", "100"],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["Keys"];
+        const list: { KeyId: string }[] = JSON.parse(out)["Keys"];
         return list.map((item) => ({
           name: item["KeyId"],
         }));
@@ -160,7 +160,7 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "kms", "list-keys", "--page-size", "100"],
     postProcess: function (out, tokens) {
       try {
-        const list = JSON.parse(out)["Keys"];
+        const list: { KeyId: string }[] = JSON.parse(out)["Keys"];
         return list.flatMap((secret) => {
           return awsRegions.flatMap((region) => {
             return {
@@ -181,7 +181,8 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "lambda", "list-functions", "--page-size", "100"],
     postProcess: function (out, tokens) {
       try {
-        const list = JSON.parse(out)["Functions"];
+        const list: { FunctionArn: string }[] =
+          JSON.parse(out)["Functions"];
         return list.map((item) => ({
           name: item["FunctionArn"],
         }));
@@ -255,7 +256,7 @@ const generators: Record<string, Fig.Generator> = {
           command: "aws",
           args: ["secretsmanager", "describe-secret", "--secret-id", secretId],
         });
-        const versions = JSON.parse(stdout)["Tags"];
+        const versions: { Key: string }[] = JSON.parse(stdout)["Tags"];
         return versions.map((elm) => ({ name: elm["Key"] }));
       } catch (e) {
         console.log(e);

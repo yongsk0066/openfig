@@ -97,7 +97,7 @@ const customGeneratorWithFilter = async (
       command: "aws",
       args,
     });
-    const list = JSON.parse(stdout)[parentKey];
+    const list: Record<string, string>[] = JSON.parse(stdout)[parentKey];
     return list
       .filter((resource) => {
         return resource.ResourceStatus === filter;

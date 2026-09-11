@@ -1,7 +1,8 @@
 const bucketGenerator: Fig.Generator = {
   script: ["aws", "s3api", "list-buckets"],
   postProcess: function (out) {
-    const json = JSON.parse(out);
+    const json: { Buckets: { Name: string; CreationDate: string }[] } =
+      JSON.parse(out);
     return json.Buckets.map((bucket) => {
       let date;
       try {

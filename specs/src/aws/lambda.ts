@@ -299,7 +299,7 @@ const listCustomSIDGenerator = async (
       args,
     });
     const policies = JSON.parse(stdout)["Policy"];
-    const statement = JSON.parse(policies)["Statement"];
+    const statement: { Sid: string }[] = JSON.parse(policies)["Statement"];
     return statement.map((elm) => {
       return {
         name: elm["Sid"],
@@ -576,7 +576,7 @@ const generators: Record<string, Fig.Generator> = {
           command: "aws",
           args,
         });
-        const list = JSON.parse(stdout)["Versions"];
+        const list: { Version: string }[] = JSON.parse(stdout)["Versions"];
         return list
           .filter((elm) => elm.Version !== "$LATEST")
           .map((elm) => {
@@ -727,7 +727,8 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "lambda", "list-layers"],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["Layers"];
+        const list: { LatestMatchingVersion: { LayerVersionArn: string } }[] =
+          JSON.parse(out)["Layers"];
         return list.map((elm) => {
           return {
             name: elm["LatestMatchingVersion"]["LayerVersionArn"],
@@ -747,7 +748,8 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "efs", "describe-file-systems"],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["FileSystems"];
+        const list: { FileSystemArn: string }[] =
+          JSON.parse(out)["FileSystems"];
         return list.map((elm) => {
           const name = elm["FileSystemArn"] as string;
           return {
@@ -904,7 +906,7 @@ const generators: Record<string, Fig.Generator> = {
             },
           ];
         }
-        const list = JSON.parse(stdout)["Versions"];
+        const list: { VersionId: string }[] = JSON.parse(stdout)["Versions"];
         return list
           .filter((elm) => elm["VersionId"] !== "null")
           .map((elm) => {

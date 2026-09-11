@@ -326,7 +326,7 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "kms", "list-keys", "--page-size", "100"],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["Keys"];
+        const list: { KeyId: string }[] = JSON.parse(out)["Keys"];
         return list.map((item) => ({
           name: item["KeyId"],
         }));

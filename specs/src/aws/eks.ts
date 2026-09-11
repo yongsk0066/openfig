@@ -75,7 +75,12 @@ const listRolesForPrincipal = (
   principal: string
 ): Fig.Suggestion[] => {
   try {
-    const roles = JSON.parse(out)["Roles"];
+    const roles: {
+      Arn: string;
+      AssumeRolePolicyDocument: {
+        Statement: { Principal: { Service: string } }[];
+      };
+    }[] = JSON.parse(out)["Roles"];
     return roles
       .filter((role) => {
         const policyDocument = role["AssumeRolePolicyDocument"];
@@ -197,7 +202,7 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "kms", "list-keys"],
     postProcess: function (out) {
       try {
-        const list = JSON.parse(out)["Keys"];
+        const list: { KeyArn: string }[] = JSON.parse(out)["Keys"];
         return list.map((key) => {
           return {
             name: `resources=secrets,provider={keyArn=${key["KeyArn"]}}`,
@@ -229,7 +234,8 @@ const generators: Record<string, Fig.Generator> = {
     script: ["aws", "eks", "describe-addon-versions"],
     postProcess: (out) => {
       try {
-        const addons = JSON.parse(out)["addons"];
+        const addons: { addonVersions: { addonVersion: string }[] }[] =
+          JSON.parse(out)["addons"];
         return addons
           .map((addon) => {
             return addon["addonVersions"].map((version) => {
@@ -276,7 +282,8 @@ const generators: Record<string, Fig.Generator> = {
           command: "aws",
           args: ["eks", "describe-cluster", "--name", param],
         });
-        const cluster = JSON.parse(stdout)["cluster"];
+        const cluster: { resourcesVpcConfig: { subnetIds: string[] } } =
+          JSON.parse(stdout)["cluster"];
         const subnets = cluster["resourcesVpcConfig"]["subnetIds"];
         return subnets.map((subnet) => {
           return {

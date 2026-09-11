@@ -232,7 +232,8 @@ const listDimensionTypes = async (
       command: "aws",
       args: ["cloudwatch", command, option, tokens[idx + 1]],
     });
-    const metrics = JSON.parse(stdout)[parentKey];
+    const metrics: Record<string, { Name: string; Value: string }[]>[] =
+      JSON.parse(stdout)[parentKey];
     // traverse JSON & compose key-value style suggestion
     return metrics
       .map((metric) => {
@@ -355,8 +356,11 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
   });
   return finalArr;
 };
-const uniqueNames = (value, index, self) =>
-  self.map((x) => x.name).indexOf(value.name) === index;
+const uniqueNames = (
+  value: Fig.Suggestion,
+  index: number,
+  self: Fig.Suggestion[]
+) => self.map((x) => x.name).indexOf(value.name) === index;
 const triggerPrefix = (
   newToken: string,
   oldToken: string,

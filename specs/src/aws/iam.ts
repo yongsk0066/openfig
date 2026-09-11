@@ -282,7 +282,9 @@ const listCustomGenerator = async (
       args: ["iam", command, option, param],
     });
     const policies = JSON.parse(stdout)[parentKey];
-    return policies.map((elm) => (childKey ? elm[childKey] : elm));
+    return policies.map((elm: Record<string, string>) =>
+      childKey ? elm[childKey] : elm
+    );
   } catch (e) {
     console.log(e);
   }
@@ -295,7 +297,9 @@ const postPrecessGenerator = (
 ): Fig.Suggestion[] => {
   try {
     const list = JSON.parse(out)[parentKey];
-    return list.map((elm) => (childKey ? elm[childKey] : elm));
+    return list.map((elm: Record<string, string>) =>
+      childKey ? elm[childKey] : elm
+    );
   } catch (error) {
     console.error(error);
   }
@@ -412,7 +416,8 @@ const generators: Record<string, Fig.Generator> = {
             param,
           ],
         });
-        const policies = JSON.parse(stdout)["InstanceProfile"];
+        const policies: { Roles: { RoleName: string }[] } =
+          JSON.parse(stdout)["InstanceProfile"];
         return policies["Roles"].map((elm) => {
           return {
             name: elm["RoleName"],

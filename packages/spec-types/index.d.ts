@@ -1157,9 +1157,9 @@ declare namespace Fig {
      */
     script?:
       | string[]
-      | Function<string[], string[]>
+      | Function<string[], string[] | undefined>
       | ExecuteCommandInput
-      | Function<string[], ExecuteCommandInput>;
+      | Function<string[], ExecuteCommandInput | undefined>;
     /**
      * Set the execution timeout of the command specified in the `script` prop.
      * @defaultValue 5000

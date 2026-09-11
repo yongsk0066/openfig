@@ -1,6 +1,5 @@
 const completionSpec: Fig.Spec = {
   name: "kafkaconnect",
-  description: null,
   subcommands: [
     {
       name: "create-connector",

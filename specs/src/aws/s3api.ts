@@ -18,7 +18,6 @@ const bucketGenerator: Fig.Generator = {
 };
 const completionSpec: Fig.Spec = {
   name: "s3api",
-  description: null,
   subcommands: [
     {
       name: "abort-multipart-upload",

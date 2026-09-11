@@ -1,6 +1,5 @@
 const completionSpec: Fig.Spec = {
   name: "personalize-runtime",
-  description: null,
   subcommands: [
     {
       name: "get-action-recommendations",

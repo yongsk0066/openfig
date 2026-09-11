@@ -1187,7 +1187,6 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "kafkaconnect",
-      description: null,
       loadSpec: "aws/kafkaconnect",
     },
     {
@@ -1216,12 +1215,10 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "kinesis-video-archived-media",
-      description: null,
       loadSpec: "aws/kinesis-video-archived-media",
     },
     {
       name: "kinesis-video-media",
-      description: null,
       loadSpec: "aws/kinesis-video-media",
     },
     {
@@ -1249,7 +1246,6 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "kinesisvideo",
-      description: null,
       loadSpec: "aws/kinesisvideo",
     },
     {
@@ -1290,7 +1286,6 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "lexv2-models",
-      description: null,
       loadSpec: "aws/lexv2-models",
     },
     {
@@ -1713,7 +1708,6 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "personalize-runtime",
-      description: null,
       loadSpec: "aws/personalize-runtime",
     },
     {
@@ -2397,7 +2391,6 @@ const completionSpec: Fig.Spec = {
     },
     {
       name: "s3api",
-      description: null,
       loadSpec: "aws/s3api",
     },
     {

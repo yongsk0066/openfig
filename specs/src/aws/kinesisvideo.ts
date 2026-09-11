@@ -1,6 +1,5 @@
 const completionSpec: Fig.Spec = {
   name: "kinesisvideo",
-  description: null,
   subcommands: [
     {
       name: "create-signaling-channel",

@@ -1,6 +1,5 @@
 const completionSpec: Fig.Spec = {
   name: "lexv2-models",
-  description: null,
   subcommands: [
     {
       name: "batch-create-custom-vocabulary-item",

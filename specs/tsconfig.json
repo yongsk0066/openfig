@@ -7,11 +7,12 @@
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    /* Still off for the 1,480 upstream spec files (counts measured on top of
-       strict): noUnusedLocals 23 (unused imports, dead option/generator
-       declarations), noUnusedParameters 56 (mostly generator callbacks that
-       ignore `tokens`). Both are lint concerns, handled by oxlint. */
-    "noUnusedLocals": false,
+    /* noUnusedParameters stays off for the 1,480 upstream spec files: 31 of
+       its 56 hits are leading parameters of positional generator callbacks
+       that cannot be dropped while a later one is used. oxlint owns that
+       case (`args: "after-used"` for specs/src); the 25 droppable ones are
+       already gone. */
+    "noUnusedLocals": true,
     "noUnusedParameters": false,
     "noEmit": true
   },

@@ -35,12 +35,22 @@ interface BinConsoleJSON {
   }[];
 }
 
-const getEnvConfig = async (executeShellCommand) => {
-  const command = "php -r 'print(json_encode(require \"app/etc/env.php\"));'";
-  const out = await executeShellCommand(command);
-  return JSON.parse(out);
+interface EnvConfig {
+  cache_types: Record<string, unknown>;
+}
+
+const getEnvConfig = async (
+  executeShellCommand: Fig.ExecuteCommandFunction
+): Promise<EnvConfig> => {
+  const { stdout } = await executeShellCommand({
+    command: "php",
+    args: ["-r", 'print(json_encode(require "app/etc/env.php"));'],
+  });
+  return JSON.parse(stdout);
 };
-const getCacheTypes = async (executeShellCommand) => {
+const getCacheTypes = async (
+  executeShellCommand: Fig.ExecuteCommandFunction
+) => {
   const env = await getEnvConfig(executeShellCommand);
   return Object.keys(env.cache_types);
 };

@@ -3,6 +3,11 @@ const genericPathArg: Fig.Arg = {
   template: "filepaths",
 };
 
+// `bosh --json deployments`, limited to the fields this spec reads
+interface BoshTables {
+  Tables: { Rows: { name: string }[] }[];
+}
+
 const deployments: Fig.Generator = {
   script: ["bosh", "--json", "deployments"],
   postProcess: function (out) {
@@ -10,8 +15,8 @@ const deployments: Fig.Generator = {
       return [];
     }
     try {
-      const parsedOutput = JSON.parse(out);
-      return parsedOutput.Tables[0].Rows.forEach((deployment) => {
+      const parsedOutput: BoshTables = JSON.parse(out);
+      return parsedOutput.Tables[0].Rows.map((deployment) => {
         return {
           name: deployment.name,
           description: "Deployment",

@@ -1,3 +1,19 @@
+// `doppler <resource> --json`, limited to the fields this spec reads
+interface DopplerEnvironment {
+  id: string;
+  name: string;
+}
+
+interface DopplerConfig {
+  name: string;
+  environment: string;
+}
+
+interface DopplerProject {
+  id: string;
+  name: string;
+}
+
 const enviornmentsGenerator: Fig.Generator = {
   cache: {
     strategy: "stale-while-revalidate",
@@ -7,10 +23,10 @@ const enviornmentsGenerator: Fig.Generator = {
   script: ["doppler", "environments", "--json"],
   postProcess: (out) => {
     try {
-      const obj = JSON.parse(out);
+      const obj: DopplerEnvironment[] = JSON.parse(out);
       return obj.map((o) => ({
         name: o.id,
-        desciption: o.name,
+        description: o.name,
         priority: 100,
       }));
     } catch {
@@ -27,10 +43,10 @@ const configGenerators: Fig.Generator = {
   script: ["doppler", "configs", "--json"],
   postProcess: (out) => {
     try {
-      const obj = JSON.parse(out);
+      const obj: DopplerConfig[] = JSON.parse(out);
       return obj.map((o) => ({
         name: o.name,
-        desciption: o.environment,
+        description: o.environment,
         priority: 100,
       }));
     } catch {
@@ -47,7 +63,7 @@ const secretsGenerator: Fig.Generator = {
   script: ["doppler", "secrets", "--only-names", "--json"],
   postProcess: (out) => {
     try {
-      const obj = JSON.parse(out);
+      const obj: Record<string, unknown> = JSON.parse(out);
       const names = Object.keys(obj);
       return names.map((name) => ({
         name,
@@ -67,10 +83,10 @@ const projectsGenerator: Fig.Generator = {
   script: ["doppler", "projects", "--json"],
   postProcess: (out) => {
     try {
-      const obj = JSON.parse(out);
+      const obj: DopplerProject[] = JSON.parse(out);
       return obj.map((o) => ({
         name: o.id,
-        desciption: o.name,
+        description: o.name,
         priority: 100,
       }));
     } catch {

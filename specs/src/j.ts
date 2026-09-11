@@ -1,8 +1,8 @@
 import autojump from "./autojump";
 
 const completionSpec: Fig.Spec = {
-  name: "j",
   ...autojump,
+  name: "j",
   args: {
     name: "directory",
     description: "Directory to jump to",
@@ -33,15 +33,18 @@ const completionSpec: Fig.Spec = {
           args.every((arg) => dir.includes(arg))
         );
 
-        return filtered.map(({ weight, dir }) => {
+        return filtered.flatMap(({ weight, dir }) => {
           const splitPath = dir.split("/");
           const name = splitPath[splitPath.length - 1];
 
           // arg is variadic but we don't want to suggest something
           // that's already been entered. This 'if' prevents redundant
           // suggestions.
-          if (!args.includes(name)) {
-            return {
+          if (args.includes(name)) {
+            return [];
+          }
+          return [
+            {
               name,
               description: dir,
               // Docs state max weight is 100 but this seems
@@ -49,8 +52,8 @@ const completionSpec: Fig.Spec = {
               // Fig should defer assigning priority to autojump.
               // 75 added to keep args above options.
               priority: 75 + weight,
-            };
-          }
+            },
+          ];
         });
       },
     },

@@ -12,10 +12,7 @@ const bunx: Fig.Spec = {
         "until [[ -d node_modules/ ]] || [[ $PWD = '/' ]]; do cd ..; done; ls -1 node_modules/.bin/`",
       ],
       postProcess: function (out) {
-        const cli = [...npxSuggestions].reduce(
-          (acc, { name }) => [...acc, name],
-          []
-        );
+        const cli = npxSuggestions.flatMap(({ name }) => name ?? []);
         return out
           .split("\n")
           .filter((name) => !cli.includes(name))

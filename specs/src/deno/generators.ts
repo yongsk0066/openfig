@@ -219,7 +219,7 @@ export function generatePreferredFilepaths(init: {
     template: "filepaths",
     filterTemplateSuggestions: (paths) => {
       for (const path of paths) {
-        if (names.has(path.name)) {
+        if (path.name !== undefined && names.has(path.name)) {
           path.priority = matchPriority;
         }
       }
@@ -631,6 +631,7 @@ async function getDenoConfig(
         "until [[ ( -f deno.json || -f deno.jsonc || $PWD = '/' ) ]]; do cd ..; done; \\cat deno.json 2>/dev/null || \\cat deno.jsonc 2>/dev/null",
       ],
     });
+    jsonString = stdout;
   }
   try {
     return JSON.parse(stripJsonComments(jsonString));
@@ -724,5 +725,6 @@ export const generateUrlScript: Fig.Generator = {
         },
       ];
     }
+    return [];
   },
 };

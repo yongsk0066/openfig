@@ -1,4 +1,4 @@
-import type { Internal } from "@fig/autocomplete-shared";
+import type { Internal } from "@fig/spec-helpers";
 import { getLogger } from "loglevel";
 import {
   parseArguments,

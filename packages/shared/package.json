@@ -12,12 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fig/autocomplete-shared": "^1.1.2"
+    "@fig/spec-helpers": "workspace:^"
   },
   "devDependencies": {
     "@fig/config": "workspace:^",
     "@fig/fuzzysort": "workspace:^",
-    "@withfig/autocomplete-types": "catalog:",
+    "@fig/spec-types": "workspace:^",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

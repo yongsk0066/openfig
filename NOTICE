@@ -22,3 +22,8 @@ Vendored third-party code carries its own license alongside it:
                                                 (derived from the `shell-color`
                                                 crate, v1.0.1)
   packages/fuzzysort/                           MIT, Stephen Kamenar (LICENSE)
+  packages/spec-types/                          MIT, Hercules Labs Inc. (Fig).
+  packages/spec-generators/                     Vendored from the withfig/
+  packages/spec-helpers/                        autocomplete-tools packages the
+  packages/spec-compiler/                       specs used to depend on; each
+                                                keeps its own LICENSE.

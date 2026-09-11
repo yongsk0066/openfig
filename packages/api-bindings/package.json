@@ -21,8 +21,8 @@
   },
   "devDependencies": {
     "@fig/config": "workspace:^",
+    "@fig/spec-types": "workspace:^",
     "@types/node": "catalog:",
-    "@withfig/autocomplete-types": "catalog:",
     "ts-morph": "catalog:",
     "typescript": "catalog:"
   },

@@ -17,6 +17,8 @@ export default defineConfig({
     projects: [
       { test: { name: "shared", root: "packages/shared" } },
       { test: { name: "shell-parser", root: "packages/shell-parser" } },
+      { test: { name: "spec-generators", root: "packages/spec-generators" } },
+      { test: { name: "spec-helpers", root: "packages/spec-helpers" } },
       {
         test: {
           name: "autocomplete-parser",

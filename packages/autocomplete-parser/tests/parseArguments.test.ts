@@ -1,6 +1,6 @@
-import { Metadata, convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
+import { Metadata, convertSubcommand, initializeDefault } from "@fig/spec-helpers";
 import logger from "loglevel";
-import { folders, filepaths } from "@fig/autocomplete-generators";
+import { folders, filepaths } from "@fig/spec-generators";
 import * as Internal from "@fig/shared/internal";
 import { SuggestionFlag, SuggestionFlags, makeArray, SpecLocationSource } from "@fig/shared/utils";
 import { Command, getCommand } from "@fig/shell-parser";

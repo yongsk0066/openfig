@@ -1,0 +1,10 @@
+{
+  "name": "@fig/spec-types",
+  "version": "0.1.0",
+  "description": "Global `Fig` namespace typings for completion specs (vendored from @withfig/autocomplete-types 1.31.0)",
+  "license": "MIT",
+  "files": [
+    "index.d.ts"
+  ],
+  "types": "index.d.ts"
+}

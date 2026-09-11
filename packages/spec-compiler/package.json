@@ -1,0 +1,25 @@
+{
+  "name": "@fig/spec-compiler",
+  "version": "0.1.0",
+  "description": "esbuild-based compiler for completion specs (derived from @withfig/autocomplete-tools 2.11.0 `compile`)",
+  "license": "MIT",
+  "bin": {
+    "fig-spec-compile": "./src/bin.ts"
+  },
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "esbuild": "catalog:"
+  },
+  "devDependencies": {
+    "@fig/config": "workspace:^",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

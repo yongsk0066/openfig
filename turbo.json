@@ -25,6 +25,14 @@
           "deny": ["app", "lib", "proto", "test"]
         }
       },
+      "spec": {
+        "dependencies": {
+          "allow": ["spec-lib"]
+        },
+        "dependents": {
+          "deny": ["app", "lib", "proto", "spec", "test"]
+        }
+      },
       "test": {
         "dependents": {
           "deny": ["app", "lib", "proto", "test"]

@@ -1,0 +1,26 @@
+{
+  "name": "@fig/spec-helpers",
+  "version": "0.1.0",
+  "description": "Spec version diffing and the internal spec representation (vendored from @fig/autocomplete-helpers 2.0.0 and @fig/autocomplete-shared 1.1.2)",
+  "license": "MIT",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@fig/config": "workspace:^",
+    "@fig/spec-types": "workspace:^",
+    "@types/node": "catalog:",
+    "@types/semver": "^7.8.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

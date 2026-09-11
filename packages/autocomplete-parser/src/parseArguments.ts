@@ -1,6 +1,6 @@
 import logger from "loglevel";
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
-import { filepaths, folders } from "@fig/autocomplete-generators";
+import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
+import { filepaths, folders } from "@fig/spec-generators";
 import * as Internal from "@fig/shared/internal";
 import {
   firstMatchingToken,

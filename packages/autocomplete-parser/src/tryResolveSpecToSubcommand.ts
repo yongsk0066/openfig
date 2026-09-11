@@ -1,4 +1,4 @@
-import { getVersionFromVersionedSpec } from "@fig/autocomplete-helpers";
+import { getVersionFromVersionedSpec } from "@fig/spec-helpers";
 import { splitPath } from "@fig/shared/utils";
 import type { SpecLocation } from "@fig/shared/internal";
 import { type SpecFileImport, getVersionFromFullFile } from "./loadHelpers.js";

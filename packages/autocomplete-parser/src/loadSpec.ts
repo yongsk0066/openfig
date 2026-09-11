@@ -1,6 +1,6 @@
 import logger, { type Logger } from "loglevel";
 import { Settings } from "@fig/api-bindings";
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
+import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
 import { withTimeout, SpecLocationSource, splitPath, ensureTrailingSlash } from "@fig/shared/utils";
 import type { Subcommand, SpecLocation } from "@fig/shared/internal";
 import { SETTINGS, getSetting, executeCommand, isInDevMode } from "@fig/api-bindings/wrappers";

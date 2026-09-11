@@ -1,0 +1,21 @@
+{
+  "name": "@fig/spec-generators",
+  "version": "0.1.0",
+  "description": "Prebuilt generators for completion specs (vendored from @fig/autocomplete-generators 2.4.0)",
+  "license": "MIT",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@fig/config": "workspace:^",
+    "@fig/spec-types": "workspace:^",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

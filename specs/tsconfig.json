@@ -4,11 +4,17 @@
     "lib": ["ES2024", "DOM"],
     "moduleResolution": "bundler",
     "types": ["@fig/spec-types"],
-    /* 1,480 upstream spec files, none of them written against these. Turning
-       them on is a separate job; `strict` alone is 438 errors. */
-    "strict": false,
+    "strict": true,
+    /* Still off for the 1,480 upstream spec files. Error counts on top of
+       `strict`, measured with the rest of the tree already fixed:
+       - noImplicitReturns: 2, both in src/aws (amplify.ts:313,
+         elasticbeanstalk.ts:220) -- flip this on once those land.
+       - noUnusedLocals: 23, all unused imports and dead option/generator
+         declarations carried over from upstream.
+       - noUnusedParameters: 56 (40 outside src/aws); most are generator
+         callbacks that take `(tokens, executeShellCommand)` and use one. */
     "noImplicitReturns": false,
-    "noFallthroughCasesInSwitch": false,
+    "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noEmit": true

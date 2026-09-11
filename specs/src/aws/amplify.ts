@@ -316,14 +316,17 @@ const generators: Record<string, Fig.Generator> = {
       try {
         const list: { productionBranch?: { branchName: string } }[] =
           JSON.parse(out)["Roles"];
-        return list.map((elm) => {
+        return list.flatMap((elm) => {
           const prodBranch = elm["productionBranch"];
           if (prodBranch) {
-            return {
-              name: prodBranch["branchName"],
-              icon: "fig://icon?type=aws",
-            };
+            return [
+              {
+                name: prodBranch["branchName"],
+                icon: "fig://icon?type=aws",
+              },
+            ];
           }
+          return [];
         });
       } catch (e) {
         console.log(e);

@@ -275,7 +275,7 @@ const generators: Record<string, Fig.Generator> = {
       try {
         const idx = tokens.indexOf("--cluster-name");
         if (idx < 0) {
-          return;
+          return [];
         }
         const param = tokens[idx + 1];
         const { stdout } = await executeShellCommand({
@@ -294,6 +294,7 @@ const generators: Record<string, Fig.Generator> = {
       } catch (e) {
         console.log(e);
       }
+      return [];
     },
   },
   listFargateProfilesForCluster: {

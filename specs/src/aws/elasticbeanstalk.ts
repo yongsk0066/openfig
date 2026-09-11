@@ -217,20 +217,24 @@ const generators: Record<string, Fig.Generator> = {
   listCnamePrefixes: {
     script: ["aws", "elasticbeanstalk", "describe-environments"],
     postProcess: (out) => {
-      return postPrecessGenerator(out, "Environments", "CNAME").map((cname) => {
-        try {
-          const parts = (cname.name as string).split(".");
-          if (parts.length && parts[0] !== "elasticbeanstalk") {
-            return {
-              name: parts[0],
-              icon: cname.icon,
-            };
+      return postPrecessGenerator(out, "Environments", "CNAME").flatMap(
+        (cname) => {
+          try {
+            const parts = (cname.name as string).split(".");
+            if (parts.length && parts[0] !== "elasticbeanstalk") {
+              return [
+                {
+                  name: parts[0],
+                  icon: cname.icon,
+                },
+              ];
+            }
+          } catch (e) {
+            console.log(e);
           }
-          return null;
-        } catch (e) {
-          console.log(e);
+          return [];
         }
-      });
+      );
     },
   },
   listApplications: {

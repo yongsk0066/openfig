@@ -290,7 +290,7 @@ const getResultList = async (
   executeShellCommand: Fig.ExecuteCommandFunction,
   args: string[],
   key: string
-): Promise<Fig.Suggestion[]> => {
+): Promise<string[]> => {
   const { stdout } = await executeShellCommand({
     command: "aws",
     args,
@@ -512,7 +512,7 @@ const generators: Record<string, Fig.Generator> = {
             "firehose",
             "describe-delivery-stream",
             "--delivery-stream-name",
-            Array.isArray(stream.name) ? stream.name[0] : stream.name,
+            stream,
           ],
           parentKey: "DeliveryStreamDescription",
           childKey: "DeliveryStreamARN",

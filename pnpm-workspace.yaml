@@ -1,17 +1,18 @@
 packages:
   - proto
+  - specs
   - tests/fig-api
   - packages/*
 
 # pnpm 12 refuses to run dependency build scripts unless decided here.
-# buf downloads its CLI binary and esbuild unpacks its platform binary in
-# postinstall; core-js only prints a funding banner.
+# buf downloads its CLI binary in postinstall; the other two are not needed at
+# build time. esbuild's postinstall only swaps its `bin/esbuild` shim for the
+# native binary, and the spec compiler drives esbuild through its Node API,
+# which finds @esbuild/darwin-arm64 on its own.
 allowBuilds:
   "@bufbuild/buf": true
   core-js: false
-  # The spec compiler runs esbuild, and esbuild's postinstall is what puts the
-  # platform binary next to the JS wrapper.
-  esbuild: true
+  esbuild: false
 
 # Transitive dev-only advisories (`pnpm audit`): ts-morph's minimatch chain and
 # vite's yaml. Both are same-major patch bumps; minimatch >=10.2.6 also pulls a

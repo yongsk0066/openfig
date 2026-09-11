@@ -11,7 +11,6 @@ target     := "aarch64-apple-darwin"
 tdir       := "target" / target / "release"
 build      := justfile_directory() / "build"
 app        := build / env("APP_NAME") + ".app"
-specs_src  := env("FIG_SPECS_SRC", home_directory() / "oss/fig/autocomplete")
 themes_src := env("FIG_THEMES_SRC", home_directory() / "oss/fig/themes")
 version    := `cargo metadata --format-version 1 --no-deps --offline | jq -r '.packages[] | select(.name=="fig_desktop") | .version'`
 min_macos  := `rustc --print deployment-target --target aarch64-apple-darwin | sed 's/^.*=//'`
@@ -38,16 +37,11 @@ deps:
     xcrun --sdk macosx --show-sdk-path
     command -v codesign plutil jq rsync perl
 
-# ~/.local/bin is dropped from PATH because autocomplete-tools shells out to a CLI of the
-# same name on every compile and this machine still has another vendor's links there.
-# Completion specs: <specs_src>/src/**/*.ts -> build/specs (index.json + <name>.js)
+# Completion specs: specs/src/**/*.ts -> specs/dist (index.json + <name>.js)
 specs:
-    cd "{{specs_src}}" && pnpm install --frozen-lockfile --ignore-scripts
-    rm -rf "{{build}}/specs"
-    cd "{{specs_src}}" && \
-        PATH="$(echo "$PATH" | tr ':' '\n' | grep -vFx "$HOME/.local/bin" | paste -sd: -)" \
-        pnpm exec autocomplete-tools compile -o "{{build}}/specs"
-    test -f "{{build}}/specs/index.json"
+    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm exec turbo build --filter=@fig/specs
+    test -f specs/dist/index.json
 
 # The filters keep turbo away from the packages the bundle does not need. They are
 # paths, not package names, so the 6단계 npm scope rename cannot silently empty them.
@@ -79,7 +73,7 @@ bundle:
     cp -R packages/autocomplete-app/dist/ "{{app}}/Contents/Resources/autocomplete/"
     cp -R packages/dashboard-app/dist/    "{{app}}/Contents/Resources/dashboard/"
     cp -R resources/themes/               "{{app}}/Contents/Resources/themes/"
-    cp -R "{{build}}/specs/"              "{{app}}/Contents/Resources/specs/"
+    cp -R specs/dist/                     "{{app}}/Contents/Resources/specs/"
 
 # Inner executables first and the bundle last, because the top level seals what is under it.
 # Signing identity: any "Apple Development" / "Developer ID Application" certificate in the

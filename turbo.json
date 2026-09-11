@@ -27,7 +27,7 @@
       },
       "spec": {
         "dependencies": {
-          "allow": ["spec-lib"]
+          "allow": ["spec-lib", "config"]
         },
         "dependents": {
           "deny": ["app", "lib", "proto", "spec", "test"]

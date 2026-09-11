@@ -23,11 +23,12 @@ const NODE_BUILTINS = new Set([...builtinModules, ...builtinModules.map((name) =
 
 /**
  * Specs run in the autocomplete webview, where no Node builtin exists. Upstream
- * pulled in `@esbuild-plugins/node-modules-polyfill` for this; every import that
- * reaches it here is dead code that esbuild then tree-shakes away (verified
- * against the byte-level baseline), so an empty module is enough. CommonJS, not
- * ESM, so that a named import of a stubbed builtin stays a runtime lookup
- * instead of failing the build.
+ * pulled in `@esbuild-plugins/node-modules-polyfill` for this, but no spec in
+ * the tree reaches a builtin any more (the compiler says so when one does), and
+ * anything that did would be running in a browser. An empty module keeps such a
+ * build from failing outright, the way the polyfill used to. CommonJS, not ESM,
+ * so a named import of a stubbed builtin stays a runtime lookup rather than a
+ * build error.
  */
 function nodeBuiltinStubs(stubbed: Set<string>): Plugin {
   return {

@@ -1,0 +1,24 @@
+{
+  "name": "@fig/specs",
+  "version": "0.1.0",
+  "description": "Completion specs, compiled to one ESM module each",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "fig-spec-compile --outdir dist",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fig/spec-generators": "workspace:^",
+    "@fig/spec-helpers": "workspace:^",
+    "semver": "^7.8.5",
+    "strip-json-comments": "^5.0.3",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@fig/spec-compiler": "workspace:^"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

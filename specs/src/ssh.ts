@@ -63,11 +63,9 @@ export const knownHosts: Fig.Generator = {
 
     return stdout
       .split("\n")
-      .map((line) => {
+      .flatMap((line) => {
         const match = knownHostRegex.exec(line);
-        if (match) {
-          return String(match);
-        }
+        return match ? [String(match)] : [];
       })
       .filter((value, index, self) => value && self.indexOf(value) === index)
       .map((knownHost) => ({

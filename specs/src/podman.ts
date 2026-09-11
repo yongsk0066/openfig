@@ -293,17 +293,17 @@ const sharedCommands: Record<string, Fig.Subcommand> = {
               // are on the same line. This could certainly be made more robust
               // down the line.
               const imageNameRegexp = /(?:[aA][sS]\s+)([\w:.-]+)/;
-              return out
-                .split("\n")
-                .map((i) => {
-                  const result = imageNameRegexp.exec(i);
-                  if (result) {
-                    return {
+              return out.split("\n").flatMap((i) => {
+                const result = imageNameRegexp.exec(i);
+                if (result) {
+                  return [
+                    {
                       name: result[1],
-                    };
-                  }
-                })
-                .filter((i) => i !== undefined);
+                    },
+                  ];
+                }
+                return [];
+              });
             },
           },
         },

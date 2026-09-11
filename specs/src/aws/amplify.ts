@@ -315,7 +315,7 @@ const generators: Record<string, Fig.Generator> = {
     postProcess: (out) => {
       try {
         const list: { productionBranch?: { branchName: string } }[] =
-          JSON.parse(out)["Roles"];
+          JSON.parse(out)["apps"] ?? [];
         return list.flatMap((elm) => {
           const prodBranch = elm["productionBranch"];
           if (prodBranch) {

@@ -310,7 +310,7 @@ fn shell_state_to_context_inner(shell_state: &ShellState, include_environment: b
         } else {
             Vec::new()
         },
-        qterm_version: Some(env!("CARGO_PKG_VERSION").into()),
+        figterm_version: Some(env!("CARGO_PKG_VERSION").into()),
         preexec: Some(shell_state.preexec),
         osc_lock: Some(shell_state.osc_lock),
         alias: if include_environment {

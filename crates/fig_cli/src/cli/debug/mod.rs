@@ -227,8 +227,8 @@ impl DebugSubcommand {
                         // Add figterm*.log to the list of files to open
                         let pattern = logs_dir.join(format!("{PTY_BINARY_NAME}*.log"));
                         let globset = glob([pattern.to_str().unwrap()])?;
-                        let qterm_logs = glob_dir(&globset, &logs_dir)?;
-                        paths.extend(qterm_logs);
+                        let pty_logs = glob_dir(&globset, &logs_dir)?;
+                        paths.extend(pty_logs);
                     }
 
                     // Push any remaining files to open

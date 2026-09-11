@@ -257,11 +257,11 @@ export declare type ShellContext = Message<"fig_common.ShellContext"> & {
   environmentVariables: EnvironmentVariable[];
 
   /**
-   * the version of qterm
+   * the version of the pty wrapper
    *
-   * @generated from field: optional string qterm_version = 14;
+   * @generated from field: optional string figterm_version = 14;
    */
-  qtermVersion?: string | undefined;
+  figtermVersion?: string | undefined;
 
   /**
    * true if a command is running

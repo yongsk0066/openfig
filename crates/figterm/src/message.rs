@@ -513,7 +513,7 @@ mod tests {
             assert!(next.environment_variables.is_empty());
             assert_eq!(next.alias, None);
             // Everything else stays in the lean hook.
-            assert_eq!(next.qterm_version, first.qterm_version);
+            assert_eq!(next.figterm_version, first.figterm_version);
             assert_eq!(next.terminal, first.terminal);
         }
 

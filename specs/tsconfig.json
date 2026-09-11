@@ -5,16 +5,12 @@
     "moduleResolution": "bundler",
     "types": ["@fig/spec-types"],
     "strict": true,
-    /* Still off for the 1,480 upstream spec files. Error counts on top of
-       `strict`, measured with the rest of the tree already fixed:
-       - noImplicitReturns: 2, both in src/aws (amplify.ts:313,
-         elasticbeanstalk.ts:220) -- flip this on once those land.
-       - noUnusedLocals: 23, all unused imports and dead option/generator
-         declarations carried over from upstream.
-       - noUnusedParameters: 56 (40 outside src/aws); most are generator
-         callbacks that take `(tokens, executeShellCommand)` and use one. */
-    "noImplicitReturns": false,
+    "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    /* Still off for the 1,480 upstream spec files (counts measured on top of
+       strict): noUnusedLocals 23 (unused imports, dead option/generator
+       declarations), noUnusedParameters 56 (mostly generator callbacks that
+       ignore `tokens`). Both are lint concerns, handled by oxlint. */
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noEmit": true

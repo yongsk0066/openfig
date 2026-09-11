@@ -165,10 +165,9 @@ pub fn autocomplete_specs_dir() -> Result<PathBuf> {
 
 /// The directory holding all of the logs
 ///
-/// - MacOS: `$TMPDIR/{cli_binary_name}log`
+/// - MacOS: `$TMPDIR/{data_dir_name}log`
 pub fn logs_dir() -> Result<PathBuf> {
-    use crate::CLI_BINARY_NAME;
-    Ok(runtime_dir()?.join(format!("{CLI_BINARY_NAME}log")))
+    Ok(runtime_dir()?.join(format!("{DATA_DIR_NAME}log")))
 }
 
 /// The directory where fig places all data-sensitive backups

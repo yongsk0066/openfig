@@ -112,8 +112,6 @@ pub enum DebugSubcommand {
     PromptAccessibility,
     /// Sample desktop process
     Sample,
-    /// Debug application codesigning
-    VerifyCodesign,
     /// Accessibility
     Accessibility {
         #[arg(value_enum)]
@@ -280,13 +278,6 @@ impl DebugSubcommand {
                 }
                 println!("\n\n\n-------\nFinished writing to {}", outfile.display());
                 println!("Please send this file to the development team");
-            },
-            DebugSubcommand::VerifyCodesign => {
-                Command::new("codesign")
-                    .arg("-vvvv")
-                    .arg(fig_util::app_bundle_path())
-                    .spawn()?
-                    .wait()?;
             },
             DebugSubcommand::Accessibility { action } => match action {
                 Some(AccessibilityAction::Refresh) => {

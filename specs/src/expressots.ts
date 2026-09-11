@@ -18,7 +18,7 @@ const completionSpec: Fig.Spec = {
             description: "Choose a template",
             generators: {
               script: ["expressots", "templates"],
-              postProcess: function (out) {
+              postProcess: function () {
                 return [
                   {
                     name: "opinionated",
@@ -41,7 +41,7 @@ const completionSpec: Fig.Spec = {
             description: "Choose a package manager",
             generators: {
               script: ["expressots", "package", "manager"],
-              postProcess: function (out) {
+              postProcess: function () {
                 return [
                   {
                     name: "npm",

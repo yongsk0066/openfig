@@ -463,7 +463,7 @@ const generators: Record<string, Fig.Generator> = {
   },
   listBuckets: {
     script: ["aws", "s3", "ls", "--page-size", "1000"],
-    postProcess: function (out, tokens) {
+    postProcess: function (out) {
       try {
         return out.split("\n").map((line) => {
           const parts = line.split(/\s+/);

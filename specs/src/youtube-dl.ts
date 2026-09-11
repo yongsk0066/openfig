@@ -954,7 +954,7 @@ const completionSpec: Fig.Spec = {
       args: {
         name: "MSO",
         generators: {
-          custom: async (tokens, executeCommand, context) => {
+          custom: async (tokens, executeCommand) => {
             const { stdout } = await executeCommand({
               command: "youtube-dl",
               args: [

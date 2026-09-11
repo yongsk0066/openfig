@@ -70,11 +70,30 @@
     "target/**",
     "**/*.config.js",
     "**/*.config.ts",
-    "specs/src/**",
     "proto/src/**",
     "packages/fuzzysort/**"
   ],
   "overrides": [
+    {
+      // Upstream completion specs. A generator callback's parameters are positional
+      // (`(tokens, executeShellCommand, context)`), so a leading one cannot be dropped
+      // when a later one is used; `after-used` still flags genuinely dead trailing params.
+      "files": ["specs/src/**"],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "args": "after-used",
+            "argsIgnorePattern": "^_",
+            "caughtErrors": "all",
+            "caughtErrorsIgnorePattern": "^_",
+            "destructuredArrayIgnorePattern": "^_",
+            "varsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+          }
+        ]
+      }
+    },
     {
       "files": ["tests/fig-api/**", "packages/*/tests/**", "**/*.test.ts", "**/*.test.tsx"],
       "rules": {

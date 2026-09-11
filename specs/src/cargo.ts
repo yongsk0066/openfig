@@ -491,7 +491,7 @@ const configGenerator: Fig.Generator = keyValue({
     name: key,
     ...other,
   })),
-  values: async (tokens, execute) => {
+  values: async (tokens) => {
     const key = tokens[tokens.length - 1].split("=")?.[0];
     const pair = configPairs[key];
     if (pair?.tomlSuggestions) {
@@ -502,9 +502,7 @@ const configGenerator: Fig.Generator = keyValue({
   separator: "=",
 });
 
-const completionSpec: (toolchain?: boolean) => Fig.Spec = (
-  toolchain = true
-) => ({
+const completionSpec: () => Fig.Spec = () => ({
   name: "cargo",
   icon: "📦",
   description: "CLI Interface for Cargo",

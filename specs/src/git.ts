@@ -22,29 +22,27 @@ const postProcessTrackedFiles: Fig.Generator["postProcess"] = (
     return { working: arr[0], file: arr.slice(1).join(" ").trim() };
   });
 
-  return [
-    ...files.map((item) => {
-      const file = item.file.replace(/^"|"$/g, "");
-      let ext = "";
+  return files.map((item) => {
+    const file = item.file.replace(/^"|"$/g, "");
+    let ext = "";
 
-      try {
-        ext = file.split(".").slice(-1)[0];
-      } catch (e) {}
+    try {
+      ext = file.split(".").slice(-1)[0];
+    } catch {}
 
-      if (file.endsWith("/")) {
-        ext = "folder";
-      }
+    if (file.endsWith("/")) {
+      ext = "folder";
+    }
 
-      return {
-        name: file,
-        icon: `fig://icon?type=${ext}&color=ff0000&badge=${item.working}`,
-        description: "Changed tracked files",
-        // If the current file already is already added
-        // we want to lower the priority
-        priority: context.some((ctx) => ctx.includes(file)) ? 50 : 100,
-      };
-    }),
-  ];
+    return {
+      name: file,
+      icon: `fig://icon?type=${ext}&color=ff0000&badge=${item.working}`,
+      description: "Changed tracked files",
+      // If the current file already is already added
+      // we want to lower the priority
+      priority: context.some((ctx) => ctx.includes(file)) ? 50 : 100,
+    };
+  });
 };
 
 interface PostProcessBranchesOptions {
@@ -428,7 +426,7 @@ export const gitGenerators: Record<string, Fig.Generator> = {
           let ext = "";
           try {
             ext = file.split(".").slice(-1)[0];
-          } catch (e) {}
+          } catch {}
 
           if (file.endsWith("/")) {
             ext = "folder";

@@ -28,7 +28,7 @@ const FQBNs: Fig.Generator = {
         }));
 
       return result;
-    } catch (error) {
+    } catch {
       return [];
     }
   },
@@ -47,7 +47,7 @@ const Ports: Fig.Generator = {
         }));
 
       return result;
-    } catch (error) {
+    } catch {
       return [];
     }
   },

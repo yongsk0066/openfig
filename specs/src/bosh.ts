@@ -22,7 +22,7 @@ const deployments: Fig.Generator = {
           description: "Deployment",
         };
       });
-    } catch (e) {
+    } catch {
       return [];
     }
   },

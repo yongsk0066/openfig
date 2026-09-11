@@ -18,8 +18,7 @@ export const createNpmSearchHandler =
   (keywords?: string[]) =>
   async (
     context: string[],
-    executeShellCommand: Fig.ExecuteCommandFunction,
-    shellContext: Fig.ShellContext
+    executeShellCommand: Fig.ExecuteCommandFunction
   ): Promise<Fig.Suggestion[]> => {
     const searchTerm = context[context.length - 1];
     if (searchTerm === "") {

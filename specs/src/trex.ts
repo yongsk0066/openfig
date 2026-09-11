@@ -16,7 +16,7 @@ const dependenciesGenerator: Fig.Generator = {
 
           return suggestions;
         }
-      } catch (error) {
+      } catch {
         return [];
       }
     }
@@ -33,7 +33,7 @@ const scriptsGenerator: Fig.Generator = {
         if (scriptsObj.scripts) {
           const scripts = Object.entries(scriptsObj.scripts);
 
-          const suggestions = scripts.map(([name, command]) => ({
+          const suggestions = scripts.map(([name]) => ({
             name: name as string,
             icon: "🚀",
             description: "trex script" as string,
@@ -41,7 +41,7 @@ const scriptsGenerator: Fig.Generator = {
 
           return suggestions;
         }
-      } catch (error) {
+      } catch {
         return [];
       }
     }

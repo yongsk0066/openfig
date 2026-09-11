@@ -8,9 +8,7 @@ const re = /(\d+\)\s)?([\w-+]+)/g;
  * Generators
  */
 
-const availableSignalsGenerator = (
-  suggestOptions?: Partial<Fig.Suggestion>
-): Fig.Generator => ({
+const availableSignalsGenerator = (): Fig.Generator => ({
   script: ["command", "kill", "-l"],
   postProcess: (output) =>
     [...output.matchAll(re)].map((signal) => ({

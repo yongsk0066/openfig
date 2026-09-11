@@ -308,18 +308,16 @@ const completionSpec: Fig.Spec = {
     {
       name: "genautocomplete",
       description: "Output completion script for a given shell",
-      subcommands: [
-        ...["bash", "fish", "zsh"].map((_) => ({
-          name: _,
-          description: `Output ${_} completion script for rclone.`,
-          args: {
-            name: "output_file",
-            isOptional: true,
-            description:
-              'If output_file is "-", then the output will be written to stdout',
-          },
-        })),
-      ],
+      subcommands: ["bash", "fish", "zsh"].map((_) => ({
+        name: _,
+        description: `Output ${_} completion script for rclone.`,
+        args: {
+          name: "output_file",
+          isOptional: true,
+          description:
+            'If output_file is "-", then the output will be written to stdout',
+        },
+      })),
     },
     {
       name: "gendocs",
@@ -439,19 +437,17 @@ const completionSpec: Fig.Spec = {
           args: {
             name: "format",
             suggestions: [
-              ...[
-                ["p", "path"],
-                ["s", "size"],
-                ["t", "modification time"],
-                ["h", "hash"],
-                ["i", "ID of object"],
-                ["o", "Original ID of underlying object"],
-                ["m", "MimeType of object if known"],
-              ].map((_) => ({
-                name: _[0],
-                description: _[1],
-              })),
-            ],
+              ["p", "path"],
+              ["s", "size"],
+              ["t", "modification time"],
+              ["h", "hash"],
+              ["i", "ID of object"],
+              ["o", "Original ID of underlying object"],
+              ["m", "MimeType of object if known"],
+            ].map((_) => ({
+              name: _[0],
+              description: _[1],
+            })),
           },
         },
         {

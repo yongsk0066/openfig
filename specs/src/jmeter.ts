@@ -1,5 +1,3 @@
-import { keyValue } from "@fig/spec-generators";
-
 const completionSpec: Fig.Spec = {
   name: "jmeter",
   description: "Apache JMeter - 100% Java Load Testing Tool",

@@ -1,5 +1,3 @@
-import { filepaths } from "@fig/spec-generators";
-
 const CATEGORY_EMOJI = "📦";
 const LINT_RULE_EMOJI = "🚨";
 

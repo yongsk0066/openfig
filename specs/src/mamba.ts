@@ -78,7 +78,7 @@ const getInstalledPackages: Fig.Generator = {
         };
       });
       return installedPackages;
-    } catch (e) {
+    } catch {
       return installedPackages;
     }
   },
@@ -107,7 +107,7 @@ const condaSearchGenerator: Fig.Generator = {
         }
       );
       return searchResults;
-    } catch (e) {
+    } catch {
       return searchResults;
     }
   },

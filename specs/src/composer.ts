@@ -66,7 +66,7 @@ const searchGenerator: Fig.Generator = {
             icon: "📦",
           }) as Fig.Suggestion
       ) as Fig.Suggestion[];
-    } catch (e) {
+    } catch {
       return [];
     }
   },

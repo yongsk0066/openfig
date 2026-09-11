@@ -25,7 +25,7 @@ const completionSpec: Fig.Spec = {
                 const langLine = outLine.split(":");
                 const descriptionString = langLine[0].trim();
                 return outLine
-                  .replace(/\:/g, ",")
+                  .replace(/:/g, ",")
                   .split(",")
                   .map((item) => {
                     return {

@@ -44,7 +44,7 @@ const deviceGenerator: Fig.Generator = {
         )}`,
         insertValue: device.deviceId,
       }));
-    } catch (e) {
+    } catch {
       return [];
     }
   },
@@ -64,7 +64,7 @@ const teamCredentialGenerator: Fig.Generator = {
         )}`,
         insertValue: credential.accessKey,
       }));
-    } catch (e) {
+    } catch {
       return [];
     }
   },

@@ -12,7 +12,7 @@ const projectsGenerator: Fig.Generator = {
         name: projectName,
         description: details.projectType,
       }));
-    } catch (e) {}
+    } catch {}
     return [];
   },
 };

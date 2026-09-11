@@ -336,7 +336,7 @@ const MultiSuggestionsGenerator = async (
 const generators: Record<string, Fig.Generator> = {
   getAccountArn: {
     script: ["aws", "sts", "get-caller-identity"],
-    postProcess: function (out, tokens) {
+    postProcess: function (out) {
       try {
         const accountId = JSON.parse(out)["Account"];
         return [{ name: `arn:aws:iam::${accountId}-ID:root` }];

@@ -51,7 +51,7 @@ export const nodeClis = new Set([
 
 // generate global package list from global package.json file
 const getGlobalPackagesGenerator: Fig.Generator = {
-  custom: async (tokens, executeCommand, generatorContext) => {
+  custom: async (tokens, executeCommand) => {
     const { stdout: yarnGlobalDir } = await executeCommand({
       command: "yarn",
       args: ["global", "dir"],
@@ -82,7 +82,7 @@ const getGlobalPackagesGenerator: Fig.Generator = {
         name: dependencyName,
         icon: "📦",
       }));
-    } catch (e) {}
+    } catch {}
 
     return [];
   },
@@ -101,7 +101,7 @@ const allDependenciesGenerator: Fig.Generator = {
         name: dependency.name.split("@")[0],
         icon: "📦",
       }));
-    } catch (e) {}
+    } catch {}
     return [];
   },
 };
@@ -120,14 +120,14 @@ const configList: Fig.Generator = {
       // TODO: fix hacky code
       // reason: JSON parse was not working without double quotes
       output = output
-        .replace(/\'/gi, '"')
+        .replace(/'/gi, '"')
         .replace("lastUpdateCheck", '"lastUpdateCheck"')
         .replace("registry", '"lastUpdateCheck"');
       const configObject = JSON.parse(output);
       if (configObject) {
         return Object.keys(configObject).map((key) => ({ name: key }));
       }
-    } catch (e) {}
+    } catch {}
 
     return [];
   },
@@ -373,7 +373,7 @@ export const createCLIsGenerator: Fig.Generator = {
             description: item.package.description,
           }) as Fig.Suggestion
       ) as Fig.Suggestion[];
-    } catch (e) {
+    } catch {
       return [];
     }
   },
@@ -1578,7 +1578,7 @@ const completionSpec: Fig.Spec = {
                           name: script,
                         }));
                       }
-                    } catch (e) {}
+                    } catch {}
                     return [];
                   },
                 },

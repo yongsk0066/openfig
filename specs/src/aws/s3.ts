@@ -298,7 +298,7 @@ const generators: Record<string, Fig.Generator> = {
   // just bucket names
   listBuckets: {
     script: ["aws", "s3", "ls", "--page-size", "1000"],
-    postProcess: function (out, context) {
+    postProcess: function (out) {
       try {
         return out.split("\n").map((line) => {
           const parts = line.split(/\s+/);

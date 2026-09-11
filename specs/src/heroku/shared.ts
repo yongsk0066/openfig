@@ -19,7 +19,7 @@ export const getAppGenerator: Fig.Generator = {
           icon: "https://www.herokucdn.com/favicon.ico",
         };
       });
-    } catch (e) {
+    } catch {
       return [];
     }
   },

@@ -36,7 +36,7 @@ const _gen: Record<string, Fig.Generator> = {
           name: item.package.name,
           description: item.package.description,
         })) as Fig.Suggestion[];
-      } catch (e) {
+      } catch {
         return [];
       }
     },

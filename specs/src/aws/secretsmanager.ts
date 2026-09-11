@@ -158,7 +158,7 @@ const generators: Record<string, Fig.Generator> = {
   },
   getReplicaRegionsGenerator: {
     script: ["aws", "kms", "list-keys", "--page-size", "100"],
-    postProcess: function (out, tokens) {
+    postProcess: function (out) {
       try {
         const list: { KeyId: string }[] = JSON.parse(out)["Keys"];
         return list.flatMap((secret) => {
@@ -179,7 +179,7 @@ const generators: Record<string, Fig.Generator> = {
   },
   getLambdasGenerator: {
     script: ["aws", "lambda", "list-functions", "--page-size", "100"],
-    postProcess: function (out, tokens) {
+    postProcess: function (out) {
       try {
         const list: { FunctionArn: string }[] =
           JSON.parse(out)["Functions"];

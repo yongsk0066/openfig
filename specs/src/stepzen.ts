@@ -12,7 +12,7 @@ const endpointsGenerator: Fig.Generator = {
           description: "StepZen endpoint",
         } as Fig.Suggestion;
       }) as Fig.Suggestion[];
-    } catch (e) {
+    } catch {
       return [];
     }
   },
@@ -36,7 +36,7 @@ const importSchemasGenerator: Fig.Generator = {
             icon: "📦",
           } as Fig.Suggestion;
         }) as Fig.Suggestion[];
-    } catch (e) {
+    } catch {
       return [];
     }
   },

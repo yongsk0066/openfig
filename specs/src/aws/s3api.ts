@@ -7,7 +7,7 @@ const bucketGenerator: Fig.Generator = {
       let date;
       try {
         date = new Date(bucket.CreationDate).toLocaleDateString();
-      } catch (e) {
+      } catch {
         date = bucket.CreationDate;
       }
       return {

@@ -263,6 +263,21 @@ const filterWithPrefix = (token: string, prefix: string): string => {
   if (!token.startsWith(prefix)) return token;
   return token.slice(token.lastIndexOf("/") + 1);
 };
+/**
+ * An `aws iam list-*`/`get-*` response array holds either bare strings
+ * (`AccountAliases`, `PolicyNames`, `ThumbprintList`, ...) or objects to pluck
+ * `childKey` out of. Either way the generators below want the string.
+ *
+ * Both helpers used to hand that string back while claiming `Fig.Suggestion[]`.
+ * The script generator tolerates it (`postProcess` output is run through an
+ * `Array<Fig.Suggestion | string>` conversion), but the custom generator does
+ * not: it spreads each element, so a bare string arrives as
+ * `{0: "a", 1: "r", ..., type: "arg"}` — a suggestion with no name.
+ */
+type AwsListItem = string | Record<string, string>;
+const pluck = (elm: AwsListItem, childKey: string): string =>
+  typeof elm === "string" ? elm : elm[childKey];
+
 const listCustomGenerator = async (
   tokens: string[],
   executeShellCommand: Fig.ExecuteCommandFunction,
@@ -281,10 +296,8 @@ const listCustomGenerator = async (
       command: "aws",
       args: ["iam", command, option, param],
     });
-    const policies = JSON.parse(stdout)[parentKey];
-    return policies.map((elm: Record<string, string>) =>
-      childKey ? elm[childKey] : elm
-    );
+    const list: AwsListItem[] = JSON.parse(stdout)[parentKey] ?? [];
+    return list.map((elm) => ({ name: pluck(elm, childKey) }));
   } catch (e) {
     console.log(e);
   }
@@ -296,10 +309,8 @@ const postPrecessGenerator = (
   childKey = ""
 ): Fig.Suggestion[] => {
   try {
-    const list = JSON.parse(out)[parentKey];
-    return list.map((elm: Record<string, string>) =>
-      childKey ? elm[childKey] : elm
-    );
+    const list: AwsListItem[] = JSON.parse(out)[parentKey] ?? [];
+    return list.map((elm) => ({ name: pluck(elm, childKey) }));
   } catch (error) {
     console.error(error);
   }

@@ -31,7 +31,7 @@ const completionSpec: Fig.Spec = {
 
     return {
       name: "mask",
-      subcommands: out.match(/##.*/g).map((elm) => {
+      subcommands: (out.match(/##.*/g) ?? []).map((elm) => {
         return {
           name: elm.slice(3),
         };

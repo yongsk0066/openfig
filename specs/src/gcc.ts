@@ -3340,6 +3340,6 @@ export const gccBase: Fig.Spec = {
 
 const completionSpec: Fig.Spec = {
   ...gccBase,
-  options: [...gccBase.options, stdOption],
+  options: [...(gccBase.options ?? []), stdOption],
 };
 export default completionSpec;

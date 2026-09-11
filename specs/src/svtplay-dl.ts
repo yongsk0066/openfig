@@ -16,8 +16,8 @@ const svtplayDlGenerators: Record<string, Fig.Generator> = {
           ];
       } catch (e) {
         console.error(e);
-        return [];
       }
+      return [];
     },
   },
 };

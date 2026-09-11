@@ -113,14 +113,14 @@ const completionSpec: Fig.Spec = {
             }
             return Object.entries(turbo.pipeline).map(([key, value]) => {
               const descriptionParts = [];
-              if ("dependsOn" in value) {
+              if (value.dependsOn) {
                 descriptionParts.push(
                   `depends on ${value.dependsOn
                     .map((item) => `'${item}'`)
                     .join(", ")}`
                 );
               }
-              if ("outputs" in value) {
+              if (value.outputs) {
                 descriptionParts.push(
                   `outputs ${value.outputs
                     .map((item) => `'${item}'`)

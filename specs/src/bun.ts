@@ -643,11 +643,11 @@ const spec: Fig.Spec = {
               .filter((bin) =>
                 typeof bin.name === "string"
                   ? bin.name.startsWith("create-")
-                  : bin.name.some((name) => name.startsWith("create-"))
+                  : (bin.name ?? []).some((name) => name.startsWith("create-"))
               )
               .map((bin) => {
                 let name = bin.name;
-                if (typeof name !== "string") name = name[0];
+                if (typeof name !== "string") name = name?.[0] ?? "";
                 name = name.replace(/^create-/, "");
 
                 return { ...bin, name, priority: 76 };

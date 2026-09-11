@@ -24,7 +24,7 @@ const plusMinusModifiers = ["+", "-"].flatMap((prefix) =>
     name:
       typeof s.name === "string"
         ? `${prefix}${s.name}`
-        : s.name.map((name) => `${prefix}${name}`),
+        : (s.name ?? []).map((name) => `${prefix}${name}`),
   }))
 );
 
@@ -33,7 +33,7 @@ const noModifiers = modifiers.map((s) => ({
   name:
     typeof s.name === "string"
       ? `no${s.name}`
-      : s.name.map((name) => `no${name}`),
+      : (s.name ?? []).map((name) => `no${name}`),
 }));
 
 const types = valueList({

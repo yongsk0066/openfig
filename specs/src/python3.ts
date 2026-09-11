@@ -19,6 +19,7 @@ const completionSpec: Fig.Spec = {
         subcommands: [{ name: "manage.py", loadSpec: "django-admin" }],
       };
     }
+    return { name: "python3" };
   },
   args: {
     name: "python script",

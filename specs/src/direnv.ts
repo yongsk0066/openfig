@@ -11,12 +11,12 @@ const envrcFilepathsGenerator = (
 ): Fig.Generator => ({
   template: "filepaths",
   filterTemplateSuggestions: (paths) => {
-    const isEnvrc = (fileName: string) => fileName.includes(".envrc");
+    const isEnvrc = (fileName = "") => fileName.includes(".envrc");
     return paths
-      .filter((file) => isEnvrc(file.name) || file.name.endsWith("/"))
+      .filter((file) => isEnvrc(file.name) || file.name?.endsWith("/"))
       .map((file) => ({
         ...file,
-        priority: isEnvrc(file.name) && PRIORITY_TOP_THRESHOLD,
+        priority: isEnvrc(file.name) ? PRIORITY_TOP_THRESHOLD : undefined,
         ...suggestOptions,
       }));
   },

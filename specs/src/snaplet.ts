@@ -26,11 +26,11 @@ function parseSnapshotList(output: string): Snapshots[] {
       // Each snapshot have name, status, date, size, location
       const columns = outputSplit[i].split(" ");
       result.push({
-        name: columns.shift(),
-        status: columns.shift().includes("SUCCESS") ? "SUCCESS" : "ERROR",
+        name: columns.shift() ?? "",
+        status: columns.shift()?.includes("SUCCESS") ? "SUCCESS" : "ERROR",
         created: `${columns.shift()} ${columns.shift()} ${columns.shift()}`,
         size: `${columns.shift()}${columns.shift()}`,
-        src: columns.shift().includes("☁️") ? "CLOUD" : "LOCAL",
+        src: columns.shift()?.includes("☁️") ? "CLOUD" : "LOCAL",
       });
     }
   }
@@ -51,9 +51,9 @@ function parsePreviewDatabaseList(output: string): PreviewDatabase[] {
     for (let i = 2; i < outputSplit.length; i++) {
       // Each database have a name, size and the snapshot used for creation
       const columns = outputSplit[i].split(" ");
-      const name = columns.shift();
+      const name = columns.shift() ?? "";
       const size = `${columns.shift()}${columns.shift()}`;
-      const snapshot = columns.shift();
+      const snapshot = columns.shift() ?? "";
       result.push({
         name,
         size,

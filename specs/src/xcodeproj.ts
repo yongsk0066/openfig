@@ -2,10 +2,10 @@ const projectsAndFoldersGenerator: Fig.Generator = {
   template: "folders",
   filterTemplateSuggestions: (paths) => {
     return paths.map((file) => {
-      const isXcodeProjFolder = file.name.endsWith(".xcodeproj/");
+      const isXcodeProjFolder = file.name?.endsWith(".xcodeproj/");
       return {
         ...file,
-        priority: isXcodeProjFolder && 76,
+        priority: isXcodeProjFolder ? 76 : undefined,
       };
     });
   },

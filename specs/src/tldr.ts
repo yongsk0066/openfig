@@ -26,7 +26,7 @@ const wholeTldrPages: Fig.Generator = {
       .filter((line) => isMarkDownRegex.test(line))
       .map((line) => {
         return {
-          name: line.split(" ").at(-1).slice(0, -3),
+          name: line.split(" ").at(-1)?.slice(0, -3) ?? "",
           description: "Tldr page",
           icon: "fig://icon?type=string",
         };
@@ -42,7 +42,7 @@ const linuxTldrPages: Fig.Generator = {
       .filter((line) => isMarkDownRegex.test(line))
       .map((line) => {
         return {
-          name: line.split(" ").at(-1).slice(0, -3),
+          name: line.split(" ").at(-1)?.slice(0, -3) ?? "",
           description: "Tldr page",
           icon: "fig://icon?type=string",
         };
@@ -58,7 +58,7 @@ const osxTldrPages: Fig.Generator = {
       .filter((line) => isMarkDownRegex.test(line))
       .map((line) => {
         return {
-          name: line.split(" ").at(-1).slice(0, -3),
+          name: line.split(" ").at(-1)?.slice(0, -3) ?? "",
           description: "Tldr page",
           icon: "fig://icon?type=string",
         };
@@ -74,7 +74,7 @@ const sunosTldrPages: Fig.Generator = {
       .filter((line) => isMarkDownRegex.test(line))
       .map((line) => {
         return {
-          name: line.split(" ").at(-1).slice(0, -3),
+          name: line.split(" ").at(-1)?.slice(0, -3) ?? "",
           description: "Tldr page",
           icon: "fig://icon?type=string",
         };

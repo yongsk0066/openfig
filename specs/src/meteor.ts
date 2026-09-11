@@ -24,7 +24,7 @@ const packagesGenerator: Fig.Generator = {
         .replace(/#.*/g, "")
         .replace(/^\s+|\s+$|\s+(?=\s)/g, "");
       if (trimmedPack.includes("@")) {
-        trimmedPack = trimmedPack.split("@").at(0);
+        trimmedPack = trimmedPack.split("@").at(0) ?? "";
       }
       return { name: trimmedPack };
     });

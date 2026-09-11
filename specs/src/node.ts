@@ -497,6 +497,7 @@ const completionSpec: Fig.Subcommand = {
         ],
       };
     }
+    return { name: "node" };
   },
 };
 

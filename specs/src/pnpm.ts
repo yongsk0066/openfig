@@ -992,7 +992,7 @@ const completionSpec: Fig.Spec = {
     };
 
     if (postProcess === undefined) {
-      return undefined;
+      return { name: "pnpm" };
     }
 
     const packages = postProcess(

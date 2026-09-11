@@ -6,11 +6,12 @@ const serverList: Fig.Generator = {
     const lines = out.split("\n");
     const serversList = [];
     for (let i = 1; i < lines.length; i++) {
-      const activeStatus = lines[i].match(/\S+/g)[0];
+      const columns = lines[i].match(/\S+/g) ?? [];
+      const activeStatus = columns[0];
       // Remove current server from the list
       if (activeStatus != "*") {
-        const server = lines[i].match(/\S+/g)[1];
-        const serverUrl = lines[i].match(/\S+/g)[2];
+        const server = columns[1];
+        const serverUrl = columns[2];
         serversList.push({
           name: server,
           description: serverUrl,

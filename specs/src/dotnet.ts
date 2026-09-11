@@ -219,9 +219,11 @@ const completionSpec: Fig.Spec = {
     const lines = stdout.split("\n").slice(2);
 
     for (const line of lines) {
-      const [_, __, command] = line
-        .match(argRegex)
-        .map((match) => match.trim());
+      const matches: string[] = line.match(argRegex) ?? [];
+      const [_, __, command] = matches.map((match) => match.trim());
+      if (!command) {
+        continue;
+      }
 
       const commands = command.split(",").map<Fig.Subcommand>((cmd) => {
         const value = cmd.replace("dotnet-", "");

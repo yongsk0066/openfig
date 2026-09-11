@@ -73,15 +73,17 @@ const completionSpec: Fig.Spec = {
           filterTemplateSuggestions: function (paths) {
             return paths
               .filter((file) => {
-                return file.name.match(/.*\.json$/g) || file.name.endsWith("/");
+                const name = file.name ?? "";
+                return name.match(/.*\.json$/g) || name.endsWith("/");
               })
               .map((file) => {
-                const isJsFile = file.name.match(/.*\.json?$/g);
-                const isTsConfig = file.name.match(/tsconfig.json$/g);
+                const name = file.name ?? "";
+                const isJsFile = name.match(/.*\.json?$/g);
+                const isTsConfig = name.match(/tsconfig.json$/g);
 
                 return {
                   ...file,
-                  priority: isTsConfig ? 100 : isJsFile && 76,
+                  priority: isTsConfig ? 100 : isJsFile ? 76 : undefined,
                 };
               });
           },

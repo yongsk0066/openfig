@@ -10,7 +10,7 @@ export const getVersionCommand: Fig.GetVersionCommand = async (
     // eslint-disable-next-line @withfig/fig-linter/no-useless-arrays
     args: ["--version"],
   });
-  return clean(stdout.slice(stdout.indexOf(" ") + 1));
+  return clean(stdout.slice(stdout.indexOf(" ") + 1)) ?? "";
 };
 
 export default createVersionedSpec("infracost", versionFiles);

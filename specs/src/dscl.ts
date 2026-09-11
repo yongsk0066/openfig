@@ -68,7 +68,7 @@ const generateDsclPath: Fig.Generator = {
     // can't guarantee that dscl is the first token. If it's not found,
     // this is -1, so searching for `datasource` will start from index 0
     const dsclIndex = tokens.indexOf("dscl");
-    let datasource: string;
+    let datasource: string | undefined;
     for (let i = dsclIndex + 1; i < tokens.length; i++) {
       const token = tokens[i];
       // skip if the current token is a flag
@@ -82,6 +82,9 @@ const generateDsclPath: Fig.Generator = {
       }
       datasource = token;
       break;
+    }
+    if (datasource === undefined) {
+      return [];
     }
     const lastSlashIndex = lastToken.lastIndexOf("/");
     const path = lastToken.slice(0, lastSlashIndex < 0 ? 0 : lastSlashIndex);

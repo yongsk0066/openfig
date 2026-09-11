@@ -1,20 +1,25 @@
 import YAML from "yaml";
 import { gitGenerators } from "./git";
 
+// `.pre-commit-config.yaml`, limited to the fields this spec reads
+interface PreCommitConfig {
+  repos?: { hooks: { id: string }[] }[];
+}
+
 const hooksInConfig: Fig.Generator = {
   script: ["cat", ".pre-commit-config.yaml"],
   postProcess: (output) => {
     const suggestions: Fig.Suggestion[] = [];
 
     try {
-      const repos = YAML.parse(output).repos;
+      const { repos }: PreCommitConfig = YAML.parse(output);
 
       if (repos) {
         repos.forEach((repo) => {
           repo.hooks.forEach((hookId) => {
             suggestions.push({
               name: `${hookId.id}`,
-            }) as Fig.Suggestion;
+            });
           });
         });
       }
@@ -23,6 +28,7 @@ const hooksInConfig: Fig.Generator = {
     } catch (e) {
       console.log(e);
     }
+    return [];
   },
 };
 

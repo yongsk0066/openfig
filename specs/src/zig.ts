@@ -1013,7 +1013,7 @@ const buildOptions: Fig.Option[] = [
 ];
 
 const llvmOptions: Fig.Option[] = [
-  ...(clangBase as Fig.Subcommand).options,
+  ...((clangBase as Fig.Subcommand).options ?? []),
   helpOption,
 ];
 

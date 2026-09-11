@@ -26,7 +26,7 @@ const completionSpec: Fig.Spec = {
       args: ["plan", "list"],
     });
     if (stdout === "") {
-      return null;
+      return { name: "rugby" };
     }
     // Handle `rugby umbrella` command
     return {

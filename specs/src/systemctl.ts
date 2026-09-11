@@ -95,8 +95,8 @@ const unitFileGenerator: Fig.Generator = {
         loadedEmoji = "❓";
       }
 
-      const loadedString =
-        unit.state?.charAt(0).toUpperCase() + unit.state?.slice(1);
+      const state = unit.state ?? "";
+      const loadedString = state.charAt(0).toUpperCase() + state.slice(1);
 
       return {
         name: unit.unit_file,

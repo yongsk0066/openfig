@@ -4861,6 +4861,6 @@ export const clangBase: Fig.Spec = {
 
 const completionSpec: Fig.Spec = {
   ...clangBase,
-  options: [...clangBase.options, stdOption],
+  options: [...(clangBase.options ?? []), stdOption],
 };
 export default completionSpec;

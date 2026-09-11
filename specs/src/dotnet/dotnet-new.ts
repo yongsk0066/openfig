@@ -194,9 +194,9 @@ const completionSpec: Fig.Spec = {
 
         return lines.map<Fig.Suggestion>((line) => {
           const argRegex = /(([a-zA-Z \.\[\]#,/][^ ]{1,})+)/g;
-          const [templateName, shortName, language, tags] = line
-            .match(argRegex)
-            .map((match) => match.trim());
+          const [templateName, shortName, language, tags] = (
+            line.match(argRegex) ?? []
+          ).map((match) => match.trim());
 
           return {
             insertValue: shortName,

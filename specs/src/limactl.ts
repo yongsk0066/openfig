@@ -254,14 +254,16 @@ const completionSpec: Fig.Spec = {
 
 const HELP_COMMAND_DESCRIPTION =
   "Help provides help for any command in the application";
-completionSpec.subcommands.push({
+const subcommands = completionSpec.subcommands ?? [];
+completionSpec.subcommands = subcommands;
+subcommands.push({
   name: "help",
   description: HELP_COMMAND_DESCRIPTION,
   args: {
     name: "command",
     isOptional: true,
     suggestions: [
-      ...completionSpec.subcommands.map(
+      ...subcommands.map(
         (subcommand): Fig.Suggestion => ({
           name: subcommand.name,
           description: subcommand.description,

@@ -74,9 +74,9 @@ const toolListGenerator: Fig.Generator = {
 
     return lines.map<Fig.Suggestion>((line) => {
       const argRegex = /(([a-zA-Z \.\[\]#,/][^ ]{1,})+)/g;
-      const [pkg, version, commands] = line
-        .match(argRegex)
-        .map((match) => match.trim());
+      const [pkg, version, commands] = (line.match(argRegex) ?? []).map(
+        (match) => match.trim()
+      );
 
       return {
         insertValue: pkg,

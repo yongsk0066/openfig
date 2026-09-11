@@ -247,7 +247,7 @@ const completionSpec: Fig.Spec = {
       name: "sql",
       description: "Start an SQL REPL in your terminal with pipe support",
       options: [
-        ...connectionOptionsAndArgs("export", "from").options,
+        ...(connectionOptionsAndArgs("export", "from").options ?? []),
         {
           name: "--pretty",
           description: "Whether database responses should be pretty printed",

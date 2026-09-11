@@ -1,14 +1,17 @@
 const postProcessDockerPs: Fig.Generator["postProcess"] = (out) => {
-  return out.split("\n").map((i) => {
+  return out.split("\n").flatMap((i) => {
     try {
       const parsedJSON: Record<string, string> = JSON.parse(i);
-      return {
-        name: parsedJSON.Names,
-        displayName: `${parsedJSON.Names} (${parsedJSON.Image})`,
-        icon: "fig://icon?type=docker",
-      };
+      return [
+        {
+          name: parsedJSON.Names,
+          displayName: `${parsedJSON.Names} (${parsedJSON.Image})`,
+          icon: "fig://icon?type=docker",
+        },
+      ];
     } catch (error) {
       console.error(error);
+      return [];
     }
   });
 };

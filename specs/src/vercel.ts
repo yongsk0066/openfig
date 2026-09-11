@@ -4,7 +4,7 @@ const envVarList: Fig.Generator = {
     const lines = out.split("\n");
     const envList = [];
     for (let i = 4; i < lines.length; i++) {
-      const envVar = lines[i].match(/\S+/g)[0];
+      const envVar = lines[i].match(/\S+/g)?.[0];
       envList.push({
         name: envVar,
       });
@@ -13,13 +13,13 @@ const envVarList: Fig.Generator = {
   },
 };
 
-const domainList = {
+const domainList: Fig.Generator = {
   script: ["vercel", "domains"],
   postProcess: function (out) {
     const lines = out.split("\n");
     const domainList = [];
     for (let i = 4; i < lines.length; i++) {
-      const domain = lines[i].match(/\S+/g)[0];
+      const domain = lines[i].match(/\S+/g)?.[0];
       domainList.push({
         name: domain,
       });
@@ -34,7 +34,7 @@ const teamList: Fig.Generator = {
     const lines = out.split("\n");
     const teamList = [];
     for (let i = 3; i < lines.length; i++) {
-      const teamName = lines[i].match(/\S+/g)[0];
+      const teamName = lines[i].match(/\S+/g)?.[0];
       teamList.push({
         name: teamName,
       });

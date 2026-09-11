@@ -10,7 +10,7 @@ const completionSpec: Fig.Spec = {
   name: "clang++",
   description: "Clang LLVM compiler for C++",
   options: [
-    ...(clangBase as Fig.Subcommand).options,
+    ...((clangBase as Fig.Subcommand).options ?? []),
     {
       name: "-std",
       description: "Language standard to compile for",

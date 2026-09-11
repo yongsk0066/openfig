@@ -413,7 +413,7 @@ const completionSpec: Fig.Spec = {
     const services: string[] = Object.keys(servicesObject);
     // Avoid infinite recursion of generated subcommands
     if (services.includes(tokens[0])) {
-      return;
+      return { name: "serverless" };
     }
 
     const subcommands: Fig.Subcommand[] = services.map((service) => ({
@@ -430,6 +430,7 @@ const completionSpec: Fig.Spec = {
         subcommands,
       };
     }
+    return { name: "serverless" };
   },
 };
 

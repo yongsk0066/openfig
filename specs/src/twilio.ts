@@ -1467,7 +1467,9 @@ const completionSpec: Fig.Spec = {
   }),
 };
 
-completionSpec.subcommands.push(
+const topLevelSubcommands = completionSpec.subcommands ?? [];
+completionSpec.subcommands = topLevelSubcommands;
+topLevelSubcommands.push(
   {
     name: "help",
     args: createSeparatedSubcommandTree(":", subcommands, {

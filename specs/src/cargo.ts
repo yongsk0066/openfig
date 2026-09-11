@@ -497,6 +497,7 @@ const configGenerator: Fig.Generator = keyValue({
     if (pair?.tomlSuggestions) {
       return pair.tomlSuggestions;
     }
+    return [];
   },
   separator: "=",
 });

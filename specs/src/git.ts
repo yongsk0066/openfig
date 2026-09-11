@@ -52,7 +52,9 @@ interface PostProcessBranchesOptions {
 }
 
 const postProcessBranches =
-  (options: PostProcessBranchesOptions = {}): Fig.Generator["postProcess"] =>
+  (
+    options: PostProcessBranchesOptions = {}
+  ): NonNullable<Fig.Generator["postProcess"]> =>
   (out) => {
     const { insertWithoutRemotes = false } = options;
 
@@ -107,7 +109,7 @@ const postProcessBranches =
           priority: 75,
         };
       })
-      .filter((suggestion) => {
+      .filter((suggestion): suggestion is NonNullable<typeof suggestion> => {
         if (!suggestion) return false;
         if (seen.has(suggestion.name)) return false;
         seen.add(suggestion.name);
@@ -260,7 +262,7 @@ export const gitGenerators: Record<string, Fig.Generator> = {
     custom: async (tokens, executeShellCommand) => {
       const pp = postProcessBranches({ insertWithoutRemotes: true });
       if (tokens.includes("-r")) {
-        return pp?.(
+        return pp(
           (
             await executeShellCommand({
               command: "git",
@@ -275,7 +277,7 @@ export const gitGenerators: Record<string, Fig.Generator> = {
           tokens
         );
       } else {
-        return pp?.(
+        return pp(
           (
             await executeShellCommand({
               command: "git",

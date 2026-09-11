@@ -146,10 +146,11 @@ const configGenerator: Fig.Generator = {
     param
       .filter(({ name }) => name?.endsWith(".json") || name?.endsWith("rc"))
       .map((param) => {
-        if (ESLINTRC_JSON.has(param.name)) {
+        const name = param.name ?? "";
+        if (ESLINTRC_JSON.has(name)) {
           param.description = "Oxlint is compatible with ESLint configs";
           param.priority = 51;
-        } else if (OXLINTRC.has(param.name)) {
+        } else if (OXLINTRC.has(name)) {
           param.priority = 52;
           param.description = "oxlint config file";
         }

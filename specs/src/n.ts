@@ -101,7 +101,7 @@ const completionSpec: Fig.Spec = {
     {
       name: ["run", "use", "as"],
       description: "Execute downloaded Node.js version with args",
-      args: [versionArg, ...[node.args].flat()],
+      args: [versionArg, ...[node.args ?? []].flat()],
       subcommands: node.subcommands,
       options: node.options,
     },

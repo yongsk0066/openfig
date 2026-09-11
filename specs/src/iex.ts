@@ -5,7 +5,7 @@ const completionSpec: Fig.Spec = {
   name: "iex",
   description: "Elixir Interactive Shell",
   options: [
-    ...elixir.options,
+    ...(elixir.options ?? []),
     {
       name: "--dot-iex",
       description:

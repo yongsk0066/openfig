@@ -11,7 +11,8 @@ const listPasswords: Fig.Generator = {
       ],
     });
     return stdout.split("\n").map((password) => ({
-      name: password.split(".password-store/").pop().replace(".gpg", ""),
+      name:
+        password.split(".password-store/").pop()?.replace(".gpg", "") ?? "",
       icon: "🔐",
     }));
   },

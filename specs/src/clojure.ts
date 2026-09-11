@@ -16,7 +16,7 @@ function bracketize<T>(content: T): string {
  */
 function singleName<T>(value: Fig.SingleOrArray<T>): T {
   if (Array.isArray(value)) {
-    return value.at(-1);
+    return value[value.length - 1];
   } else {
     return value;
   }

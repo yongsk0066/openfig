@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "fig-spec-compile --outdir dist",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fig/spec-generators": "workspace:^",
@@ -16,7 +17,10 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@fig/spec-compiler": "workspace:^"
+    "@fig/config": "workspace:^",
+    "@fig/spec-compiler": "workspace:^",
+    "@fig/spec-types": "workspace:^",
+    "typescript": "catalog:"
   },
   "engines": {
     "node": ">=26"

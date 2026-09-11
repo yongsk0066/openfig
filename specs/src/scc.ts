@@ -1,8 +1,5 @@
-import {
-  valueList,
-  keyValueList,
-  KeyValueSuggestions,
-} from "@fig/spec-generators";
+import { valueList, keyValueList } from "@fig/spec-generators";
+import type { KeyValueSuggestions } from "@fig/spec-generators";
 
 /** The output of processing `scc --languages` */
 interface SccLanguages {

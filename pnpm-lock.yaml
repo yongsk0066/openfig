@@ -610,9 +610,18 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@fig/config':
+        specifier: workspace:^
+        version: link:../packages/config
       '@fig/spec-compiler':
         specifier: workspace:^
         version: link:../packages/spec-compiler
+      '@fig/spec-types':
+        specifier: workspace:^
+        version: link:../packages/spec-types
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   tests/fig-api:
     devDependencies:

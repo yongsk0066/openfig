@@ -1,0 +1,17 @@
+{
+  "extends": "@fig/config/base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM"],
+    "moduleResolution": "bundler",
+    "types": ["@fig/spec-types"],
+    /* 1,480 upstream spec files, none of them written against these. Turning
+       them on is a separate job; `strict` alone is 438 errors. */
+    "strict": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

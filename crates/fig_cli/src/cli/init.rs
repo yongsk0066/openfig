@@ -16,7 +16,7 @@ use fig_integrations::shell::{
     When,
 };
 use fig_os_shim::Context;
-use fig_util::env_var::Q_SHELL;
+use fig_util::env_var::FIG_SHELL;
 use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
@@ -28,7 +28,7 @@ use super::internal::should_figterm_launch::should_figterm_launch_exit_status;
 
 const SHELL_INTEGRATIONS_ENABLED_STATE_KEY: &str = "shell-integrations.enabled";
 
-static IS_SNAPSHOT_TEST: LazyLock<bool> = LazyLock::new(|| fig_os_shim::Env::new().q_init_snapshot_test());
+static IS_SNAPSHOT_TEST: LazyLock<bool> = LazyLock::new(|| fig_os_shim::Env::new().fig_init_snapshot_test());
 
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct InitArgs {
@@ -113,7 +113,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
     if let Some(parent_process) = get_parent_process_exe() {
         to_source.push(assign_shell_variable(
             shell,
-            Q_SHELL,
+            FIG_SHELL,
             if *IS_SNAPSHOT_TEST {
                 Path::new("/bin/zsh").display()
             } else {
@@ -129,11 +129,11 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
         } else {
             should_figterm_launch_exit_status(&Context::new(), true)
         };
-        to_source.push(assign_shell_variable(shell, "SHOULD_QTERM_LAUNCH", status, false));
+        to_source.push(assign_shell_variable(shell, "SHOULD_FIGTERM_LAUNCH", status, false));
     }
 
     if let Some(path) = fig_settings::settings::get_string_opt("figterm.path") {
-        to_source.push(assign_shell_variable(shell, "Q_TERM_PATH", path, false));
+        to_source.push(assign_shell_variable(shell, "FIG_TERM_PATH", path, false));
     }
 
     let shell_integration_source = shell.get_fig_integration_source(when);
@@ -146,7 +146,7 @@ fn shell_integrations_disabled_code(shell: Shell) -> String {
     guard_source(
         &shell,
         false,
-        "Q_SHELL_INTEGRATION_DISABLED",
+        "FIG_SHELL_INTEGRATION_DISABLED",
         GuardAssignment::AfterSourcing,
         format!(
             "printf '{PRODUCT_NAME} shell integration is disabled.\\nRe-enable by running: {}\\n'",

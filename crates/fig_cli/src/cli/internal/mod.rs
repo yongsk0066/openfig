@@ -24,7 +24,7 @@ use fig_proto::local::EnvironmentVariable;
 use fig_proto::util::get_shell;
 use fig_util::directories;
 use fig_util::directories::figterm_socket_path;
-use fig_util::env_var::QTERM_SESSION_ID;
+use fig_util::env_var::FIGTERM_SESSION_ID;
 use sysinfo::System;
 use tracing::error;
 
@@ -78,7 +78,7 @@ pub enum InternalSubcommand {
     /// Exit code:
     /// - 0 execute figterm
     /// - 1 dont execute figterm
-    /// - 2 fallback to Q_TERM env
+    /// - 2 fallback to FIG_TERM env
     ShouldFigtermLaunch,
     SocketsDir,
     FigtermSocketPath {
@@ -144,7 +144,7 @@ impl InternalSubcommand {
 }
 
 pub async fn pre_cmd(alias: Option<String>) -> ExitCode {
-    let Ok(session_id) = std::env::var(QTERM_SESSION_ID) else {
+    let Ok(session_id) = std::env::var(FIGTERM_SESSION_ID) else {
         return ExitCode::FAILURE;
     };
 

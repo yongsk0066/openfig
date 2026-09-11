@@ -12,65 +12,65 @@ export TTY
 
 export SHELL_PID="$$"
 
-if [[ -z "${Q_SHELL:-}" ]]; then
-  Q_SHELL=$({{CLI_BINARY_NAME}} _ get-shell)
+if [[ -z "${FIG_SHELL:-}" ]]; then
+  FIG_SHELL=$({{CLI_BINARY_NAME}} _ get-shell)
 fi
 
-Q_HAS_SET_PROMPT=0
+FIG_HAS_SET_PROMPT=0
 
 fig_preexec() {
   # Restore user defined prompt before executing.
   if [ -n "${PS1+x}" ]; then
-    PS1="$Q_USER_PS1"
+    PS1="$FIG_USER_PS1"
   fi
   if [ -n "${PROMPT+x}" ]; then
-    PROMPT="$Q_USER_PROMPT"
+    PROMPT="$FIG_USER_PROMPT"
   fi
   if [ -n "${prompt+x}" ]; then
-    prompt="$Q_USER_prompt"
+    prompt="$FIG_USER_prompt"
   fi
 
   if [ -n "${PS2+x}" ]; then
-    PS2="$Q_USER_PS2"
+    PS2="$FIG_USER_PS2"
   fi
   if [ -n "${PROMPT2+x}" ]; then
-    PROMPT2="$Q_USER_PROMPT2"
+    PROMPT2="$FIG_USER_PROMPT2"
   fi
 
   if [ -n "${PS3+x}" ]; then
-    PS3="$Q_USER_PS3"
+    PS3="$FIG_USER_PS3"
   fi
   if [ -n "${PROMPT3+x}" ]; then
-    PROMPT3="$Q_USER_PROMPT3"
+    PROMPT3="$FIG_USER_PROMPT3"
   fi
 
   if [ -n "${PS4+x}" ]; then
-    PS4="$Q_USER_PS4"
+    PS4="$FIG_USER_PS4"
   fi
   if [ -n "${PROMPT4+x}" ]; then
-    PROMPT4="$Q_USER_PROMPT4"
+    PROMPT4="$FIG_USER_PROMPT4"
   fi
 
   if [ -n "${RPS1+x}" ]; then
-    RPS1="$Q_USER_RPS1"
+    RPS1="$FIG_USER_RPS1"
   fi
   if [ -n "${RPROMPT+x}" ]; then
-    RPROMPT="$Q_USER_RPROMPT"
+    RPROMPT="$FIG_USER_RPROMPT"
   fi
 
   if [ -n "${RPS2+x}" ]; then
-    RPS2="$Q_USER_RPS2"
+    RPS2="$FIG_USER_RPS2"
   fi
   if [ -n "${RPROMPT2+x}" ]; then
-    RPROMPT2="$Q_USER_RPROMPT2"
+    RPROMPT2="$FIG_USER_RPROMPT2"
   fi
 
-  Q_HAS_SET_PROMPT=0
+  FIG_HAS_SET_PROMPT=0
 
   # One write instead of two: each `fig_osc` is a separate `printf`, i.e. a separate write(2)
   # into the pty that figterm has to wake up for.
   # shellcheck disable=SC2059
-  printf '\033]697;OSCLock=%s\007\033]697;PreExec\007' "${QTERM_SESSION_ID}"
+  printf '\033]697;OSCLock=%s\007\033]697;PreExec\007' "${FIGTERM_SESSION_ID}"
 }
 
 fig_precmd() {
@@ -84,44 +84,44 @@ fig_precmd() {
   # keys are gone (nothing parses them either).
   # shellcheck disable=SC2059
   printf '\033]697;OSCUnlock=%s\007\033]697;Dir=%s\007\033]697;Shell=zsh\007\033]697;ShellPath=%s\007\033]697;PID=%d\007\033]697;ExitCode=%s\007\033]697;TTY=%s\007\033]697;Log=%s\007\033]697;ZshAutosuggestionColor=%s\007\033]697;User=%s\007' \
-    "${QTERM_SESSION_ID}" \
+    "${FIGTERM_SESSION_ID}" \
     "$PWD" \
-    "${Q_SHELL:-$SHELL}" \
+    "${FIG_SHELL:-$SHELL}" \
     "$$" \
     "${LAST_STATUS}" \
     "${TTY}" \
-    "${Q_LOG_LEVEL}" \
+    "${FIG_LOG_LEVEL}" \
     "${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE}" \
     "${USER:-root}"
 
-  if [ "$Q_HAS_SET_PROMPT" -eq 1 ]; then
+  if [ "$FIG_HAS_SET_PROMPT" -eq 1 ]; then
     # ^C pressed while entering command, call preexec manually to clear fig prompts.
     fig_preexec
   fi
 
   START_PROMPT=$'\033]697;StartPrompt\007'
   END_PROMPT=$'\033]697;EndPrompt\007'
-  NEW_CMD=$'\033]697;NewCmd='"${QTERM_SESSION_ID}"$'\007'
+  NEW_CMD=$'\033]697;NewCmd='"${FIGTERM_SESSION_ID}"$'\007'
 
   # Save user defined prompts.
-  Q_USER_PS1="$PS1"
-  Q_USER_PROMPT="$PROMPT"
-  Q_USER_prompt="$prompt"
+  FIG_USER_PS1="$PS1"
+  FIG_USER_PROMPT="$PROMPT"
+  FIG_USER_prompt="$prompt"
 
-  Q_USER_PS2="$PS2"
-  Q_USER_PROMPT2="$PROMPT2"
+  FIG_USER_PS2="$PS2"
+  FIG_USER_PROMPT2="$PROMPT2"
 
-  Q_USER_PS3="$PS3"
-  Q_USER_PROMPT3="$PROMPT3"
+  FIG_USER_PS3="$PS3"
+  FIG_USER_PROMPT3="$PROMPT3"
 
-  Q_USER_PS4="$PS4"
-  Q_USER_PROMPT4="$PROMPT4"
+  FIG_USER_PS4="$PS4"
+  FIG_USER_PROMPT4="$PROMPT4"
 
-  Q_USER_RPS1="$RPS1"
-  Q_USER_RPROMPT="$RPROMPT"
+  FIG_USER_RPS1="$RPS1"
+  FIG_USER_RPROMPT="$RPROMPT"
 
-  Q_USER_RPS2="$RPS2"
-  Q_USER_RPROMPT2="$RPROMPT2"
+  FIG_USER_RPS2="$RPS2"
+  FIG_USER_RPROMPT2="$RPROMPT2"
 
   if [ -n "${PROMPT+x}" ]; then
     PROMPT="%{$START_PROMPT%}$PROMPT%{$END_PROMPT$NEW_CMD%}"
@@ -163,7 +163,7 @@ fig_precmd() {
     RPS2="%{$START_PROMPT%}$RPS2%{$END_PROMPT%}"
   fi
 
-  Q_HAS_SET_PROMPT=1
+  FIG_HAS_SET_PROMPT=1
 
   if command -v {{CLI_BINARY_NAME}} >/dev/null 2>&1; then
     (command {{CLI_BINARY_NAME}} _ pre-cmd --alias "$(\alias)" > /dev/null 2>&1 &) >/dev/null 2>&1

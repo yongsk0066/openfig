@@ -15,7 +15,7 @@ use serde::{
 };
 use tokio::process::Command;
 
-use crate::env_var::Q_ZDOTDIR;
+use crate::env_var::FIG_ZDOTDIR;
 use crate::{
     Error,
     directories,
@@ -100,7 +100,7 @@ impl Shell {
             Shell::Bash => home(),
             Shell::Zsh => match env
                 .get_os("ZDOTDIR")
-                .or_else(|| env.get_os(Q_ZDOTDIR))
+                .or_else(|| env.get_os(FIG_ZDOTDIR))
                 .map(PathBuf::from)
             {
                 Some(dir) => Ok(dir),

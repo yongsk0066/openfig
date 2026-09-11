@@ -211,7 +211,7 @@ impl Cli {
 
         // `q init`, `q completion` and the `q _ …` internals write to stdout expecting the shell
         // to `eval` it or capture it in `$(…)`. A log line in that stream is a syntax error in the
-        // user's shell startup, so the stdout logger is off for them whatever `Q_LOG_STDOUT` or
+        // user's shell startup, so the stdout logger is off for them whatever `FIG_LOG_STDOUT` or
         // `-v` say; the file log still gets everything.
         let stdout_is_machine_readable = matches!(
             self.subcommand,
@@ -221,7 +221,8 @@ impl Cli {
         // Initialize our logger and keep around the guard so logging can perform as expected.
         let _log_guard = initialize_logging(LogArgs {
             log_level: verbosity.map(|level| level.to_string()),
-            log_to_stdout: !stdout_is_machine_readable && (fig_os_shim::Env::new().q_log_stdout() || self.verbose > 0),
+            log_to_stdout: !stdout_is_machine_readable
+                && (fig_os_shim::Env::new().fig_log_stdout() || self.verbose > 0),
             log_file_path: (max_level >= Level::DEBUG)
                 .then(|| directories::logs_dir().map(|dir| dir.join("cli.log")))
                 .and_then(Result::ok),

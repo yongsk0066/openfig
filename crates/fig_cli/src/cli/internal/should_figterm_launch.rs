@@ -8,8 +8,8 @@ use std::process::ExitCode;
 use fig_os_shim::Context;
 use fig_util::Shell;
 
-const Q_FORCE_FIGTERM_LAUNCH: &str = "Q_FORCE_FIGTERM_LAUNCH";
-const Q_TERM_DISABLED: &str = "Q_TERM_DISABLED";
+const FIG_FORCE_FIGTERM_LAUNCH: &str = "FIG_FORCE_FIGTERM_LAUNCH";
+const FIG_TERM_DISABLED: &str = "FIG_TERM_DISABLED";
 const INSIDE_EMACS: &str = "INSIDE_EMACS";
 const TERM_PROGRAM: &str = "TERM_PROGRAM";
 const WARP_TERMINAL: &str = "WarpTerminal";
@@ -50,7 +50,7 @@ impl Status {
 }
 
 fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> Status {
-    use fig_util::env_var::Q_TERM;
+    use fig_util::env_var::FIG_TERM;
     let env = ctx.env();
 
     let parent_pid = match current_pid.parent() {
@@ -76,9 +76,9 @@ fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> 
     let valid_parent = Shell::try_find_shell(parent_name).is_some();
 
     if env.in_codespaces() {
-        return match env.get_os(Q_TERM) {
-            Some(_) => Status::DontLaunch(format!("In Codespaces and {Q_TERM} is set").into()),
-            None => Status::Launch(format!("In Codespaces and {Q_TERM} is not set").into()),
+        return match env.get_os(FIG_TERM) {
+            Some(_) => Status::DontLaunch(format!("In Codespaces and {FIG_TERM} is set").into()),
+            None => Status::Launch(format!("In Codespaces and {FIG_TERM} is not set").into()),
         };
     }
 
@@ -179,27 +179,27 @@ fn should_launch(ctx: &Context, quiet: bool) -> u8 {
 }
 
 pub fn should_figterm_launch_exit_status(ctx: &Context, quiet: bool) -> u8 {
-    use fig_util::env_var::PROCESS_LAUNCHED_BY_Q;
+    use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 
     let env = ctx.env();
 
-    if env.get_os(Q_FORCE_FIGTERM_LAUNCH).is_some() {
+    if env.get_os(FIG_FORCE_FIGTERM_LAUNCH).is_some() {
         if !quiet {
-            writeln!(stdout(), "✅ {Q_FORCE_FIGTERM_LAUNCH}").ok();
+            writeln!(stdout(), "✅ {FIG_FORCE_FIGTERM_LAUNCH}").ok();
         }
         return 0;
     }
 
-    if env.get_os(Q_TERM_DISABLED).is_some() {
+    if env.get_os(FIG_TERM_DISABLED).is_some() {
         if !quiet {
-            writeln!(stdout(), "❌ {Q_TERM_DISABLED}").ok();
+            writeln!(stdout(), "❌ {FIG_TERM_DISABLED}").ok();
         }
         return 1;
     }
 
-    if env.get_os(PROCESS_LAUNCHED_BY_Q).is_some() {
+    if env.get_os(PROCESS_LAUNCHED_BY_FIG).is_some() {
         if !quiet {
-            writeln!(stdout(), "❌ {PROCESS_LAUNCHED_BY_Q}").ok();
+            writeln!(stdout(), "❌ {PROCESS_LAUNCHED_BY_FIG}").ok();
         }
         return 1;
     }
@@ -279,8 +279,8 @@ mod tests {
         Env,
     };
     use fig_util::env_var::{
-        PROCESS_LAUNCHED_BY_Q,
-        Q_TERM,
+        FIG_TERM,
+        PROCESS_LAUNCHED_BY_FIG,
     };
 
     use super::*;
@@ -374,12 +374,12 @@ mod tests {
     #[test]
     fn override_tests() {
         let tests = [
-            test(Q_FORCE_FIGTERM_LAUNCH)
-                .env(&[(Q_FORCE_FIGTERM_LAUNCH, "1")])
+            test(FIG_FORCE_FIGTERM_LAUNCH)
+                .env(&[(FIG_FORCE_FIGTERM_LAUNCH, "1")])
                 .expect(0),
-            test(Q_TERM_DISABLED).env(&[(Q_TERM_DISABLED, "1")]).expect(1),
-            test(PROCESS_LAUNCHED_BY_Q)
-                .env(&[(PROCESS_LAUNCHED_BY_Q, "1")])
+            test(FIG_TERM_DISABLED).env(&[(FIG_TERM_DISABLED, "1")]).expect(1),
+            test(PROCESS_LAUNCHED_BY_FIG)
+                .env(&[(PROCESS_LAUNCHED_BY_FIG, "1")])
                 .expect(1),
             test(INSIDE_EMACS).env(&[(INSIDE_EMACS, "1")]).expect(1),
             test(WARP_TERMINAL).env(&[(TERM_PROGRAM, WARP_TERMINAL)]).expect(1),
@@ -404,10 +404,10 @@ mod tests {
         let tests = [
             test("no parent id").expect(1),
             test("invalid parent").parent_exe("/usr/bin/invalid").expect(1),
-            test(format!("In Codespaces with {Q_TERM}"))
+            test(format!("In Codespaces with {FIG_TERM}"))
                 .parent_exe("/usr/bin/zsh")
                 .env(&[("CODESPACES", "1")])
-                .env(&[(Q_TERM, "1")])
+                .env(&[(FIG_TERM, "1")])
                 .expect(1),
         ];
         for test in tests {
@@ -439,7 +439,7 @@ mod tests {
                 .parent_exe("/usr/bin/zsh")
                 .grandparent_exe("/usr/bin/tmux")
                 .expect(0),
-            test(format!("In Codespaces without {Q_TERM}"))
+            test(format!("In Codespaces without {FIG_TERM}"))
                 .parent_exe("/usr/bin/zsh")
                 .env(&[("CODESPACES", "1")])
                 .expect(0),

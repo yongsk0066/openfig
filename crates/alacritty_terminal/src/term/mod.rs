@@ -242,14 +242,14 @@ pub struct TextBuffer {
     pub cursor_idx: Option<usize>,
 }
 
-/// `Q_PROMPT_OFFSET_WORKAROUND`, parsed once.
+/// `FIG_PROMPT_OFFSET_WORKAROUND`, parsed once.
 ///
 /// This was read and re-parsed on every new prompt, and each read built a fresh
 /// `fig_os_shim::Env` (a full snapshot of the process environment). The variable is set by the
 /// shell integration before figterm starts and cannot change afterwards.
 static PROMPT_OFFSET_WORKAROUND: LazyLock<Option<i32>> = LazyLock::new(|| {
     fig_os_shim::Env::new()
-        .q_prompt_offset_workaround()
+        .fig_prompt_offset_workaround()
         .ok()
         .and_then(|offset| offset.parse::<i32>().ok())
 });

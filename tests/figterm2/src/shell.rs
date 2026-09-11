@@ -118,6 +118,27 @@ fn pty_binary() -> Result<std::path::PathBuf> {
     Ok(path)
 }
 
+/// Path to the workspace build of the CLI, for the same reason as [`pty_binary`].
+///
+/// The generated shell integration calls the CLI by bare name (`q _ should-figterm-launch`,
+/// `q _ get-shell`), so this goes on the spawned shell's `PATH` under that name.
+fn cli_binary() -> Result<std::path::PathBuf> {
+    let test_exe = std::env::current_exe().context("no current_exe")?;
+    let profile_dir = test_exe
+        .parent()
+        .and_then(|deps| deps.parent())
+        .context("test binary is not under target/<profile>/deps")?;
+    let path = profile_dir.join(fig_util::consts::CLI_CRATE_NAME);
+    if !path.exists() {
+        anyhow::bail!(
+            "{} was not built at {}; run the tests through `cargo nextest run --workspace`",
+            fig_util::consts::CLI_CRATE_NAME,
+            path.display()
+        );
+    }
+    Ok(path)
+}
+
 pub struct Shell {
     // pub remote_socket: UnixListener,
     pub desktop_socket: UnixListener,
@@ -176,12 +197,52 @@ impl Shell {
         // Spawn a shell into the pty
         let mut cmd = CommandBuilder::new(shell);
 
-        // `pre.sh` honours a pre-set `Q_TERM_PATH`; without it the shell integration would exec
-        // whatever pty binary is *installed* on this machine, so the test would silently validate
-        // the installed app instead of the workspace build.
-        cmd.env("Q_TERM_PATH", pty_binary()?);
-        cmd.env("Q_NEW_SESSION", "1");
-        cmd.env("MOCK_QTERM_SESSION_ID", SESSION_ID);
+        // A throwaway `HOME` whose rc file sources *this build's* shell integration.
+        //
+        // The shell used to inherit the real `HOME`, so it read the installed app's rc hook —
+        // `eval "$(~/.local/bin/q init bash pre …)"` — and the test measured whatever version was
+        // installed on the machine. That is how the `Q_*` -> `FIG_*` rename first showed up here:
+        // the installed CLI still emitted `Q_TERM_PATH`, so the `FIG_TERM_PATH` below was ignored,
+        // the installed pty binary ran instead of the workspace one, and it did not know
+        // `MOCK_FIGTERM_SESSION_ID` — which surfaced as `path must be shorter than SUN_LEN`,
+        // because a random session UUID makes the socket path 32 characters longer than `1234`.
+        let home = tempdir.path().join("home");
+        tokio::fs::create_dir_all(&home).await?;
+        let cli = cli_binary()?;
+        let (rc_name, rc_file) = match shell {
+            "zsh" => ("zshrc", ".zshrc"),
+            _ => ("bashrc", ".bashrc"),
+        };
+        tokio::fs::write(
+            home.join(rc_file),
+            format!(
+                "eval \"$({cli} init {shell} pre --rcfile {rc_name})\"\n\
+                 eval \"$({cli} init {shell} post --rcfile {rc_name})\"\n",
+                cli = cli.display(),
+            ),
+        )
+        .await?;
+
+        // The integration calls the CLI and tests for the pty binary by bare name.
+        let bin = tempdir.path().join("bin");
+        tokio::fs::create_dir_all(&bin).await?;
+        tokio::fs::symlink(&cli, bin.join(fig_util::consts::CLI_BINARY_NAME)).await?;
+        tokio::fs::symlink(pty_binary()?, bin.join(fig_util::consts::PTY_BINARY_NAME)).await?;
+
+        cmd.env("HOME", &home);
+        cmd.env(
+            "PATH",
+            format!(
+                "{}:{}",
+                bin.display(),
+                std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into())
+            ),
+        );
+        // `pre.sh` honours a pre-set `FIG_TERM_PATH`; without it the shell integration would exec
+        // whatever pty binary is first on `PATH`.
+        cmd.env("FIG_TERM_PATH", pty_binary()?);
+        cmd.env("FIG_NEW_SESSION", "1");
+        cmd.env("MOCK_FIGTERM_SESSION_ID", SESSION_ID);
         cmd.env("TMPDIR", tempdir.path());
         cmd.env("XDG_RUNTIME_DIR", tempdir.path());
 

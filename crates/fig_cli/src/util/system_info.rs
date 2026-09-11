@@ -112,7 +112,7 @@ pub fn in_ssh() -> bool {
 /// Is the calling binary running on a remote instance
 pub fn is_remote() -> bool {
     // TODO(chay): Add detection for inside docker container
-    in_ssh() || fig_os_shim::Env::new().q_fake_is_remote()
+    in_ssh() || fig_os_shim::Env::new().fig_fake_is_remote()
 }
 
 pub fn in_codespaces() -> bool {

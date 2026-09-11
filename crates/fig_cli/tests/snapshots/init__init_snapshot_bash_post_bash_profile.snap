@@ -2,7 +2,7 @@
 source: crates/fig_cli/tests/init.rs
 expression: init
 ---
-Q_SHELL="/bin/zsh"
+FIG_SHELL="/bin/zsh"
 function __fig_source_bash_preexec() {
 # bash-preexec.sh -- Bash support for ZSH-like 'preexec' and 'precmd' functions.
 # https://github.com/rcaloras/bash-preexec
@@ -403,33 +403,33 @@ export TTY
 
 export SHELL_PID="$$"
 
-Q_LAST_PS1="$PS1"
-Q_LAST_PS2="$PS2"
-Q_LAST_PS3="$PS3"
+FIG_LAST_PS1="$PS1"
+FIG_LAST_PS2="$PS2"
+FIG_LAST_PS3="$PS3"
 
-if [[ -z "${Q_SHELL:-}" ]]; then
-  Q_SHELL=$(q _ get-shell)
+if [[ -z "${FIG_SHELL:-}" ]]; then
+  FIG_SHELL=$(q _ get-shell)
 fi
 
 # Construct Operating System Command.
 function __fig_preexec() {
   # One write instead of two.
   # shellcheck disable=SC2059
-  printf '\033]697;OSCLock=%s\007\033]697;PreExec\007' "${QTERM_SESSION_ID}"
+  printf '\033]697;OSCLock=%s\007\033]697;PreExec\007' "${FIGTERM_SESSION_ID}"
 
   # Reset user prompts before executing a command, but only if it hasn't
   # changed since we last set it.
-  if [[ -n "${Q_USER_PS1+x}" && "${PS1}" = "${Q_LAST_PS1}" ]]; then
-    Q_LAST_PS1="${Q_USER_PS1}"
-    PS1="${Q_USER_PS1}"
+  if [[ -n "${FIG_USER_PS1+x}" && "${PS1}" = "${FIG_LAST_PS1}" ]]; then
+    FIG_LAST_PS1="${FIG_USER_PS1}"
+    PS1="${FIG_USER_PS1}"
   fi
-  if [[ -n "${Q_USER_PS2+x}" && "${PS2}" = "${Q_LAST_PS2}" ]]; then
-    Q_LAST_PS2="${Q_USER_PS2}"
-    PS2="${Q_USER_PS2}"
+  if [[ -n "${FIG_USER_PS2+x}" && "${PS2}" = "${FIG_LAST_PS2}" ]]; then
+    FIG_LAST_PS2="${FIG_USER_PS2}"
+    PS2="${FIG_USER_PS2}"
   fi
-  if [[ -n "${Q_USER_PS3+x}" && "${PS3}" = "${Q_LAST_PS3}" ]]; then
-    Q_LAST_PS3="${Q_USER_PS3}"
-    PS3="${Q_USER_PS3}"
+  if [[ -n "${FIG_USER_PS3+x}" && "${PS3}" = "${FIG_LAST_PS3}" ]]; then
+    FIG_LAST_PS3="${FIG_USER_PS3}"
+    PS3="${FIG_USER_PS3}"
   fi
 
   _fig_done_preexec="yes"
@@ -450,13 +450,13 @@ function __fig_pre_prompt () {
   # under `set -u`).
   # shellcheck disable=SC2059
   printf '\033]697;OSCUnlock=%s\007\033]697;Dir=%s\007\033]697;Shell=bash\007\033]697;ShellPath=%s\007\033]697;PID=%d\007\033]697;ExitCode=%s\007\033]697;TTY=%s\007\033]697;Log=%s\007\033]697;User=%s\007' \
-    "${QTERM_SESSION_ID}" \
+    "${FIGTERM_SESSION_ID}" \
     "${PWD}" \
-    "${Q_SHELL:-$SHELL}" \
+    "${FIG_SHELL:-$SHELL}" \
     "$$" \
     "${__fig_ret_value}" \
     "${TTY}" \
-    "${Q_LOG_LEVEL}" \
+    "${FIG_LOG_LEVEL}" \
     "${USER:-root}"
 
   if command -v q >/dev/null 2>&1; then
@@ -477,32 +477,32 @@ function __fig_post_prompt () {
 
   __fig_reset_hooks
 
-  # If Q_USER_PSx is undefined or PSx changed by user, update Q_USER_PSx.
-  if [[ -z "${Q_USER_PS1+x}" || "${PS1}" != "${Q_LAST_PS1}" ]]; then
-    Q_USER_PS1="${PS1}"
+  # If FIG_USER_PSx is undefined or PSx changed by user, update FIG_USER_PSx.
+  if [[ -z "${FIG_USER_PS1+x}" || "${PS1}" != "${FIG_LAST_PS1}" ]]; then
+    FIG_USER_PS1="${PS1}"
   fi
-  if [[ -z "${Q_USER_PS2+x}" || "${PS2}" != "${Q_LAST_PS2}" ]]; then
-    Q_USER_PS2="${PS2}"
+  if [[ -z "${FIG_USER_PS2+x}" || "${PS2}" != "${FIG_LAST_PS2}" ]]; then
+    FIG_USER_PS2="${PS2}"
   fi
-  if [[ -z "${Q_USER_PS3+x}" || "${PS3}" != "${Q_LAST_PS3}" ]]; then
-    Q_USER_PS3="${PS3}"
+  if [[ -z "${FIG_USER_PS3+x}" || "${PS3}" != "${FIG_LAST_PS3}" ]]; then
+    FIG_USER_PS3="${PS3}"
   fi
 
   # `$'…'` rather than `$(fig_osc …)`: this ran on every prompt and each command substitution is
   # a fork. Same bytes, three fewer processes per prompt. (post.zsh has always done it this way.)
   START_PROMPT=$'\\[\033]697;StartPrompt\007\\]'
   END_PROMPT=$'\\[\033]697;EndPrompt\007\\]'
-  NEW_CMD=$'\\[\033]697;NewCmd='"${QTERM_SESSION_ID}"$'\007\\]'
+  NEW_CMD=$'\\[\033]697;NewCmd='"${FIGTERM_SESSION_ID}"$'\007\\]'
 
-  # Reset $? first in case it's used in $Q_USER_PSx.
+  # Reset $? first in case it's used in $FIG_USER_PSx.
   __bp_set_ret_value "${__fig_ret_value}" "${__bp_last_argument_prev_command}"
-  PS1="${START_PROMPT}${Q_USER_PS1}${END_PROMPT}${NEW_CMD}"
-  PS2="${START_PROMPT}${Q_USER_PS2}${END_PROMPT}"
-  PS3="${START_PROMPT}${Q_USER_PS3}${END_PROMPT}${NEW_CMD}"
+  PS1="${START_PROMPT}${FIG_USER_PS1}${END_PROMPT}${NEW_CMD}"
+  PS2="${START_PROMPT}${FIG_USER_PS2}${END_PROMPT}"
+  PS3="${START_PROMPT}${FIG_USER_PS3}${END_PROMPT}${NEW_CMD}"
 
-  Q_LAST_PS1="${PS1}"
-  Q_LAST_PS2="${PS2}"
-  Q_LAST_PS3="${PS3}"
+  FIG_LAST_PS1="${PS1}"
+  FIG_LAST_PS2="${PS2}"
+  FIG_LAST_PS3="${PS3}"
 }
 
 __fig_reset_hooks() {

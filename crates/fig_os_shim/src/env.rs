@@ -157,36 +157,36 @@ impl Env {
     }
 
     pub fn in_codespaces(&self) -> bool {
-        self.get_os("CODESPACES").is_some() || self.get_os("Q_CODESPACES").is_some()
+        self.get_os("CODESPACES").is_some() || self.get_os("FIG_CODESPACES").is_some()
     }
 
     pub fn in_ci(&self) -> bool {
-        self.get_os("CI").is_some() || self.get_os("Q_CI").is_some()
+        self.get_os("CI").is_some() || self.get_os("FIG_CI").is_some()
     }
 
-    // Q-specific environment variable methods
-    pub fn q_fake_is_remote(&self) -> bool {
-        self.get_os("Q_FAKE_IS_REMOTE").is_some()
+    // Our own environment variables (`FIG_*`).
+    pub fn fig_fake_is_remote(&self) -> bool {
+        self.get_os("FIG_FAKE_IS_REMOTE").is_some()
     }
 
-    pub fn q_log_level(&self) -> Result<String, VarError> {
-        self.get("Q_LOG_LEVEL")
+    pub fn fig_log_level(&self) -> Result<String, VarError> {
+        self.get("FIG_LOG_LEVEL")
     }
 
-    pub fn q_log_stdout(&self) -> bool {
-        self.get_os("Q_LOG_STDOUT").is_some()
+    pub fn fig_log_stdout(&self) -> bool {
+        self.get_os("FIG_LOG_STDOUT").is_some()
     }
 
-    pub fn q_term(&self) -> Result<String, VarError> {
-        self.get("Q_TERM")
+    pub fn fig_term(&self) -> Result<String, VarError> {
+        self.get("FIG_TERM")
     }
 
-    pub fn q_init_snapshot_test(&self) -> bool {
-        self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
+    pub fn fig_init_snapshot_test(&self) -> bool {
+        self.get_os("FIG_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
-        self.get("Q_PROMPT_OFFSET_WORKAROUND")
+    pub fn fig_prompt_offset_workaround(&self) -> Result<String, VarError> {
+        self.get("FIG_PROMPT_OFFSET_WORKAROUND")
     }
 }
 

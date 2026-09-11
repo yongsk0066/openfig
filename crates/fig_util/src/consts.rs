@@ -59,28 +59,28 @@ pub mod env_var {
 
     define_env_vars! {
         /// The UUID of the current parent pty session
-        QTERM_SESSION_ID = "QTERM_SESSION_ID",
+        FIGTERM_SESSION_ID = "FIGTERM_SESSION_ID",
 
         /// Set if the pty wrapper is running, contains the version
-        Q_TERM = "Q_TERM",
+        FIG_TERM = "FIG_TERM",
 
         /// Sets the current log level
-        Q_LOG_LEVEL = "Q_LOG_LEVEL",
+        FIG_LOG_LEVEL = "FIG_LOG_LEVEL",
 
         /// Overrides the ZDOTDIR environment variable
-        Q_ZDOTDIR = "Q_ZDOTDIR",
+        FIG_ZDOTDIR = "FIG_ZDOTDIR",
 
         /// Indicates a process was launched by the desktop app
-        PROCESS_LAUNCHED_BY_Q = "PROCESS_LAUNCHED_BY_Q",
+        PROCESS_LAUNCHED_BY_FIG = "PROCESS_LAUNCHED_BY_FIG",
 
         /// The shell to use in the pty wrapper
-        Q_SHELL = "Q_SHELL",
+        FIG_SHELL = "FIG_SHELL",
 
         /// Indicates the user is debugging the shell
-        Q_DEBUG_SHELL = "Q_DEBUG_SHELL",
+        FIG_DEBUG_SHELL = "FIG_DEBUG_SHELL",
 
         /// Indicates the user is using zsh autosuggestions which disables Inline
-        Q_USING_ZSH_AUTOSUGGESTIONS = "Q_USING_ZSH_AUTOSUGGESTIONS"
+        FIG_USING_ZSH_AUTOSUGGESTIONS = "FIG_USING_ZSH_AUTOSUGGESTIONS"
     }
 }
 

@@ -28,6 +28,20 @@ async fn launchctl<'a>(args: impl IntoIterator<Item = &'a str>) {
     }
 }
 
+/// True when both paths exist, have the same length and identical bytes.
+async fn same_file_contents(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let (Ok(ma), Ok(mb)) = (tokio::fs::metadata(a).await, tokio::fs::metadata(b).await) else {
+        return false;
+    };
+    if ma.len() != mb.len() {
+        return false;
+    }
+    match (tokio::fs::read(a).await, tokio::fs::read(b).await) {
+        (Ok(da), Ok(db)) => da == db,
+        _ => false,
+    }
+}
+
 /// Symlink, and overwrite if it already exists and is invalid or not a symlink
 async fn symlink(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> Result<(), std::io::Error> {
     use std::io::ErrorKind;
@@ -94,29 +108,13 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
                 let pty_path = pty_path.clone();
 
                 tokio::spawn(async move {
-                    // Check version if copy already exists, this is because everytime a copy is made the first start is
-                    // kinda slow and we want to avoid that
-                    if pty_shell_cpy.exists() {
-                        let output = tokio::process::Command::new(&pty_shell_cpy)
-                            .arg("--version")
-                            .output()
-                            .await
-                            .ok();
-
-                        let version = output
-                            .as_ref()
-                            .and_then(|output| std::str::from_utf8(&output.stdout).ok())
-                            .map(|s| {
-                                match s.strip_prefix(PTY_BINARY_NAME) {
-                                    Some(s) => s,
-                                    None => s,
-                                }
-                                .trim()
-                            });
-
-                        if version == Some(env!("CARGO_PKG_VERSION")) {
-                            return;
-                        }
+                    // Refresh the copy whenever its bytes differ from the bundled binary. The
+                    // upstream check compared `--version` strings, which never change between
+                    // local rebuilds of the same version — so every rebuild kept spawning the
+                    // copy from the first install, and once the env-var names moved that stale
+                    // figterm made `should-figterm-launch` start another figterm inside it.
+                    if same_file_contents(&pty_shell_cpy, &pty_path).await {
+                        return;
                     }
 
                     // On a first install there is nothing to remove; ENOENT here is the normal

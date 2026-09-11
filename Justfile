@@ -98,12 +98,21 @@ sign:
 # conditional on app.launchOnStartup is 8단계. A pre-existing regular file at a ~/.local/bin
 # target (another vendor's CLI,
 # not one of our symlinks) is moved aside instead of being clobbered.
-# Install into /Applications and run for the first time
+# Install into /Applications and run for the first time.
+# The per-shell figterm copies are replaced by rename, never overwritten in place: an
+# executable that is currently running (old terminal tabs) keeps its inode, and the kernel
+# would otherwise mark the rewritten pages "Code Signature Invalid" and SIGKILL every new
+# figterm (that was a real bug on 2026-09-11).
 install:
     -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
+    for _ in $(seq 1 50); do pgrep -x "$DESKTOP_BIN" >/dev/null || break; sleep 0.1; done
     rm -rf "/Applications/$APP_NAME.app"
     ditto "{{app}}" "/Applications/$APP_NAME.app"
     mkdir -p "$HOME/.local/bin"
+    for shell in zsh bash; do \
+        cp "/Applications/$APP_NAME.app/Contents/MacOS/$PTY_BIN" "$HOME/.local/bin/.$shell ($PTY_BIN).new" \
+            && mv -f "$HOME/.local/bin/.$shell ($PTY_BIN).new" "$HOME/.local/bin/$shell ($PTY_BIN)"; \
+    done
     for bin in "$CLI_BIN" "$PTY_BIN"; do \
         link="$HOME/.local/bin/$bin"; \
         if [ -f "$link" ] && [ ! -L "$link" ]; then \

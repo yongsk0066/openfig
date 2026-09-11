@@ -6,7 +6,10 @@ use std::io::{
 use std::process::ExitCode;
 
 use fig_os_shim::Context;
-use fig_util::Shell;
+use fig_util::{
+    PTY_BINARY_NAME,
+    Shell,
+};
 
 const FIG_FORCE_FIGTERM_LAUNCH: &str = "FIG_FORCE_FIGTERM_LAUNCH";
 const FIG_TERM_DISABLED: &str = "FIG_TERM_DISABLED";
@@ -70,6 +73,14 @@ fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> 
         },
         None => return Status::DontLaunch("No parent name".into()),
     };
+
+    // A shell whose parent *is* figterm (`zsh (figterm)` is the per-shell copy of the pty
+    // binary) is already wrapped; launching again would nest figterm inside figterm forever.
+    // The environment normally says so too (`FIG_TERM`), but a stale copy speaking older
+    // variable names must not be able to defeat this check.
+    if parent_name == PTY_BINARY_NAME || parent_name.ends_with(&format!("({PTY_BINARY_NAME})")) {
+        return Status::DontLaunch(format!("Parent {parent_name:?} is {PTY_BINARY_NAME}").into());
+    }
 
     // `Shell::try_find_shell` is the same test `Shell::current_shell` uses, so this cannot drift
     // from the set of shells the integration actually supports.

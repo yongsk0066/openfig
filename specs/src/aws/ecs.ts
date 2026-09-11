@@ -212,7 +212,7 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
   });
   return final_array;
 };
-const generators = {
+const generators: Record<string, Fig.Generator> = {
   listFiles: {
     script: (tokens) => {
       return appendFolderPath(tokens, _prefixFile);
@@ -298,8 +298,11 @@ const generators = {
   },
   listStartedBy: {
     custom: async (tokens, executeShellCommand) => {
-      const out = await executeShellCommand("aws ecs list-tasks");
-      const list = JSON.parse(out)["taskArns"];
+      const { stdout } = await executeShellCommand({
+        command: "aws",
+        args: ["ecs", "list-tasks"],
+      });
+      const list: string[] = JSON.parse(stdout)["taskArns"];
       const tasks = list.map((arn) => ({
         command: ["ecs", "describe-tasks", "--tasks", arn],
         parentKey: "tasks",
@@ -312,13 +315,14 @@ const generators = {
     custom: async (tokens, executeShellCommand) => {
       const idx = tokens.indexOf("--cluster");
       if (idx < 0) {
-        return;
+        return [];
       }
       const param = tokens[idx + 1];
-      const out = await executeShellCommand(
-        `aws ecs list-tasks --cluster ${param}`
-      );
-      const list = JSON.parse(out)["taskArns"];
+      const { stdout } = await executeShellCommand({
+        command: "aws",
+        args: ["ecs", "list-tasks", "--cluster", param],
+      });
+      const list: string[] = JSON.parse(stdout)["taskArns"];
       const tasks = list.map((arn) => ({
         command: ["ecs", "describe-tasks", "--tasks", arn],
         parentKey: "tasks",
@@ -347,13 +351,19 @@ const generators = {
       try {
         const idx = tokens.indexOf("--codedeploy-application");
         if (idx < 0) {
-          return;
+          return [];
         }
         const param = tokens[idx + 1];
-        const out = await executeShellCommand(
-          `aws deploy list-deployment-groups --application-name ${param}`
-        );
-        const list = JSON.parse(out)["deploymentGroups"];
+        const { stdout } = await executeShellCommand({
+          command: "aws",
+          args: [
+            "deploy",
+            "list-deployment-groups",
+            "--application-name",
+            param,
+          ],
+        });
+        const list: string[] = JSON.parse(stdout)["deploymentGroups"];
         return list.map((group) => {
           return {
             name: group,
@@ -363,6 +373,7 @@ const generators = {
       } catch (e) {
         console.log(e);
       }
+      return [];
     },
   },
 };

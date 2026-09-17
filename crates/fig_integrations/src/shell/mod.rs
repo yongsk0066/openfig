@@ -7,6 +7,7 @@ use clap::ValueEnum;
 use fig_os_shim::Env;
 use fig_util::{
     CLI_BINARY_NAME,
+    HOOK_PROTOCOL_VERSION,
     PRODUCT_NAME,
     PTY_BINARY_NAME,
     Shell,
@@ -29,6 +30,27 @@ use crate::{
     Integration,
     backup_file,
 };
+
+/// Setting that moves zsh from the pty binary to the shell hook (`scripts/fig.zsh`,
+/// docs/15-architecture-study.md §3.3). With it on, `init zsh pre` never starts the pty binary and
+/// `init zsh post` emits the hook instead of the OSC markers. bash is unaffected.
+pub const ZSH_HOOK_SETTING: &str = "autocomplete.zshHook";
+
+/// The oldest zsh the hook loads in: `zle-line-pre-redraw` and `add-zle-hook-widget` arrived in
+/// 5.3. Older shells get no autocomplete and are otherwise untouched.
+pub const ZSH_HOOK_MIN_VERSION: &str = "5.3";
+
+/// `scripts/fig.zsh` ready to be `eval`ed: socket path and protocol version filled in.
+pub fn zsh_hook_source() -> Result<String> {
+    let socket = directories::hook_socket_path()?;
+    // The path goes between single quotes.
+    let socket = socket.to_string_lossy().replace('\'', r"'\''");
+    Ok(include_str!("scripts/fig.zsh")
+        .replace("{{PRODUCT_NAME}}", PRODUCT_NAME)
+        .replace("{{HOOK_SOCKET}}", &socket)
+        .replace("{{HOOK_PROTOCOL_VERSION}}", &HOOK_PROTOCOL_VERSION.to_string())
+        .replace("{{ZSH_HOOK_MIN_VERSION}}", ZSH_HOOK_MIN_VERSION))
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

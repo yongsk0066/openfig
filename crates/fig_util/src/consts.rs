@@ -29,6 +29,14 @@ pub const LAUNCH_AGENT_LABEL: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".laun
 /// Prefix the uninstaller uses to find every LaunchAgent this app wrote.
 pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
 
+/// Version of the zsh hook's line protocol (`fig.zsh` <-> `fig_remote_ipc::hook`).
+///
+/// A shell sources `fig.zsh` once and keeps it for its whole life, so a tab opened before a
+/// rebuild talks to the new desktop with the old script. `HELLO` carries this number and the
+/// desktop answers `WELCOME 0` to any other, which disarms the hook in that shell. Bump it with
+/// any change to the wire format that an older script or desktop would misread.
+pub const HOOK_PROTOCOL_VERSION: u32 = 1;
+
 /// Build time env vars
 pub mod build {
     /// A git full sha hash of the current build

@@ -198,6 +198,14 @@ pub fn local_remote_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("remote.sock"))
 }
 
+/// The socket the zsh hook (`fig.zsh`) connects to, speaking the line protocol of
+/// `fig_remote_ipc::hook` rather than `remote.sock`'s protobuf, which zsh cannot produce.
+///
+/// - MacOS: `$TMPDIR/{runtime_dir}/hook.sock`
+pub fn hook_socket_path() -> Result<PathBuf> {
+    Ok(host_sockets_dir()?.join("hook.sock"))
+}
+
 /// Get path to a figterm socket
 ///
 /// - MacOS: `$TMPDIR/{runtime_dir}/t/$SESSION_ID.sock`
@@ -239,6 +247,7 @@ mod tests {
         assert!(fig_data_dir().is_ok());
         assert!(sockets_dir().is_ok());
         assert!(local_remote_socket_path().is_ok());
+        assert!(hook_socket_path().is_ok());
         assert!(figterm_socket_path("test").is_ok());
         assert!(resources_path().is_ok());
         assert!(backups_dir().is_ok());
@@ -334,6 +343,11 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_hook_socket_path() {
+        assert_directory!(hook_socket_path(), @"$TMPDIR/figrun/hook.sock");
+    }
+
+    #[test]
     fn snapshot_figterm_socket_path() {
         assert_directory!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/figrun/t/$SESSION_ID.sock");
     }
@@ -361,6 +375,9 @@ mod tests {
         let secure_socket = local_remote_socket_path().unwrap();
         let secure_socket_bytes = secure_socket.as_os_str().as_bytes().len();
         assert!(secure_socket_bytes <= MAX_SOCKET_LEN);
+
+        let hook_socket = hook_socket_path().unwrap();
+        assert!(hook_socket.as_os_str().as_bytes().len() <= MAX_SOCKET_LEN);
     }
 
     #[test]

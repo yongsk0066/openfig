@@ -122,6 +122,12 @@ pub struct PlatformState {
     /// gives `AccessibilityUpdated` a handle to re-register with.
     #[serde(skip)]
     window_server: Mutex<Option<WindowServer>>,
+    /// Set by the autocomplete window's Show/Hide; the frame-watch timer only ticks while true.
+    #[serde(skip)]
+    autocomplete_visible: Arc<AtomicBool>,
+    /// Last observed frame of the followed terminal window, compared on every tick.
+    #[serde(skip)]
+    watched_frame: Mutex<Option<CGRect>>,
 }
 
 #[derive(Debug, Clone)]
@@ -213,6 +219,18 @@ impl PlatformState {
             proxy,
             focused_window: Mutex::new(focused_window),
             window_server: Mutex::new(None),
+            autocomplete_visible: Arc::new(AtomicBool::new(false)),
+            watched_frame: Mutex::new(None),
+        }
+    }
+
+    /// Called by the autocomplete window's Show/Hide handling; gates the frame watch.
+    pub fn set_autocomplete_visible(&self, visible: bool) {
+        self.autocomplete_visible.store(visible, Ordering::Release);
+        if visible {
+            // Start from the current frame so the first tick does not trigger a spurious move.
+            let guard = self.focused_window.lock().unwrap();
+            *self.watched_frame.lock().unwrap() = guard.as_ref().and_then(|w| w.get_bounds());
         }
     }
 
@@ -323,6 +341,24 @@ impl PlatformState {
             PlatformBoundEvent::InitializePostRun => {
                 super::objc_overrides::install(window_map);
 
+                // Frame watch: 20 Hz while the autocomplete window is visible, nothing otherwise.
+                let proxy = self.proxy.clone();
+                let visible = self.autocomplete_visible.clone();
+                tokio::runtime::Handle::current().spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    loop {
+                        interval.tick().await;
+                        if visible.load(Ordering::Acquire)
+                            && proxy
+                                .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::FrameWatchTick))
+                                .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+
                 // Accessibility trust is only re-evaluated on the `com.apple.accessibility.api`
                 // distributed notification, which fires when the user flips the switch — never
                 // at login. Launched by the LaunchAgent early in the session, `AXIsProcessTrusted`
@@ -424,6 +460,37 @@ impl PlatformState {
                     let _: () = unsafe { msg_send![ns_window, setLevel: above] };
                 }
 
+                Ok(())
+            },
+            PlatformBoundEvent::FrameWatchTick => {
+                if !self.autocomplete_visible.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                let current = self
+                    .focused_window
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .and_then(|w| w.get_bounds());
+                let mut watched = self.watched_frame.lock().unwrap();
+                let same = |a: &CGRect, b: &CGRect| {
+                    a.origin.x == b.origin.x
+                        && a.origin.y == b.origin.y
+                        && a.size.width == b.size.width
+                        && a.size.height == b.size.height
+                };
+                let moved = match (&current, &*watched) {
+                    (Some(now), Some(before)) => !same(now, before),
+                    (Some(_), None) => true,
+                    (None, _) => false,
+                };
+                if moved {
+                    *watched = current;
+                    drop(watched);
+                    if let Err(e) = self.refresh_window_position() {
+                        debug!(%e, "Failed to refresh window position after the terminal moved");
+                    }
+                }
                 Ok(())
             },
             PlatformBoundEvent::CaretPositionUpdateRequested => {

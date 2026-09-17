@@ -399,6 +399,7 @@ impl WindowState {
                 self.window.set_visible(false);
 
                 if self.window_id == AUTOCOMPLETE_ID {
+                    platform_state.set_autocomplete_visible(false);
                     for session in figterm_state.inner.lock().linked_sessions.values_mut() {
                         let _ = session
                             .sender
@@ -437,6 +438,7 @@ impl WindowState {
                         }
 
                         self.window.set_visible(true);
+                        platform_state.set_autocomplete_visible(true);
                         // We handle setting window level on focus changed on MacOS
                         // TODO: pull this out into platform code.
                     }

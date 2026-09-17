@@ -35,6 +35,10 @@ pub enum PlatformBoundEvent {
         visible: bool,
     },
     CaretPositionUpdateRequested,
+    /// Periodic tick while the autocomplete window is visible: re-read the followed terminal
+    /// window's frame and reposition if it moved. macOS posts `kAXWindowMovedNotification`
+    /// only when a drag *ends*, so without this the dropdown sat still during the drag.
+    FrameWatchTick,
     WindowDestroyed {
         // TODO: dont use on other platforms than macos
         app: ApplicationSpecifier,

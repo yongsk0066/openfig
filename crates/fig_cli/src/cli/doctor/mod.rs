@@ -20,7 +20,11 @@ use anstream::{
     println,
 };
 use async_trait::async_trait;
-use checks::BashVersionCheck;
+use checks::{
+    BashVersionCheck,
+    ZshHookCheck,
+    current_shell_uses_hook,
+};
 use clap::Args;
 use crossterm::style::Stylize;
 use crossterm::terminal::{
@@ -560,6 +564,15 @@ struct PtySocketCheck;
 impl DoctorCheck for PtySocketCheck {
     fn name(&self) -> Cow<'static, str> {
         format!("{PTY_BINARY_NAME} socket check").into()
+    }
+
+    /// A zsh on the hook path has no pty binary to check (`ZshHookCheck` covers it).
+    async fn get_type(&self, _: &(), _platform: Platform) -> DoctorCheckType {
+        if current_shell_uses_hook() {
+            DoctorCheckType::NoCheck
+        } else {
+            DoctorCheckType::NormalCheck
+        }
     }
 
     async fn check(&self, _: &()) -> Result<(), DoctorError> {
@@ -1430,6 +1443,15 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         run_checks(
             "Let's make sure the app is running...".into(),
             vec![&AppRunningCheck, &DesktopSocketCheck],
+            config,
+            &mut spinner,
+        )
+        .await?;
+
+        let zsh_hook = ZshHookCheck::probe().await;
+        run_checks(
+            "Let's see which way zsh gets autocomplete...".into(),
+            vec![&zsh_hook],
             config,
             &mut spinner,
         )

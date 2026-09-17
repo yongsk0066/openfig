@@ -109,6 +109,9 @@ install:
         mv -n "$link" "$backup"; \
     fi; \
     ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" "$link"
+    # Leftovers of the pty binary (deleted 2026-09-18): the per-shell copies and the link that
+    # earlier installs put next to the CLI. Nothing reads them any more.
+    rm -f "$HOME/.local/bin/figterm" "$HOME/.local/bin/zsh (figterm)" "$HOME/.local/bin/bash (figterm)"
     open "/Applications/$APP_NAME.app" --args --no-dashboard
     "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" setup --dotfiles --no-confirm
 

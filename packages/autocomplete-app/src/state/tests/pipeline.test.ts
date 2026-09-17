@@ -2,6 +2,7 @@ import type { Suggestion } from "@fig/shared/internal";
 import { SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
 import {
   type ArgumentParserResult,
+  initialParserState,
   loadSubcommandCached,
   parseArguments,
 } from "@fig/autocomplete-parser";
@@ -123,6 +124,7 @@ describe("computeSuggestions", () => {
       fixtures[buffer] = await parse(buffer);
     }
     fixtures["cd pro"] = await parse("cd pro");
+    fixtures["ls && "] = await parse("ls && ");
     fixtures["g ch"] = await parse("g ch", { g: "git" });
   });
 
@@ -229,6 +231,18 @@ describe("computeSuggestions", () => {
       ["checkout"],
     ]);
     expect(computeSuggestions(input(fixture, { fuzzy: false })).suggestions).toEqual([]);
+  });
+
+  it("no annotations: the store's initial parse and an empty command after `&&`", () => {
+    const empty = { suggestions: [], selectedIndex: 0, hasChangedIndex: false };
+    // What the store holds at startup and after `error()`, which SHOW_AUTOCOMPLETE can show.
+    expect(initialParserState.annotations).toEqual([]);
+    expect(computeSuggestions(input({ buffer: "", parserResult: initialParserState }))).toEqual(
+      empty,
+    );
+    // The parser annotates no token for an empty first word.
+    expect(fixtures["ls && "].parserResult.annotations).toEqual([]);
+    expect(computeSuggestions(input(fixtures["ls && "]))).toEqual(empty);
   });
 
   it("empty: a first word being typed has nothing to suggest", () => {

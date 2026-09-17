@@ -113,6 +113,31 @@ describe("store: fuzzy search", () => {
   });
 });
 
+// SHOW_AUTOCOMPLETE, TOGGLE_AUTOCOMPLETE and Tab with `onlyShowOnTab` all end here.
+const show = () => useAutocompleteStore.getState().setVisibleState(Visibility.VISIBLE);
+
+describe("store: showing the list", () => {
+  it("works before anything was parsed", () => {
+    useAutocompleteStore.setState(initial, true);
+    expect(show).not.toThrow();
+    expect(useAutocompleteStore.getState()).toMatchObject({
+      visibleState: Visibility.VISIBLE,
+      suggestions: [],
+    });
+  });
+
+  it("works after an error reset the parse", () => {
+    typed("build");
+    useAutocompleteStore.getState().error("Invalid token array");
+    expect(useAutocompleteStore.getState().visibleState).toBe(Visibility.HIDDEN_UNTIL_KEYPRESS);
+    expect(show).not.toThrow();
+    expect(useAutocompleteStore.getState()).toMatchObject({
+      visibleState: Visibility.VISIBLE,
+      suggestions: [],
+    });
+  });
+});
+
 describe("store: logging", () => {
   it("a keystroke writes nothing to the console at the default log level", () => {
     logger.setLevel("warn");

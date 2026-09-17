@@ -195,9 +195,10 @@ export const getAllSuggestions = (
     suggestions.push(...options);
   }
 
-  const lastAnnotation = annotations[annotations.length - 1];
+  // Absent in the parser's initial state and for an empty first word (`ls && `).
+  const lastAnnotation: Annotation | undefined = annotations[annotations.length - 1];
   const isInOptionChain =
-    lastAnnotation.type === TokenType.Composite &&
+    lastAnnotation?.type === TokenType.Composite &&
     lastAnnotation.subtokens[lastAnnotation.subtokens.length - 1]?.type === TokenType.Option;
 
   if (isInOptionChain) {

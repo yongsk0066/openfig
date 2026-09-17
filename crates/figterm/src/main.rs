@@ -236,6 +236,12 @@ pub(crate) fn forget_last_sent_edit_buffer() {
     *LAST_SENT_EDIT_BUFFER.lock_ignore_poison() = None;
 }
 
+/// Serializes the tests that drive [`send_edit_buffer`]: it reads and writes process-wide state
+/// (`LAST_SENT_EDIT_BUFFER`, `CONTEXT_DIRTY`, the desktop-connected flag), and `cargo test` runs
+/// tests on parallel threads of one process. nextest gives each test its own process anyway.
+#[cfg(test)]
+pub(crate) static EDIT_BUFFER_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Set when the shell pushes a new environment/alias snapshot (`UpdateShellContextRequest`),
 /// cleared by the next edit-buffer hook that carries one.
 ///
@@ -373,12 +379,18 @@ where
     // `dash` is not a `Shell` variant — the integration is never installed into it — but figterm
     // is routinely `exec`ed under `sh`/`dash` as a login shell, and the edit buffer works there,
     // so it stays as an explicit extra rather than being folded into `Shell::all()`.
-    let shell_enabled = Shell::all()
-        .iter()
-        .map(Shell::as_str)
-        .chain(std::iter::once("dash"))
-        .chain(USER_ENABLED_SHELLS.iter().map(|s| s.as_str()))
-        .any(|s| shell == Some(s));
+    //
+    // `USER_ENABLED_SHELLS` is only looked at for a shell that is not built in. Forcing it opens
+    // the state database, which a zsh or bash session never needs — and the golden replay
+    // (`golden.rs`) runs this function in a test process that must not open the user's database.
+    let shell_enabled = shell.is_some_and(|shell| {
+        Shell::all()
+            .iter()
+            .map(Shell::as_str)
+            .chain(std::iter::once("dash"))
+            .any(|s| s == shell)
+            || USER_ENABLED_SHELLS.iter().any(|s| s == shell)
+    });
 
     let preexec = term.shell_state().preexec;
 
@@ -397,6 +409,26 @@ where
     match buffer {
         Some(buffer) => buffer,
         None => term.get_current_buffer(),
+    }
+}
+
+/// Feeds one read from the pty master to the terminal emulator.
+///
+/// The main loop calls this for every read, echoes the bytes, and then asks
+/// [`can_send_edit_buffer`] for the edit buffer. The golden replay (`golden.rs`) runs recorded
+/// reads through the same three steps minus the echo, so this is the one place the parse happens.
+fn advance_pty_output<T>(processor: &mut Processor, term: &mut Term<T>, bytes: &[u8])
+where
+    T: EventListener,
+{
+    let old_delayed_count = term.get_delayed_events_count();
+    processor.advance(term, bytes);
+
+    let delayed_count = term.get_delayed_events_count();
+
+    // We have delayed events and did not receive delayed events. Flush all delayed events now.
+    if delayed_count > 0 && delayed_count == old_delayed_count {
+        term.flush_delayed_events();
     }
 }
 
@@ -905,16 +937,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                         Ok(size) => {
                             trace!("Read {size} bytes from master");
 
-                            let old_delayed_count = term.get_delayed_events_count();
-                            processor.advance(&mut term, &write_buffer[..size]);
-
-                            let delayed_count = term.get_delayed_events_count();
-
-                            // We have delayed events and did not receive delayed events. Flush all
-                            // delayed events now.
-                            if delayed_count > 0 && delayed_count == old_delayed_count {
-                                term.flush_delayed_events();
-                            }
+                            advance_pty_output(&mut processor, &mut term, &write_buffer[..size]);
 
                             stdout.write_all(&write_buffer[..size]).await?;
                             stdout.flush().await?;
@@ -1073,6 +1096,7 @@ mod tests {
     /// background used to re-send a byte-identical edit buffer for each chunk of its output.
     #[tokio::test]
     async fn identical_edit_buffers_are_sent_once() {
+        let _globals = EDIT_BUFFER_TEST_LOCK.lock().await;
         let (tx, rx) = flume::unbounded();
         let shell_state = ShellState::default();
         let buffer = |text: &str, cursor: usize| TextBuffer {

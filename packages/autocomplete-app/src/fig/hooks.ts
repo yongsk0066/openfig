@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import fuzzysort from "@fig/fuzzysort";
 import {
   EditBufferNotifications,
   Event,
@@ -131,6 +132,7 @@ export const useFigClearCache = () => {
       console.log("clearing cache");
       window.resetCaches?.();
       generatorCache.clear();
+      fuzzysort.cleanup();
       clearSpecIndex();
       return { unsubscribe: false };
     }),

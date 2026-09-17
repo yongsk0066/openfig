@@ -80,6 +80,10 @@ declare module "@fig/fuzzysort" {
       highlightClose?: string,
     ): string | null;
     single(search: string, target: string | Prepared): Result | null;
+    /** Empties the prepared-target and prepared-search caches. */
+    cleanup(): void;
+    /** Entry counts of the two bounded caches (at most 10,000 and 1,000). */
+    cacheSizes(): { prepared: number; preparedSearch: number };
   }
   const fuzzysort: Fuzzysort;
 

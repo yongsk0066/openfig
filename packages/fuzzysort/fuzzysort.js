@@ -9,8 +9,59 @@
  */
 
 var isNode = typeof require !== "undefined" && typeof window === "undefined";
-var preparedCache = new Map();
-var preparedSearchCache = new Map();
+
+// Bounded memo of prepared strings. Upstream used two plain Maps that were only emptied by
+// `cleanup()`, which nothing called: with fuzzy search on, every suggestion name ever shown
+// stayed prepared (50k names ~ +52 MiB) until the window reloaded.
+//
+// Two generations (the same scheme as `@fig/shared/lru`, inlined because this package has no
+// dependencies): new entries go to `young`; when it holds `maxSize / 2` it becomes `old` and
+// the previous `old` is dropped; a hit in `old` moves back to `young`. At most `maxSize`
+// entries, and a hit in `young` is a single `Map#get` on this per-keystroke path.
+function createBoundedCache(maxSize) {
+  var generationSize = Math.floor(maxSize / 2);
+  var young = new Map();
+  var old = new Map();
+  function insert(key, value) {
+    if (young.size >= generationSize) {
+      old = young;
+      young = new Map();
+    }
+    young.set(key, value);
+  }
+  return {
+    get: function (key) {
+      var value = young.get(key);
+      if (value !== undefined) return value;
+      value = old.get(key);
+      if (value === undefined) return undefined;
+      old.delete(key);
+      insert(key, value);
+      return value;
+    },
+    set: function (key, value) {
+      if (young.has(key)) young.set(key, value);
+      else {
+        old.delete(key);
+        insert(key, value);
+      }
+    },
+    clear: function () {
+      young.clear();
+      old.clear();
+    },
+    get size() {
+      return young.size + old.size;
+    },
+  };
+}
+
+// A 5,000-name suggestion list (a large directory) stays prepared across keystrokes.
+var PREPARED_CACHE_SIZE = 10000;
+// Queries are prefixes of what the user types; far fewer distinct ones are live at a time.
+var PREPARED_SEARCH_CACHE_SIZE = 1000;
+var preparedCache = createBoundedCache(PREPARED_CACHE_SIZE);
+var preparedSearchCache = createBoundedCache(PREPARED_SEARCH_CACHE_SIZE);
 var noResults = [];
 noResults.total = 0;
 var matchesSimple = [];
@@ -20,6 +71,9 @@ function cleanup() {
   preparedSearchCache.clear();
   matchesSimple = [];
   matchesStrict = [];
+}
+function cacheSizes() {
+  return { prepared: preparedCache.size, preparedSearch: preparedSearchCache.size };
 }
 function isObj(x) {
   return typeof x === "object";
@@ -252,6 +306,7 @@ export const fuzzysort = {
   },
 
   cleanup: cleanup,
+  cacheSizes: cacheSizes,
 };
 
 export default fuzzysort;

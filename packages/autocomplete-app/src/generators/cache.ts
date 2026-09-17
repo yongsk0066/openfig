@@ -1,3 +1,5 @@
+import { LruCache } from "@fig/shared/lru";
+
 class CacheEntry<T> {
   private lastFetch = 0;
 
@@ -57,7 +59,9 @@ class CacheEntry<T> {
 }
 
 export class Cache {
-  private cache = new Map<string, CacheEntry<unknown>>();
+  // Keyed by (directory, script or tokens) of every cached generator run; bounded because
+  // `beta.autocomplete.auto-cache` caches every generator and the window lives for days.
+  private cache = new LruCache<string, CacheEntry<unknown>>(500);
 
   async entry<T>(key: string, run: () => Promise<T>, cache: Fig.Cache): Promise<T> {
     if (!this.cache.has(key)) {
@@ -71,6 +75,10 @@ export class Cache {
       this.cache.set(key, new CacheEntry());
     }
     return this.cache.get(key)!.value as T | undefined;
+  }
+
+  get size() {
+    return this.cache.size;
   }
 
   clear() {

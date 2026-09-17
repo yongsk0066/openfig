@@ -1,5 +1,6 @@
 import logger, { type Logger } from "loglevel";
 import * as semver from "semver";
+import { LruCache } from "@fig/shared/lru";
 import { ensureTrailingSlash, withTimeout } from "@fig/shared/utils";
 import { executeCommand, fread, isInDevMode } from "@fig/api-bindings/wrappers";
 import z from "zod";
@@ -16,7 +17,8 @@ export type SpecFileImport =
       versions: Fig.VersionDiffMap;
     };
 
-const stringImportCache = new Map<string, unknown>();
+// Keyed by the spec source text, so every edit of a local spec adds an entry.
+const stringImportCache = new LruCache<string, unknown>(64);
 
 export const importString = async (str: string) => {
   if (stringImportCache.has(str)) {

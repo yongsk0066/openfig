@@ -692,8 +692,10 @@ export const initialParserState = getResultFromState(
   }),
 );
 
-const parseArgumentsCache = createCache<ArgumentParserState>();
-const parseArgumentsGenerateSpecCache = createCache<ArgumentParserState>();
+// Keyed by every token but the last plus spec, cwd and shell: one entry per distinct command
+// prefix per directory, which never stops growing over a long session without a bound.
+const parseArgumentsCache = createCache<ArgumentParserState>(1000);
+const parseArgumentsGenerateSpecCache = createCache<ArgumentParserState>(1000);
 const figCaches = new Set<string>();
 export const clearFigCaches = () => {
   for (const cache of figCaches) {

@@ -1,10 +1,15 @@
 import type { Subcommand } from "@fig/shared/internal";
+import { LruCache } from "@fig/shared/lru";
 
-const allCaches: Array<Map<string, unknown>> = [];
+const allCaches: Array<LruCache<string, unknown>> = [];
 
-export const createCache = <T>() => {
-  const cache = new Map<string, T>();
-  allCaches.push(cache);
+/**
+ * Every parser cache is bounded: the autocomplete window stays open for days, and keys
+ * such as the parse cache's (tokens, spec, cwd, shell) never repeat once the user moves on.
+ */
+export const createCache = <T>(maxSize = 1000) => {
+  const cache = new LruCache<string, T>(maxSize);
+  allCaches.push(cache as LruCache<string, unknown>);
   return cache;
 };
 
@@ -16,8 +21,9 @@ export const resetCaches = () => {
 
 window.resetCaches = resetCaches;
 
-export const specCache = createCache<Subcommand>();
-export const generateSpecCache = createCache<Subcommand>();
+// Converted specs, one per (source, path, name); the ~30 preloaded specs fit many times over.
+export const specCache = createCache<Subcommand>(256);
+export const generateSpecCache = createCache<Subcommand>(256);
 
 window.listCache = () => {
   console.log(specCache);

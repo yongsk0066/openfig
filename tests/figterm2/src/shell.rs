@@ -36,6 +36,32 @@ use uuid::Uuid;
 /// Session id handed to the pty binary; it names the socket under `<runtime dir>/t/`.
 const SESSION_ID: &str = "1234";
 
+/// Environment variables that make `q _ should-figterm-launch` refuse to wrap the shell
+/// (`crates/fig_cli/src/cli/internal/should_figterm_launch.rs`), or that `pre.sh` reads as "already
+/// wrapped". The spawned shell inherits the test runner's environment, so any of these in the
+/// caller's shell turns every test here into "figterm never connected": `CI=1` did exactly that
+/// (docs/15-architecture-study.md §2.6 #11), and pushing over ssh would do the same through
+/// `SSH_*`.
+const LAUNCH_BLOCKING_ENV: &[&str] = &[
+    "CI",
+    "FIG_CI",
+    "FIG_TERM",
+    "FIG_TERM_TMUX",
+    "FIG_TERM_DISABLED",
+    "FIGTERM_SESSION_ID",
+    "PROCESS_LAUNCHED_BY_FIG",
+    "INSIDE_EMACS",
+    "TERM_PROGRAM",
+    "__CFBundleIdentifier",
+    "__PWSH_LOGIN_CHECKED",
+    "SSH_CLIENT",
+    "SSH_CONNECTION",
+    "SSH_TTY",
+    "CODESPACES",
+    "FIG_CODESPACES",
+    "SHOULD_FIGTERM_LAUNCH",
+];
+
 #[derive(Debug, Clone)]
 struct RemoteHook {
     buffer: Arc<Mutex<Option<String>>>,
@@ -229,6 +255,9 @@ impl Shell {
         tokio::fs::symlink(&cli, bin.join(fig_util::consts::CLI_BINARY_NAME)).await?;
         tokio::fs::symlink(pty_binary()?, bin.join(fig_util::consts::PTY_BINARY_NAME)).await?;
 
+        for key in LAUNCH_BLOCKING_ENV {
+            cmd.env_remove(key);
+        }
         cmd.env("HOME", &home);
         cmd.env(
             "PATH",

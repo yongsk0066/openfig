@@ -17,8 +17,8 @@ import { cmdSpec } from "./mocks/spec";
 import { resetCaches } from "../src/caches";
 import { afterEach, beforeEach, beforeAll, describe, it, expect, Mock, vi } from "vitest";
 
-vi.mock("../src/loadSpec", () => ({
-  ...vi.importActual("../src/loadSpec.ts"),
+vi.mock("../src/loadSpec", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/loadSpec")>()),
   loadSubcommandCached: vi.fn(),
 }));
 
@@ -217,7 +217,7 @@ const emptyContext: Fig.ShellContext = {
 // updateStateForSubcommand throws) because they are implementation details and
 // we are concerned only with behavior.
 // See https://teamgaslight.com/blog/testing-behavior-vs-testing-implementation
-describe.todo("parseArguments", () => {
+describe("parseArguments", () => {
   // Function that runs a basic test for a command that doesn't load/generate new spec.
   const basicTestWithSpec =
     (completionObj: Internal.Subcommand) =>

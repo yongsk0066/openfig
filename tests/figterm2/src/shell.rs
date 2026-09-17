@@ -627,6 +627,12 @@ impl Shell {
         Ok(())
     }
 
+    /// True once the process we spawned (the pty binary, after the shell `exec`s into it) has
+    /// exited. Reaps it, unlike `kill(pid, 0)`, which still succeeds for a zombie.
+    pub fn has_exited(&mut self) -> bool {
+        !matches!(self.child.try_wait(), Ok(None))
+    }
+
     /// Pid of the pty binary. The shell we spawned `exec`s into it, so the pid is unchanged.
     pub fn pty_pid(&self) -> Option<u32> {
         self.child.process_id()

@@ -45,8 +45,7 @@ async fn refused_handshake_keeps_the_shell_working(shell_name: &str) {
     tokio::time::sleep(PAST_ONE_RECONNECT.saturating_sub(refused_at.elapsed())).await;
 
     // Still the pty binary in the middle, still in raw mode: nothing crashed or fell back to exec.
-    let pid = shell.pty_pid().expect("no pty pid") as i32;
-    assert_eq!(unsafe { libc::kill(pid, 0) }, 0, "{shell_name}: the pty binary exited");
+    assert!(!shell.has_exited(), "{shell_name}: the pty binary exited");
     assert!(
         !shell.is_cooked(),
         "{shell_name}: the pty binary is no longer running the terminal"

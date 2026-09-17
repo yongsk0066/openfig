@@ -23,6 +23,7 @@ use core_foundation::base::{
 use core_foundation::runloop::{
     CFRunLoopAddSource,
     CFRunLoopGetCurrent,
+    CFRunLoopGetMain,
     CFRunLoopRef,
     CFRunLoopRemoveSource,
     kCFRunLoopDefaultMode,
@@ -141,6 +142,7 @@ impl<T> AXObserver<T> {
         // Postcondition: the observer's source is attached to *this thread's* run loop. That
         // pairing is the premise of the `Drop` impl below and of `create`'s `# Safety` clause 3.
         let run_loop = CFRunLoopGetCurrent();
+        tracing::trace!(pid, on_main = (run_loop == CFRunLoopGetMain()), "AX observer created");
         CFRunLoopAddSource(run_loop, AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
 
         // SAFETY:

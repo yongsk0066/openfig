@@ -16,6 +16,7 @@ use std::sync::{
 use accessibility_sys::{
     AXError,
     AXIsProcessTrusted,
+    AXUIElementCreateApplication,
     AXUIElementCreateSystemWide,
     AXUIElementSetMessagingTimeout,
     pid_t,
@@ -555,17 +556,32 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::WindowDestroyed { app } => {
+                // Fired for every destroyed window of a tracked app (the observer cannot tell
+                // which one — the element is dead). Terminal.app does not post a focused-window
+                // change when a window closes and a sibling takes over, so ask the app which
+                // window is focused now and drop ours if it is not that one any more.
                 let mut focused = self.focused_window.lock().unwrap();
                 if let Some(focused_window) = focused.as_ref()
                     && focused_window.bundle_id() == app.bundle_id
                 {
-                    focused.take();
-                    self.proxy
-                        .send_event(Event::WindowEvent {
-                            window_id: AUTOCOMPLETE_ID,
-                            window_event: WindowEvent::Hide,
-                        })
-                        .ok();
+                    // SAFETY: `AXUIElementCreateApplication` has no preconditions; `get_window_id`
+                    // requires a live element, which a freshly returned focused window is. The
+                    // `+1` from the Create rule is owned by the `UIElement` and released on drop.
+                    let still_focused = unsafe {
+                        UIElement::from(AXUIElementCreateApplication(app.pid))
+                            .focused_window()
+                            .ok()
+                            .and_then(|window| window.get_window_id().ok())
+                    } == Some(focused_window.window_id);
+                    if !still_focused {
+                        focused.take();
+                        self.proxy
+                            .send_event(Event::WindowEvent {
+                                window_id: AUTOCOMPLETE_ID,
+                                window_event: WindowEvent::Hide,
+                            })
+                            .ok();
+                    }
                 }
                 Ok(())
             },

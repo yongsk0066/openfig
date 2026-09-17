@@ -333,7 +333,7 @@ impl UIElement {
         self.get_attr::<AXValue>(kAXFrameAttribute)?.as_rect().ok_or(-1)
     }
 
-    pub(crate) fn focused_window(&self) -> Result<Self> {
+    pub fn focused_window(&self) -> Result<Self> {
         let window = self.get_attr::<AXUIElement>(kAXFocusedWindowAttribute)?;
         Ok(window.into())
     }

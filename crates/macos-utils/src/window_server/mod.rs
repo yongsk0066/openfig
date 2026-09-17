@@ -992,6 +992,7 @@ unsafe extern "C" fn application_ax_callback(
     let app = &cb_data.app;
 
     let event_name = name.to_string();
+    trace!(app = %app.bundle_id, %event_name, "AX notification");
 
     let event = match &*event_name {
         kAXFocusedWindowChangedNotification | kAXMainWindowChangedNotification => {
@@ -1013,32 +1014,17 @@ unsafe extern "C" fn application_ax_callback(
             Some(WindowServerEvent::RequestCaretPositionUpdate)
         },
         kAXUIElementDestroyedNotification => {
-            // This notification fires for every destroyed element — menus, tooltips, text
-            // fields — not just windows, and each one used to cost an
-            // `AXUIElementCreateApplication` plus a cross-process `focused_window()` round
-            // trip. The destroyed element is right here as an argument, so ask it what it was
-            // first and only follow up when a window actually went away.
-            let was_a_window = element.role().is_ok_and(|role| role == kAXWindowRole);
-
-            if was_a_window {
-                // We check to see if there is a valid window for the app, if there is not then we know the
-                // final window has been destroyed. This is done via getting an error when trying to get
-                // the focused window.
-                // SAFETY:
-                // Operations: `AXUIElementCreateApplication` (no preconditions, Create rule) and
-                // `UIElement::from`, whose precondition — a live non-null element — is the
-                // postcondition of the former.
-                // Leak note: the `+1` from the Create rule is never released, and `UIElement::from`
-                // applies the *Get* rule on top of it, so this leaks one AX element per destroyed
-                // window. See docs/13-unsafe-review.md #6.
-                let ax_app_ref = UIElement::from(AXUIElementCreateApplication(app.pid));
-                if ax_app_ref.focused_window().is_err() {
-                    Some(WindowServerEvent::WindowDestroyed { app: app.clone() })
-                } else {
-                    None
-                }
-            } else {
+            // The element is already gone, so it usually cannot answer `role()` at all
+            // (`kAXErrorInvalidUIElement`); requiring `Ok(window)` here meant a closed terminal
+            // window never produced `WindowDestroyed` and the autocomplete window stayed on
+            // screen (2026-09-17). Only a *known* non-window (menus, tooltips, text fields — the
+            // bulk of these notifications) is skipped; everything else is reported and the
+            // desktop decides by comparing window ids, which it can do cheaply.
+            let known_non_window = element.role().is_ok_and(|role| role != kAXWindowRole);
+            if known_non_window {
                 None
+            } else {
+                Some(WindowServerEvent::WindowDestroyed { app: app.clone() })
             }
         },
 

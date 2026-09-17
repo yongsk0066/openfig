@@ -1,5 +1,8 @@
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::sync::LazyLock;
 
 use async_trait::async_trait;
@@ -78,8 +81,132 @@ static FIG_IGNORE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?mi)^\s*#\s*
 /// Comment-only and empty lines.
 static COMMENT_LINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*(#.*)?\n").unwrap());
 
-fn integration_file_name(dotfile_name: &str, when: &When, shell: &Shell) -> String {
-    format!("{}.{when}.{shell}", LEADING_DOT.replace_all(dotfile_name, ""))
+fn integration_file_name(dotfile_name: &str, when: &When, extension: &str) -> String {
+    format!("{}.{when}.{extension}", LEADING_DOT.replace_all(dotfile_name, ""))
+}
+
+/// The `pre` and `post` blocks an install puts in one rc file: a comment line, then a line that
+/// sources `<data dir>/shell/<rc file>.<when>.<extension>`.
+#[derive(Debug, Clone, Copy)]
+struct Blocks {
+    dotfile_name: &'static str,
+    extension: &'static str,
+}
+
+impl Blocks {
+    fn script_path(self, when: When) -> Result<PathBuf> {
+        Ok(directories::fig_data_dir()?.join("shell").join(integration_file_name(
+            self.dotfile_name,
+            &when,
+            self.extension,
+        )))
+    }
+
+    fn description(when: When) -> String {
+        match when {
+            When::Pre => format!("# {PRODUCT_NAME} pre block. Keep at the top of this file."),
+            When::Post => format!("# {PRODUCT_NAME} post block. Keep at the bottom of this file."),
+        }
+    }
+
+    fn source_text(self, when: When) -> Result<String> {
+        let home = directories::home_dir()?;
+        let script_path = self.script_path(when)?;
+        let path = format!("\"${{HOME}}/{}\"", script_path.strip_prefix(home)?.display());
+
+        Ok(format!("[[ -f {path} ]] && builtin source {path}"))
+    }
+
+    fn regex(self, when: When, constrain_position: bool) -> Result<Regex> {
+        let regex = format!(
+            r#"{}(?:{}\n)?{}\n{{0,2}}{}"#,
+            if constrain_position && when == When::Pre {
+                "^"
+            } else {
+                ""
+            },
+            regex::escape(&Self::description(when)),
+            regex::escape(&self.source_text(when)?),
+            if constrain_position && when == When::Post {
+                "$"
+            } else {
+                ""
+            },
+        );
+        Ok(Regex::new(&regex)?)
+    }
+
+    /// Whether the `pre` (with `pre`) or `post` (with `post`) block is in `text`.
+    fn is_present_in(self, text: &str, pre: bool, post: bool) -> Result<bool> {
+        Ok((pre && self.regex(When::Pre, false)?.is_match(text))
+            || (post && self.regex(When::Post, false)?.is_match(text)))
+    }
+
+    /// `text` with the `pre` (with `pre`) and `post` (with `post`) blocks removed and the remainder
+    /// normalised.
+    fn strip_from_text(self, text: &str, pre: bool, post: bool) -> Result<String> {
+        let mut contents = text.to_owned();
+        for (when, strip) in [(When::Pre, pre), (When::Post, post)] {
+            if strip {
+                contents = self.regex(when, false)?.replace_all(&contents, "").into();
+            }
+        }
+
+        let mut contents = contents.trim().to_string();
+        contents.push('\n');
+        Ok(contents)
+    }
+}
+
+/// The rc files bash support wrote its blocks into, until it ended with the pty binary
+/// (docs/15-architecture-study.md §4 stage 4). Nothing writes them any more and `init bash`, which
+/// they call, prints nothing, so they are harmless; uninstalling still removes them.
+const LEGACY_BASH_DOTFILES: [&str; 4] = [".bashrc", ".bash_profile", ".bash_login", ".profile"];
+
+/// Removes bash support's blocks from `env`'s rc files, each file copied into `backup_dir` first,
+/// and the scripts those blocks sourced. Returns whether any rc file had a block.
+pub async fn uninstall_legacy_bash(env: &Env, backup_dir: Option<&Path>) -> Result<bool> {
+    let found = strip_legacy_bash_dotfiles(env, backup_dir)?;
+    for dotfile_name in LEGACY_BASH_DOTFILES {
+        let blocks = Blocks {
+            dotfile_name,
+            extension: "bash",
+        };
+        for when in When::all() {
+            let script = blocks.script_path(when)?;
+            match tokio::fs::remove_file(&script).await {
+                Err(err) if err.kind() != ErrorKind::NotFound => return Err(err).with_path(&script),
+                _ => {},
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The rc file half of [`uninstall_legacy_bash`].
+fn strip_legacy_bash_dotfiles(env: &Env, backup_dir: Option<&Path>) -> Result<bool> {
+    let home = env.home().ok_or(directories::DirectoryError::NoHomeDirectory)?;
+    let mut found = false;
+    for dotfile_name in LEGACY_BASH_DOTFILES {
+        let blocks = Blocks {
+            dotfile_name,
+            extension: "bash",
+        };
+        let dotfile = home.join(dotfile_name);
+        if let Ok(contents) = std::fs::read_to_string(&dotfile)
+            && blocks.is_present_in(&contents, true, true)?
+        {
+            found = true;
+            backup_file(&dotfile, backup_dir)?;
+            write_atomic(
+                &dotfile,
+                blocks.strip_from_text(&contents, true, true)?.as_bytes(),
+                None,
+            )
+            .with_path(&dotfile)?;
+        }
+    }
+    Ok(found)
 }
 
 pub trait ShellExt {
@@ -94,13 +221,13 @@ impl ShellExt for Shell {
         let mut integrations = vec![];
 
         for file in match self {
-            Shell::Bash => [".bashrc", ".bash_profile", ".bash_login", ".profile"].iter(),
             Shell::Zsh => [".zshrc", ".zprofile"].iter(),
         } {
             for when in &When::all() {
-                let path = directories::fig_data_dir()?
-                    .join("shell")
-                    .join(integration_file_name(file, when, self));
+                let path =
+                    directories::fig_data_dir()?
+                        .join("shell")
+                        .join(integration_file_name(file, when, self.as_str()));
 
                 integrations.push(ShellScriptShellIntegration {
                     shell: *self,
@@ -117,30 +244,6 @@ impl ShellExt for Shell {
         let config_dir = self.get_config_directory(env)?;
 
         let integrations: Vec<Box<dyn ShellIntegration>> = match self {
-            Shell::Bash => {
-                let mut configs = vec![".bashrc"];
-                let other_configs = [".profile", ".bash_login", ".bash_profile"];
-
-                configs.extend(other_configs.into_iter().filter(|f| config_dir.join(f).exists()));
-
-                // Include .profile if none of [.profile, .bash_login, .bash_profile] exist.
-                if configs.len() == 1 {
-                    configs.push(other_configs[0]);
-                }
-
-                configs
-                    .into_iter()
-                    .map(|filename| {
-                        Box::new(DotfileShellIntegration {
-                            pre: true,
-                            post: true,
-                            shell: *self,
-                            dotfile_directory: config_dir.clone(),
-                            dotfile_name: filename,
-                        }) as Box<dyn ShellIntegration>
-                    })
-                    .collect()
-            },
             Shell::Zsh => vec![".zshrc", ".zprofile"]
                 .into_iter()
                 .map(|filename| {
@@ -162,28 +265,6 @@ impl ShellExt for Shell {
         let script = match (self, when) {
             (Shell::Zsh, When::Pre) => include_str!("scripts/pre.zsh"),
             (Shell::Zsh, When::Post) => return zsh_hook_source(),
-            (Shell::Bash, When::Pre) => {
-                concat!(
-                    "function __fig_source_bash_preexec() {\n",
-                    include_str!("scripts/bash-preexec.sh"),
-                    "}\n",
-                    "__fig_source_bash_preexec\n",
-                    "# shellcheck disable=SC2329\n",
-                    "function __bp_adjust_histcontrol() { :; }\n",
-                    include_str!("scripts/pre.sh")
-                )
-            },
-            (Shell::Bash, When::Post) => {
-                concat!(
-                    "function __fig_source_bash_preexec() {\n",
-                    include_str!("scripts/bash-preexec.sh"),
-                    "}\n",
-                    "__fig_source_bash_preexec\n",
-                    "# shellcheck disable=SC2329\n",
-                    "function __bp_adjust_histcontrol() { :; }\n",
-                    include_str!("scripts/post.bash")
-                )
-            },
         };
 
         Ok(script.replace("{{CLI_BINARY_NAME}}", CLI_BINARY_NAME))
@@ -258,7 +339,7 @@ impl ShellScriptShellIntegration {
         };
         match self.shell {
             // Check if ~/.local/bin/{CLI_BINARY_NAME} is executable before eval
-            Shell::Bash | Shell::Zsh => format!(
+            Shell::Zsh => format!(
                 "[ -x ~/.local/bin/{CLI_BINARY_NAME} ] && eval \"$(~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile})\""
             ),
         }
@@ -298,8 +379,7 @@ impl ShellIntegration for ShellScriptShellIntegration {
     }
 }
 
-/// zsh and bash integration where we modify a dotfile with pre/post hooks that reference script
-/// files.
+/// zsh integration where we modify a dotfile with pre/post hooks that reference script files.
 #[derive(Debug, Clone)]
 pub struct DotfileShellIntegration {
     shell: Shell,
@@ -314,67 +394,32 @@ impl DotfileShellIntegration {
         self.dotfile_directory.join(self.dotfile_name)
     }
 
-    fn script_integration(&self, when: When) -> Result<ShellScriptShellIntegration> {
-        let integration_file_name = format!(
-            "{}.{}.{}",
-            LEADING_DOT.replace_all(self.dotfile_name, ""),
-            when,
-            self.shell
-        );
-        Ok(ShellScriptShellIntegration {
-            shell: self.shell,
-            when,
-            path: directories::fig_data_dir()?.join("shell").join(integration_file_name),
-        })
-    }
-
-    #[allow(clippy::unused_self)]
-    fn description(&self, when: When) -> String {
-        match when {
-            When::Pre => format!("# {PRODUCT_NAME} pre block. Keep at the top of this file."),
-            When::Post => format!("# {PRODUCT_NAME} post block. Keep at the bottom of this file."),
+    fn blocks(&self) -> Blocks {
+        Blocks {
+            dotfile_name: self.dotfile_name,
+            extension: self.shell.as_str(),
         }
     }
 
+    fn script_integration(&self, when: When) -> Result<ShellScriptShellIntegration> {
+        Ok(ShellScriptShellIntegration {
+            shell: self.shell,
+            when,
+            path: self.blocks().script_path(when)?,
+        })
+    }
+
     fn source_text(&self, when: When) -> Result<String> {
-        let home = directories::home_dir()?;
-        let integration_path = self.script_integration(when)?.path;
-        let path = format!("\"${{HOME}}/{}\"", integration_path.strip_prefix(home)?.display());
-
-        Ok(format!("[[ -f {path} ]] && builtin source {path}"))
-    }
-
-    fn source_regex(&self, when: When, constrain_position: bool) -> Result<Regex> {
-        let regex = format!(
-            r#"{}(?:{}\n)?{}\n{{0,2}}{}"#,
-            if constrain_position && when == When::Pre {
-                "^"
-            } else {
-                ""
-            },
-            regex::escape(&self.description(when)),
-            regex::escape(&self.source_text(when)?),
-            if constrain_position && when == When::Post {
-                "$"
-            } else {
-                ""
-            },
-        );
-        Ok(Regex::new(&regex)?)
-    }
-
-    fn remove_from_text(&self, text: impl Into<String>, when: When) -> Result<String> {
-        let source_regex = self.source_regex(when, false)?;
-        Ok(source_regex.replace_all(&text.into(), "").into())
+        self.blocks().source_text(when)
     }
 
     fn matches_text(&self, text: &str, when: When) -> Result<()> {
         let dotfile = self.dotfile_path();
-        if !self.source_regex(when, false)?.is_match(text) {
+        if !self.blocks().regex(when, false)?.is_match(text) {
             let message = format!("{} does not source {} integration", dotfile.display(), when);
             return Err(Error::NotInstalled(message.into()));
         }
-        if !self.source_regex(when, true)?.is_match(text) {
+        if !self.blocks().regex(when, true)?.is_match(text) {
             let position = match when {
                 When::Pre => "first",
                 When::Post => "last",
@@ -392,8 +437,7 @@ impl DotfileShellIntegration {
 
     /// Whether either of our blocks is currently present in `text`.
     fn is_present_in(&self, text: &str) -> Result<bool> {
-        Ok((self.pre && self.source_regex(When::Pre, false)?.is_match(text))
-            || (self.post && self.source_regex(When::Post, false)?.is_match(text)))
+        self.blocks().is_present_in(text, self.pre, self.post)
     }
 
     /// The rc file with our blocks removed and the remainder normalised.
@@ -401,19 +445,7 @@ impl DotfileShellIntegration {
     /// Shared by `uninstall` and `install_inner` so that installing over an existing install and
     /// uninstalling agree byte for byte.
     fn strip_from_text(&self, text: &str) -> Result<String> {
-        let mut contents = text.to_owned();
-
-        if self.pre {
-            contents = self.remove_from_text(&contents, When::Pre)?;
-        }
-
-        if self.post {
-            contents = self.remove_from_text(&contents, When::Post)?;
-        }
-
-        let mut contents = contents.trim().to_string();
-        contents.push('\n');
-        Ok(contents)
+        self.blocks().strip_from_text(text, self.pre, self.post)
     }
 
     /// The rc file as it should look once installed, given its current contents.
@@ -425,7 +457,7 @@ impl DotfileShellIntegration {
             contents = format!(
                 "{}{}\n{}\n{}",
                 shebang,
-                self.description(When::Pre),
+                Blocks::description(When::Pre),
                 self.source_text(When::Pre)?,
                 post_shebang,
             );
@@ -435,7 +467,7 @@ impl DotfileShellIntegration {
             contents = format!(
                 "{}\n{}\n{}\n",
                 contents,
-                self.description(When::Post),
+                Blocks::description(When::Post),
                 self.source_text(When::Post)?,
             );
         }
@@ -624,8 +656,8 @@ mod test {
     fn install_uninstall_roundtrip_is_stable() {
         let dir = tempfile::tempdir().unwrap();
 
-        for (shell, name) in [(Shell::Zsh, ".zshrc"), (Shell::Bash, ".bashrc")] {
-            let integration = dotfile(shell, name, dir.path());
+        for name in [".zshrc", ".zprofile"] {
+            let integration = dotfile(Shell::Zsh, name, dir.path());
 
             for original in [
                 "# user config\nexport FOO=1\n",
@@ -680,5 +712,72 @@ mod test {
         integration.uninstall().await.unwrap();
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), contents);
+    }
+
+    /// The blocks bash support wrote, spelled out as they are in an rc file today, come out whole
+    /// and leave everything else — another tool's blocks included — where it was.
+    #[test]
+    fn legacy_bash_blocks_are_stripped() {
+        let bashrc = "# Fig pre block. Keep at the top of this file.\n\
+            [[ -f \"${HOME}/Library/Application Support/fig/shell/bashrc.pre.bash\" ]] && builtin source \"${HOME}/Library/Application Support/fig/shell/bashrc.pre.bash\"\n\
+            # Kiro CLI pre block. Keep at the top of this file.\n\
+            . \"$HOME/.cargo/env\"\n\
+            \n\
+            # Kiro CLI post block. Keep at the bottom of this file.\n\
+            \n\
+            # Fig post block. Keep at the bottom of this file.\n\
+            [[ -f \"${HOME}/Library/Application Support/fig/shell/bashrc.post.bash\" ]] && builtin source \"${HOME}/Library/Application Support/fig/shell/bashrc.post.bash\"\n";
+        let blocks = Blocks {
+            dotfile_name: ".bashrc",
+            extension: "bash",
+        };
+        assert!(blocks.is_present_in(bashrc, true, true).unwrap());
+        assert_eq!(
+            blocks.strip_from_text(bashrc, true, true).unwrap(),
+            "# Kiro CLI pre block. Keep at the top of this file.\n\
+             . \"$HOME/.cargo/env\"\n\
+             \n\
+             # Kiro CLI post block. Keep at the bottom of this file.\n"
+        );
+        // A zsh block in the same file is not bash's to remove.
+        let zshrc_blocks = Blocks {
+            dotfile_name: ".zshrc",
+            extension: "zsh",
+        };
+        assert!(!zshrc_blocks.is_present_in(bashrc, true, true).unwrap());
+    }
+
+    /// Uninstalling finds the blocks in a sandboxed `HOME` and leaves a file without any alone.
+    #[tokio::test]
+    async fn uninstall_legacy_bash_rewrites_only_files_with_blocks() {
+        let home = tempfile::tempdir().unwrap();
+        let blocks = Blocks {
+            dotfile_name: ".profile",
+            extension: "bash",
+        };
+        let installed = format!(
+            "{}\n{}\nexport PATH=\"$HOME/bin:$PATH\"\n{}\n{}\n",
+            Blocks::description(When::Pre),
+            blocks.source_text(When::Pre).unwrap(),
+            Blocks::description(When::Post),
+            blocks.source_text(When::Post).unwrap(),
+        );
+        std::fs::write(home.path().join(".profile"), &installed).unwrap();
+        let untouched = "# user config\n\n\n";
+        std::fs::write(home.path().join(".bashrc"), untouched).unwrap();
+
+        let env = Env::from_slice(&[("HOME", home.path().to_str().unwrap())]);
+        let backups = home.path().join("backups");
+        // Only the rc files: the scripts live in the real data directory, which `HOME` here does not
+        // redirect, so `uninstall_legacy_bash` itself would delete this machine's.
+        let found = strip_legacy_bash_dotfiles(&env, Some(&backups)).unwrap();
+
+        assert!(found);
+        assert_eq!(
+            std::fs::read_to_string(home.path().join(".profile")).unwrap(),
+            "export PATH=\"$HOME/bin:$PATH\"\n"
+        );
+        assert_eq!(std::fs::read_to_string(home.path().join(".bashrc")).unwrap(), untouched);
+        assert_eq!(std::fs::read_to_string(backups.join(".profile")).unwrap(), installed);
     }
 }

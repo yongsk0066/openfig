@@ -22,7 +22,10 @@ use crate::error::{
     Error,
     Result,
 };
-use crate::shell::ShellExt;
+use crate::shell::{
+    ShellExt,
+    uninstall_legacy_bash,
+};
 
 bitflags::bitflags! {
     /// The different components that can be installed.
@@ -41,20 +44,19 @@ bitflags::bitflags! {
 /// link to it and a copy per shell. Nothing creates them any more; uninstalling still removes them.
 const LEGACY_PTY_BINARIES: [&str; 3] = ["figterm", "zsh (figterm)", "bash (figterm)"];
 
-/// Removes the integration blocks from the user's rc files.
+/// Removes the integration blocks from the user's rc files, and the ones bash support left behind.
 ///
-/// Each rc file is copied into the timestamped backup directory first: `uninstall` rewrites the
-/// file whether or not anything was found to remove (it also trims trailing whitespace and
-/// normalises the final newline), so it is destructive even in the no-op case.
+/// Each rc file is copied into the timestamped backup directory first.
 async fn uninstall_shell_integrations(env: &Env) -> Result<()> {
     let backup_dir = directories::utc_backup_dir()?;
-    for shell in [Shell::Bash, Shell::Zsh] {
+    for shell in Shell::all() {
         for integration in shell.get_shell_integrations(env)? {
             let path = integration.path();
             backup_file(&path, Some(&backup_dir))?;
             integration.uninstall().await?;
         }
     }
+    uninstall_legacy_bash(env, Some(&backup_dir)).await?;
     Ok(())
 }
 

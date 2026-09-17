@@ -32,7 +32,7 @@ pub async fn onboarding(
     match request.action() {
         OnboardingAction::InstallationScript => {
             let mut errs: Vec<String> = vec![];
-            for shell in [Shell::Bash, Shell::Zsh] {
+            for shell in Shell::all() {
                 match shell.get_shell_integrations(ctx.env()) {
                     Ok(integrations) => {
                         for integration in integrations {

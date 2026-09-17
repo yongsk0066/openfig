@@ -23,12 +23,6 @@ fn local_state_get() -> Result<()> {
 }
 
 #[test]
-fn get_shell() -> Result<()> {
-    cli().args(["_", "get-shell"]).assert().success();
-    Ok(())
-}
-
-#[test]
 fn hostname() -> Result<()> {
     cli().args(["_", "hostname"]).assert().success();
     Ok(())

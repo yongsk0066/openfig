@@ -12,7 +12,6 @@ use clap::{
 };
 use eyre::Result;
 use fig_integrations::install::InstallComponents;
-use fig_proto::util::get_shell;
 use fig_util::directories;
 use sysinfo::System;
 
@@ -54,7 +53,6 @@ pub enum InternalSubcommand {
     LocalState(local_state::LocalStateArgs),
     /// Install the cli
     Install(InstallArgs),
-    GetShell,
     Hostname,
     SocketsDir,
     Uuidgen,
@@ -72,15 +70,6 @@ impl InternalSubcommand {
             InternalSubcommand::LocalState(local_state) => {
                 local_state.execute().await?;
                 Ok(ExitCode::SUCCESS)
-            },
-            InternalSubcommand::GetShell => match get_shell() {
-                Ok(shell) => {
-                    if write!(stdout(), "{shell}").is_ok() {
-                        return Ok(ExitCode::SUCCESS);
-                    }
-                    Ok(ExitCode::FAILURE)
-                },
-                Err(_) => Ok(ExitCode::FAILURE),
             },
             InternalSubcommand::Hostname => {
                 if let Some(hostname) = System::host_name()

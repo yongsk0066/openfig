@@ -4,34 +4,42 @@ use std::io::{
     Write,
     stdout,
 };
-use std::path::Path;
 use std::process::ExitCode;
-use std::sync::LazyLock;
 
-use clap::Args;
+use clap::{
+    Args,
+    ValueEnum,
+};
 use crossterm::style::Stylize;
 use eyre::Result;
 use fig_integrations::shell::{
     ShellExt,
     When,
 };
-use fig_util::env_var::FIG_SHELL;
 use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
     Shell,
-    get_parent_process_exe,
 };
 
 const SHELL_INTEGRATIONS_ENABLED_STATE_KEY: &str = "shell-integrations.enabled";
 
-static IS_SNAPSHOT_TEST: LazyLock<bool> = LazyLock::new(|| fig_os_shim::Env::new().fig_init_snapshot_test());
+/// The shells `init` is called for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum InitShell {
+    Zsh,
+    /// Prints nothing. bash support ended with the pty binary (docs/15-architecture-study.md §4
+    /// stage 4), but the blocks it put in `~/.bashrc` and `~/.profile` still run `init bash` in
+    /// every new bash until an uninstall removes them, so this has to stay a silent success.
+    #[value(hide = true)]
+    Bash,
+}
 
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct InitArgs {
     /// The shell to generate the dotfiles for
     #[arg(value_enum)]
-    shell: Shell,
+    shell: InitShell,
     /// When to generate the dotfiles for
     #[arg(value_enum)]
     when: When,
@@ -42,7 +50,11 @@ pub struct InitArgs {
 impl InitArgs {
     pub async fn execute(&self) -> Result<ExitCode> {
         let InitArgs { shell, when, rcfile } = self;
-        match shell_init(shell, when, rcfile).await {
+        let shell = match shell {
+            InitShell::Zsh => Shell::Zsh,
+            InitShell::Bash => return Ok(ExitCode::SUCCESS),
+        };
+        match shell_init(&shell, when, rcfile).await {
             Ok(source) => writeln!(stdout(), "{source}"),
             Err(err) => writeln!(stdout(), "# Could not load source: {err}"),
         }
@@ -58,8 +70,8 @@ enum GuardAssignment {
 
 fn assign_shell_variable(shell: &Shell, name: impl Display, value: impl Display, exported: bool) -> String {
     match (shell, exported) {
-        (Shell::Bash | Shell::Zsh, false) => format!("{name}=\"{value}\""),
-        (Shell::Bash | Shell::Zsh, true) => format!("export {name}=\"{value}\""),
+        (Shell::Zsh, false) => format!("{name}=\"{value}\""),
+        (Shell::Zsh, true) => format!("export {name}=\"{value}\""),
     }
 }
 
@@ -72,7 +84,7 @@ fn guard_source(
 ) -> String {
     let mut output: Vec<Cow<'static, str>> = Vec::with_capacity(4);
     output.push(match shell {
-        Shell::Bash | Shell::Zsh => format!("if [ -z \"${{{guard_var}}}\" ]; then").into(),
+        Shell::Zsh => format!("if [ -z \"${{{guard_var}}}\" ]; then").into(),
     });
 
     let shell_var = assign_shell_variable(shell, guard_var, "1", export);
@@ -87,7 +99,7 @@ fn guard_source(
 
     output.push(
         match shell {
-            Shell::Bash | Shell::Zsh => "fi\n",
+            Shell::Zsh => "fi\n",
         }
         .into(),
     );
@@ -105,27 +117,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
         return Ok(shell_integrations_disabled_code(*shell));
     }
 
-    let mut to_source = Vec::new();
-
-    // zsh's `post` is the hook (`fig.zsh`), which does not read it; bash's markers do.
-    if *shell == Shell::Bash
-        && let Some(parent_process) = get_parent_process_exe()
-    {
-        to_source.push(assign_shell_variable(
-            shell,
-            FIG_SHELL,
-            if *IS_SNAPSHOT_TEST {
-                Path::new("/bin/zsh").display()
-            } else {
-                parent_process.display()
-            },
-            false,
-        ));
-    }
-
-    to_source.push(shell.get_fig_integration_source(when)?);
-
-    Ok(to_source.join("\n"))
+    Ok(shell.get_fig_integration_source(when)?)
 }
 
 fn shell_integrations_disabled_code(shell: Shell) -> String {

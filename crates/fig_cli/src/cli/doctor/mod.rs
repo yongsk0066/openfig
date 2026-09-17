@@ -3,7 +3,6 @@ mod checks;
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::fs::read_to_string;
 use std::future::Future;
 use std::path::{
     Path,
@@ -20,10 +19,7 @@ use anstream::{
     println,
 };
 use async_trait::async_trait;
-use checks::{
-    BashVersionCheck,
-    ZshHookCheck,
-};
+use checks::ZshHookCheck;
 use clap::Args;
 use crossterm::style::Stylize;
 use crossterm::terminal::{
@@ -66,7 +62,6 @@ use futures::FutureExt;
 use futures::future::BoxFuture;
 use owo_colors::OwoColorize;
 use regex::Regex;
-use semver::Version;
 use spinners::{
     Spinner,
     Spinners,
@@ -630,7 +625,7 @@ impl DoctorCheck<DiagnosticsResponse> for ShellCompatibilityCheck {
     }
 
     async fn check(&self, _: &DiagnosticsResponse) -> Result<(), DoctorError> {
-        let shell_regex = Regex::new(r"(bash|zsh)").unwrap();
+        let shell_regex = Regex::new(r"zsh").unwrap();
 
         let current_shell = fig_util::get_parent_process_exe();
         let current_shell_valid = current_shell
@@ -899,61 +894,6 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
     }
 }
 
-struct ItermBashIntegrationCheck;
-
-#[async_trait]
-impl DoctorCheck<SupportedTerminalCheckContext> for ItermBashIntegrationCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "iTerm bash integration configured".into()
-    }
-
-    async fn get_type(&self, context: &SupportedTerminalCheckContext, platform: Platform) -> DoctorCheckType {
-        if platform == Platform::MacOs {
-            if Shell::current_shell() != Some(Shell::Bash) {
-                return DoctorCheckType::NoCheck;
-            }
-
-            match directories::home_dir() {
-                Ok(home) => {
-                    if !home.join(".iterm2_shell_integration.bash").exists() {
-                        DoctorCheckType::NoCheck
-                    } else if matches!(context.terminal, Some(Terminal::Iterm)) {
-                        DoctorCheckType::NormalCheck
-                    } else {
-                        DoctorCheckType::SoftCheck
-                    }
-                },
-                Err(_) => DoctorCheckType::NoCheck,
-            }
-        } else {
-            DoctorCheckType::NoCheck
-        }
-    }
-
-    async fn check(&self, _: &SupportedTerminalCheckContext) -> Result<(), DoctorError> {
-        let integration_file = directories::home_dir().unwrap().join(".iterm2_shell_integration.bash");
-        let integration = read_to_string(integration_file).context("Could not read .iterm2_shell_integration.bash")?;
-
-        match Regex::new(r"V(\d*\.\d*\.\d*)").unwrap().captures(&integration) {
-            Some(captures) => {
-                let version = captures.get(1).unwrap().as_str();
-                if Version::new(0, 4, 0) > Version::parse(version).unwrap() {
-                    return Err(doctor_error!(
-                        "iTerm Bash Integration is out of date. Please update in iTerm's menu by selecting \"Install \
-                         Shell Integration\". For more details see https://iterm2.com/documentation-shell-integration.html"
-                    ));
-                }
-                Ok(())
-            },
-            None => Err(doctor_warning!(
-                "iTerm's Bash Integration is installed, but we could not check the version in \
-                 ~/.iterm2_shell_integration.bash. Integration may be out of date. You can try updating in iTerm's \
-                 menu by selecting \"Install Shell Integration\"",
-            )),
-        }
-    }
-}
-
 struct SystemVersionCheck;
 
 #[async_trait]
@@ -1192,8 +1132,8 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         })?;
     }
 
-    let shell_integrations: Vec<_> = [Shell::Bash, Shell::Zsh]
-        .into_iter()
+    let shell_integrations: Vec<_> = Shell::all()
+        .iter()
         .map(|shell| shell.get_shell_integrations(&Env::new()))
         .collect::<Result<Vec<_>, fig_integrations::Error>>()?
         .into_iter()
@@ -1259,7 +1199,7 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
         run_checks(
             "Let's check if your system is compatible...".into(),
-            vec![&SystemVersionCheck, &BashVersionCheck],
+            vec![&SystemVersionCheck],
             config,
             &mut spinner,
         )
@@ -1286,7 +1226,7 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
         run_checks_with_context(
             "Let's check your terminal integrations...",
-            vec![&SupportedTerminalCheck, &ItermBashIntegrationCheck],
+            vec![&SupportedTerminalCheck],
             get_terminal_context,
             config,
             &mut spinner,

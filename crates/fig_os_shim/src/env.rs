@@ -176,10 +176,6 @@ impl Env {
     pub fn fig_log_stdout(&self) -> bool {
         self.get_os("FIG_LOG_STDOUT").is_some()
     }
-
-    pub fn fig_init_snapshot_test(&self) -> bool {
-        self.get_os("FIG_INIT_SNAPSHOT_TEST").is_some()
-    }
 }
 
 impl Shim for Env {

@@ -77,13 +77,11 @@ pub async fn install_cli(
             println!("To install the integrations manually, you will have to add the following to your rc files");
             println!("This step is required for the application to function properly");
             println!();
-            println!("At the top of your .bashrc or .zshrc file:");
-            println!("bash:    . \"$HOME/{shell_dir}/bashrc.pre.bash\"");
-            println!("zsh:     . \"$HOME/{shell_dir}/zshrc.pre.zsh\"");
+            println!("At the top of your .zshrc file:");
+            println!(". \"$HOME/{shell_dir}/zshrc.pre.zsh\"");
             println!();
-            println!("At the bottom of your .bashrc or .zshrc file:");
-            println!("bash:    . \"$HOME/{shell_dir}/bashrc.post.bash\"");
-            println!("zsh:     . \"$HOME/{shell_dir}/zshrc.post.zsh\"");
+            println!("At the bottom of your .zshrc file:");
+            println!(". \"$HOME/{shell_dir}/zshrc.post.zsh\"");
             println!();
 
             if let Err(err) = install(InstallComponents::SHELL_INTEGRATIONS, &env).await {

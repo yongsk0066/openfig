@@ -22,12 +22,11 @@ use crate::{
     get_parent_process_exe,
 };
 
-/// All supported shells
+/// All supported shells. zsh is the only one since bash support ended with the pty binary
+/// (docs/15-architecture-study.md §4 stage 4): the shell integration is `fig.zsh`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "camelCase")]
 pub enum Shell {
-    /// Bash shell
-    Bash,
     /// Zsh shell
     Zsh,
 }
@@ -43,7 +42,6 @@ impl FromStr for Shell {
 
     fn from_str(s: &str) -> Result<Self, ()> {
         match s {
-            "bash" => Ok(Shell::Bash),
             "zsh" => Ok(Shell::Zsh),
             _ => Err(()),
         }
@@ -52,24 +50,18 @@ impl FromStr for Shell {
 
 impl Shell {
     pub fn all() -> &'static [Self] {
-        &[Shell::Bash, Shell::Zsh]
+        &[Shell::Zsh]
     }
 
     /// All shells to run unit / integration tests with
     pub fn all_test() -> Vec<Self> {
-        vec![Shell::Bash, Shell::Zsh]
+        vec![Shell::Zsh]
     }
 
     /// Try to find the name of common shells in the input
     pub fn try_find_shell(input: impl AsRef<Path>) -> Option<Self> {
         let input = input.as_ref().file_name()?.to_str()?;
-        if input.contains("bash") {
-            Some(Shell::Bash)
-        } else if input.contains("zsh") {
-            Some(Shell::Zsh)
-        } else {
-            None
-        }
+        if input.contains("zsh") { Some(Shell::Zsh) } else { None }
     }
 
     /// Gets the current shell of the parent process
@@ -97,7 +89,6 @@ impl Shell {
     pub fn get_config_directory(&self, env: &Env) -> Result<PathBuf, directories::DirectoryError> {
         let home = || env.home().ok_or(directories::DirectoryError::NoHomeDirectory);
         match self {
-            Shell::Bash => home(),
             Shell::Zsh => match env
                 .get_os("ZDOTDIR")
                 .or_else(|| env.get_os(FIG_ZDOTDIR))
@@ -111,18 +102,10 @@ impl Shell {
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            Shell::Bash => "bash",
             Shell::Zsh => "zsh",
         }
     }
 }
-
-/// Matches the first line of `bash --version`.
-///
-/// The words between `GNU bash,` and the version number are localized (`version` in the C locale,
-/// `\uBC84\uC804` under `LANG=ko_KR`), so anything non-numeric is skipped instead of being matched
-/// literally. `shell_version` also forces `LC_ALL=C`; this is the second line of defence.
-static BASH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^GNU bash,\D*(\d+\.\d+\.\d+)").unwrap());
 
 /// Matches the first line of `zsh --version`, e.g. `zsh 5.9 (arm64-apple-darwin26.0)` or
 /// `zsh 5.9.2 (aarch64-apple-darwin25.4.0)`. The patch component is optional but must not be
@@ -132,10 +115,9 @@ static ZSH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^zsh\s+(\d+\.
 async fn shell_version(shell: &Shell, exe_path: &Path) -> Result<String, Error> {
     let err = || Error::ShellVersion(*shell);
     let re: &Regex = match shell {
-        Shell::Bash => &BASH_RE,
         Shell::Zsh => &ZSH_RE,
     };
-    // `LC_ALL=C` keeps the banner in English regardless of the user's locale.
+    // `LC_ALL=C` keeps any localized banner in English.
     let version_output = Command::new(exe_path)
         .arg("--version")
         .env("LC_ALL", "C")
@@ -151,13 +133,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_version() {
-        // Every entry must resolve to a `major.minor[.patch]` triple. `bash` resolves through
-        // `$PATH` (Homebrew bash 5.x on this machine), `/bin/bash` is the Apple-shipped 3.2.57.
-        let tests = [
-            (Shell::Bash, "/bin/bash"),
-            (Shell::Bash, "bash"),
-            (Shell::Zsh, "/bin/zsh"),
-        ];
+        // Every entry must resolve to a `major.minor[.patch]` triple.
+        let tests = [(Shell::Zsh, "/bin/zsh")];
 
         for (shell, exe_path_str) in tests {
             let exe_path = Path::new(exe_path_str);
@@ -186,64 +163,6 @@ mod tests {
             assert!(parts.next().is_none(), "{exe_path_str}: trailing junk in {version:?}");
             assert!(major >= 3, "{exe_path_str}: implausible major {major} in {version:?}");
         }
-
-        // `/bin/bash` is pinned by macOS and will not move off 3.2.57.
-        assert_eq!(
-            shell_version(&Shell::Bash, Path::new("/bin/bash")).await.unwrap(),
-            "3.2.57"
-        );
-    }
-
-    #[test]
-    fn test_bash_re() {
-        let bash_3_version = indoc::indoc! {r"
-            GNU bash, version 3.2.57(1)-release (x86_64-apple-darwin23)
-            Copyright (C) 2007 Free Software Foundation, Inc.
-        "};
-        assert_eq!(
-            BASH_RE.captures(bash_3_version).unwrap().get(1).unwrap().as_str(),
-            "3.2.57"
-        );
-
-        let bash_5_version = indoc::indoc! {r"
-            GNU bash, version 5.2.26(1)-release (aarch64-apple-darwin23.2.0)
-            Copyright (C) 2022 Free Software Foundation, Inc.
-            License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
-
-            This is free software; you are free to change and redistribute it.
-            There is NO WARRANTY, to the extent permitted by law.
-        "};
-        assert_eq!(
-            BASH_RE.captures(bash_5_version).unwrap().get(1).unwrap().as_str(),
-            "5.2.26"
-        );
-    }
-
-    /// Homebrew bash 5.3+ is built with NLS, so under `LANG=ko_KR` the banner reads
-    /// `GNU bash, 버전 5.3.15(1)-release`. The old `GNU bash, version …` pattern missed it and
-    /// `test_shell_version` failed on every run.
-    #[test]
-    fn test_bash_re_localized() {
-        let ko = indoc::indoc! {r"
-            GNU bash, 버전 5.3.15(1)-release (aarch64-apple-darwin25.4.0)
-            Copyright (C) 2025 Free Software Foundation, Inc.
-            라이선스 GPLv3+: GNU GPL 버전 3 이상 <http://gnu.org/license/gpl.html>
-        "};
-        assert_eq!(BASH_RE.captures(ko).unwrap().get(1).unwrap().as_str(), "5.3.15");
-
-        // Other NLS banners take the same shape.
-        assert_eq!(
-            BASH_RE
-                .captures("GNU bash, Version 5.1.16(1)-release")
-                .unwrap()
-                .get(1)
-                .unwrap()
-                .as_str(),
-            "5.1.16"
-        );
-
-        // A line that merely mentions a version elsewhere must not match.
-        assert!(BASH_RE.captures("License GPLv3+: GNU GPL version 3 or later").is_none());
     }
 
     #[test]

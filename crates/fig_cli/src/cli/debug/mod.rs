@@ -44,10 +44,7 @@ use fig_util::{
     Shell,
     directories,
 };
-use tempfile::{
-    NamedTempFile,
-    TempDir,
-};
+use tempfile::TempDir;
 use tracing::error;
 
 use crate::cli::launch_fig_desktop;
@@ -463,17 +460,12 @@ impl DebugSubcommand {
                 .context("Could not open devtools window")?;
             },
             DebugSubcommand::Shell => {
-                let mut profile = NamedTempFile::new()?;
                 let tmp_dir = TempDir::new()?;
 
                 match Shell::current_shell() {
                     Some(shell) => {
                         let mut command = Command::new(shell.as_str());
                         match shell {
-                            Shell::Bash => {
-                                writeln!(profile, "eval \"$({CLI_BINARY_NAME} init bash post)\"")?;
-                                command.args(["--noprofile", "--norc", "--rcfile"]).arg(profile.path());
-                            },
                             Shell::Zsh => {
                                 std::fs::write(
                                     tmp_dir.path().join(".zshrc"),
@@ -488,7 +480,6 @@ impl DebugSubcommand {
                         println!("Starting {PRODUCT_NAME} debug shell");
                         println!();
 
-                        profile.as_file().sync_all()?;
                         let mut output = command.spawn()?;
                         if !output.wait()?.success() {
                             panic!();

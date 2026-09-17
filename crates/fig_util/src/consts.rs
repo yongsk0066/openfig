@@ -78,9 +78,6 @@ pub mod env_var {
         /// Indicates a process was launched by the desktop app
         PROCESS_LAUNCHED_BY_FIG = "PROCESS_LAUNCHED_BY_FIG",
 
-        /// The shell to use in the pty wrapper
-        FIG_SHELL = "FIG_SHELL",
-
         /// Indicates the user is using zsh autosuggestions which disables Inline
         FIG_USING_ZSH_AUTOSUGGESTIONS = "FIG_USING_ZSH_AUTOSUGGESTIONS"
     }

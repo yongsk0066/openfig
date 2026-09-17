@@ -38,18 +38,6 @@ const installChecks: InstallCheckWithInstallKey[] = [
             content: ".zprofile",
             tag: "code",
           },
-          {
-            content: ".bashrc",
-            tag: "code",
-          },
-          {
-            content: ".bash_profile",
-            tag: "code",
-          },
-          {
-            content: ".profile",
-            tag: "code",
-          },
         ],
         [
           {

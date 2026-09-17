@@ -16,7 +16,7 @@ locally, and is not published anywhere.
 | --- | --- |
 | Desktop app (WebView host, tray, window positioning) | `crates/fig_desktop/` |
 | CLI (`fig`) | `crates/fig_cli/` |
-| Shell integration (zsh, bash) | `crates/fig_integrations/src/shell/` |
+| Shell integration (zsh) | `crates/fig_integrations/src/shell/` |
 | Autocomplete UI (React) | `packages/autocomplete-app/` |
 | Settings dashboard (React) | `packages/dashboard-app/` |
 | Parsers, API bindings, shared utilities | `packages/*/` |

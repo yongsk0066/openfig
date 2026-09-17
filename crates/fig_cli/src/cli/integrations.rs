@@ -103,7 +103,7 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
         Integration::Dotfiles { shell } => {
             let shells = match shell {
                 Some(shell) => vec![shell],
-                None => vec![Shell::Bash, Shell::Zsh],
+                None => Shell::all().to_vec(),
             };
 
             let mut errs: Vec<String> = vec![];
@@ -161,10 +161,17 @@ async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
         Integration::Dotfiles { shell } => {
             let shells = match shell {
                 Some(shell) => vec![shell],
-                None => vec![Shell::Bash, Shell::Zsh],
+                None => Shell::all().to_vec(),
             };
 
             let mut errs: Vec<String> = vec![];
+            // The blocks bash support left in bash's rc files go with the rest.
+            if shell.is_none() {
+                match fig_integrations::shell::uninstall_legacy_bash(&Env::new(), None).await {
+                    Ok(found) => uninstalled |= found,
+                    Err(e) => errs.push(format!("{}: {}", "bash".bold(), e.verbose_message())),
+                }
+            }
             for shell in &shells {
                 match shell.get_shell_integrations(&Env::new()) {
                     Ok(integrations) => {
@@ -220,7 +227,7 @@ async fn status(integration: Integration, format: OutputFormat) -> Result<ExitCo
             let mut all_integrations = vec![];
             let mut errors = vec![];
 
-            for shell in &[Shell::Bash, Shell::Zsh] {
+            for shell in Shell::all() {
                 match shell.get_shell_integrations(&Env::new()) {
                     Ok(integrations) => {
                         for integration in integrations {

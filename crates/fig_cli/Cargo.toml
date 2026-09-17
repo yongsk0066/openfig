@@ -41,7 +41,6 @@ objc2-app-kit = { workspace = true, features = ["NSRunningApplication"] }
 objc2-foundation.workspace = true
 owo-colors = "4.2.0"
 regex.workspace = true
-semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 spinners.workspace = true

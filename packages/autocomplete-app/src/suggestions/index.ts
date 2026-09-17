@@ -294,15 +294,52 @@ const addAutoExecuteSuggestion = (
   return suggestions;
 };
 
+/**
+ * A string that two values share whenever `fieldsAreEqual` would call them equal (the
+ * converse need not hold). Primitives contribute their value; an object whose own values
+ * are all strings (a `name` array) contributes them; any other object only its key count,
+ * which `fieldsAreEqual` also requires to match; functions and symbols only their type.
+ */
+const bucketKeyPart = (value: unknown): string => {
+  switch (typeof value) {
+    case "undefined":
+      return "u";
+    case "string":
+      return `s${JSON.stringify(value)}`;
+    case "number":
+    case "boolean":
+    case "bigint":
+      return `${typeof value}:${String(value)}`;
+    case "object": {
+      if (value === null) return "null";
+      const keys = Object.keys(value);
+      const record = value as Record<string, unknown>;
+      if (keys.every((key) => typeof record[key] === "string")) {
+        return `o${JSON.stringify(keys.map((key) => [key, record[key]]))}`;
+      }
+      return `o${keys.length}`;
+    }
+    default:
+      return typeof value;
+  }
+};
+
 export const deduplicateSuggestions = (
   suggestions: Suggestion[],
   fields: (keyof Suggestion)[],
 ): Suggestion[] => {
   const deduplicated: Suggestion[] = [];
+  // Kept suggestions grouped by a key equal suggestions always share, so each one is compared
+  // with `fieldsAreEqual` only against the few kept rows in its bucket instead of all of them.
+  const buckets = new Map<string, Suggestion[]>();
   for (const suggestion of suggestions) {
-    const isDuplicated =
-      deduplicated.filter((dd) => fieldsAreEqual(suggestion, dd, fields)).length > 0;
-    if (!isDuplicated) {
+    const key = fields.map((field) => bucketKeyPart(suggestion[field])).join("\u0000");
+    const bucket = buckets.get(key);
+    if (!bucket) {
+      buckets.set(key, [suggestion]);
+      deduplicated.push(suggestion);
+    } else if (!bucket.some((kept) => fieldsAreEqual(suggestion, kept, fields))) {
+      bucket.push(suggestion);
       deduplicated.push(suggestion);
     }
   }

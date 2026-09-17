@@ -42,7 +42,53 @@ async fn same_file_contents(a: &std::path::Path, b: &std::path::Path) -> bool {
     }
 }
 
+/// Hidden sibling `.<name>.new` of `dst`, where a replacement is staged before it is renamed into
+/// place. Same directory, so the `rename` never crosses a file system.
+fn staging_path(dst: &std::path::Path) -> Result<std::path::PathBuf, std::io::Error> {
+    let name = dst.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{} has no file name", dst.display()),
+        )
+    })?;
+    Ok(dst.with_file_name(format!(".{}.new", name.to_string_lossy())))
+}
+
+/// Move the staged `tmp` over `dst`, or clean it up if that fails.
+///
+/// `rename(2)` swaps the directory entry in one step: a shell that starts at that moment finds
+/// either the old file or the new one, never nothing, and a process still running from the old
+/// file keeps its inode.
+async fn rename_into_place(tmp: &std::path::Path, dst: &std::path::Path) -> Result<(), std::io::Error> {
+    let result = tokio::fs::rename(tmp, dst).await;
+    if result.is_err() {
+        tokio::fs::remove_file(tmp).await.ok();
+    }
+    result
+}
+
+/// Replace `dst` with a copy of `src` via a staged file and a `rename`, the same way the
+/// Justfile's `install` recipe does it.
+///
+/// Neither half of the obvious alternatives is safe for the `<shell> (figterm)` copies. Removing
+/// `dst` and then copying leaves a window in which a new shell's rc hook finds no binary. Copying
+/// over an existing `dst` rewrites the pages of a signed executable that open terminal tabs are
+/// running, and the kernel then kills every new `exec` of it with "Code Signature Invalid".
+async fn replace_file(src: &std::path::Path, dst: &std::path::Path) -> Result<(), std::io::Error> {
+    let tmp = staging_path(dst)?;
+    // A leftover from an interrupted run is removed rather than written into.
+    tokio::fs::remove_file(&tmp).await.ok();
+    if let Err(err) = tokio::fs::copy(src, &tmp).await {
+        tokio::fs::remove_file(&tmp).await.ok();
+        return Err(err);
+    }
+    rename_into_place(&tmp, dst).await
+}
+
 /// Symlink, and overwrite if it already exists and is invalid or not a symlink
+///
+/// The replacement is staged next to `dst` and renamed over it instead of removing `dst` first,
+/// so `~/.local/bin/<cli>` never disappears while a new shell's rc hook is looking for it.
 async fn symlink(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> Result<(), std::io::Error> {
     use std::io::ErrorKind;
 
@@ -59,16 +105,16 @@ async fn symlink(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Pa
             {
                 return Ok(());
             }
-
-            // If it's not a symlink or it points to the wrong place, delete it
-            tokio::fs::remove_file(dst).await?;
         },
         Err(err) if err.kind() == ErrorKind::NotFound => {},
         Err(err) => return Err(err),
     }
 
-    // Create the symlink
-    tokio::fs::symlink(src, dst).await
+    // Not there, not a symlink, or pointing elsewhere: stage the right link and swap it in.
+    let tmp = staging_path(dst)?;
+    tokio::fs::remove_file(&tmp).await.ok();
+    tokio::fs::symlink(src, &tmp).await?;
+    rename_into_place(&tmp, dst).await
 }
 
 pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
@@ -103,31 +149,24 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
                 error!(%err, "Failed to symlink for {PTY_BINARY_NAME}: {pty_path:?}");
             }
 
+            // Awaited, not spawned: the refresh used to run in a detached task, so it raced the rest
+            // of startup and its errors went nowhere anyone waited for. Comparing the bytes costs
+            // two reads of an ~11 MB binary per shell, from the page cache after the first launch.
             for shell in Shell::all() {
                 let pty_shell_cpy = local_bin.join(format!("{shell} ({PTY_BINARY_NAME})"));
-                let pty_path = pty_path.clone();
 
-                tokio::spawn(async move {
-                    // Refresh the copy whenever its bytes differ from the bundled binary. The
-                    // upstream check compared `--version` strings, which never change between
-                    // local rebuilds of the same version — so every rebuild kept spawning the
-                    // copy from the first install, and once the env-var names moved that stale
-                    // figterm made `should-figterm-launch` start another figterm inside it.
-                    if same_file_contents(&pty_shell_cpy, &pty_path).await {
-                        return;
-                    }
+                // Refresh the copy whenever its bytes differ from the bundled binary. The upstream
+                // check compared `--version` strings, which never change between local rebuilds of
+                // the same version — so every rebuild kept spawning the copy from the first install,
+                // and once the env-var names moved that stale figterm made `should-figterm-launch`
+                // start another figterm inside it.
+                if same_file_contents(&pty_shell_cpy, &pty_path).await {
+                    continue;
+                }
 
-                    // On a first install there is nothing to remove; ENOENT here is the normal
-                    // path, not an error worth two ERROR lines in every fresh log.
-                    if let Err(err) = tokio::fs::remove_file(&pty_shell_cpy).await
-                        && err.kind() != std::io::ErrorKind::NotFound
-                    {
-                        error!(%err, "Failed to remove {PTY_BINARY_NAME} shell {shell:?} copy");
-                    }
-                    if let Err(err) = tokio::fs::copy(&pty_path, &pty_shell_cpy).await {
-                        error!(%err, "Failed to copy {PTY_BINARY_NAME} to {}", pty_shell_cpy.display());
-                    }
-                });
+                if let Err(err) = replace_file(&pty_path, &pty_shell_cpy).await {
+                    error!(%err, "Failed to copy {PTY_BINARY_NAME} to {}", pty_shell_cpy.display());
+                }
             }
         },
         None => error!("Failed to find {PTY_BINARY_NAME} in bundle"),
@@ -206,6 +245,41 @@ mod test {
     }
 
     #[tokio::test]
+    async fn replace_file_swaps_the_inode_and_leaves_no_staging_file() {
+        use std::os::unix::fs::MetadataExt;
+
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let src = tmp_dir.path().join("figterm");
+        let dst = tmp_dir.path().join("zsh (figterm)");
+        let staged = tmp_dir.path().join(".zsh (figterm).new");
+
+        // First install: nothing to replace.
+        std::fs::write(&src, "old").unwrap();
+        replace_file(&src, &dst).await.unwrap();
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "old");
+
+        // A running figterm holds the old file open; a refresh must not write into it.
+        let mut running = std::fs::File::open(&dst).unwrap();
+        let old_ino = std::fs::metadata(&dst).unwrap().ino();
+
+        std::fs::write(&src, "new").unwrap();
+        replace_file(&src, &dst).await.unwrap();
+
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "new");
+        assert_ne!(std::fs::metadata(&dst).unwrap().ino(), old_ino);
+        // Through the handle opened before the refresh, not by path.
+        assert_eq!(std::io::read_to_string(&mut running).unwrap(), "old");
+        assert!(!staged.exists());
+
+        // A leftover from an interrupted refresh does not get in the way.
+        std::fs::write(&staged, "partial").unwrap();
+        std::fs::write(&src, "newer").unwrap();
+        replace_file(&src, &dst).await.unwrap();
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "newer");
+        assert!(!staged.exists());
+    }
+
+    #[tokio::test]
     async fn test_symlink() {
         use tempfile::tempdir;
 
@@ -249,5 +323,12 @@ mod test {
         symlink(&src_file_2, &dst_file).await.unwrap();
         assert!(dst_file.exists());
         assert_eq!(std::fs::read_to_string(&dst_file).unwrap(), "content 2");
+
+        // A regular file in the way is replaced by the link
+        let plain = tmp_dir.join("plain");
+        std::fs::write(&plain, "not a link").unwrap();
+        symlink(&src_file_1, &plain).await.unwrap();
+        assert_eq!(plain.read_link().unwrap(), src_file_1);
+        assert!(!tmp_dir.join(".plain.new").exists());
     }
 }

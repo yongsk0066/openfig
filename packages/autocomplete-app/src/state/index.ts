@@ -243,10 +243,13 @@ const log =
   <T>(config: NamedStateCreator<T>): StateCreator<T, [], []> =>
   (set, get, api) => {
     const namedSet: NamedSetState<T> = (name, partial, replace) => {
-      console.groupCollapsed(`applying update: ${name}`);
+      // Every store write goes through here (several per keystroke), so the console group
+      // exists only when someone raised the log level to look at it.
+      const grouped = logger.getLevel() <= logger.levels.DEBUG;
+      if (grouped) console.groupCollapsed(`applying update: ${name}`);
       logger.info({ name, partial, replace });
       applySet(set, partial, replace);
-      console.groupEnd();
+      if (grouped) console.groupEnd();
     };
     return config(namedSet, get, api);
   };
@@ -275,7 +278,7 @@ export const useAutocompleteStore = create<AutocompleteState>()(
               "completionObj",
             ]);
 
-            console.log(parserResult);
+            logger.debug({ parserResult });
 
             const newGeneratorStates = generatorState.triggerGenerators(parserResult);
             if (

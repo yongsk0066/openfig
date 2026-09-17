@@ -3,7 +3,8 @@ import { SETTINGS, updateSettings } from "@fig/api-bindings/wrappers";
 import { type ArgumentParserResult, TokenType } from "@fig/autocomplete-parser";
 import { SuggestionFlag } from "@fig/shared/utils";
 import { getCommand } from "@fig/shell-parser";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import logger from "loglevel";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAutocompleteStore } from "..";
 import { Visibility } from "../types";
 
@@ -68,5 +69,24 @@ describe("store: settings", () => {
 
     useAutocompleteStore.getState().setSettings({ [SETTINGS.HISTORY_MODE]: "off" });
     expect(names()).toEqual([["build"], ["build"]]);
+  });
+});
+
+describe("store: logging", () => {
+  it("a keystroke writes nothing to the console at the default log level", () => {
+    logger.setLevel("warn");
+    const spies = (["log", "group", "groupCollapsed", "groupEnd", "info", "debug"] as const).map(
+      (method) => vi.spyOn(console, method),
+    );
+    const buffer = "tool b";
+    useAutocompleteStore.getState().setFigState((figState) => ({
+      ...figState,
+      buffer,
+      cursorLocation: buffer.length,
+    }));
+    useAutocompleteStore.getState().setParserResult(parserResultFor("b"), false, false);
+    const calls = spies.map((spy) => [spy.getMockName(), spy.mock.calls.length]);
+    spies.forEach((spy) => spy.mockRestore());
+    expect(calls.filter(([, count]) => count !== 0)).toEqual([]);
   });
 });

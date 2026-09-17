@@ -13,14 +13,10 @@ is kept as required by that license.
 
 Vendored third-party code carries its own license alongside it:
 
-  crates/alacritty_terminal/                    Apache-2.0, The Alacritty Project
   crates/fig_integrations/src/shell/scripts/    MIT, Ryan Caloras and contributors
     bash-preexec.sh                             (LICENSE.bash-preexec)
   crates/macos-utils/accessibility-master/      MIT OR Apache-2.0, as declared
                                                 in its own Cargo.toml
-  crates/shell_color/                           MIT OR Apache-2.0, Chay Nabors
-                                                (derived from the `shell-color`
-                                                crate, v1.0.1)
   packages/fuzzysort/                           MIT, Stephen Kamenar (LICENSE)
   packages/spec-types/                          MIT, Hercules Labs Inc. (Fig).
   packages/spec-generators/                     Vendored from the withfig/

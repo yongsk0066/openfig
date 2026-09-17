@@ -47,20 +47,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alacritty_terminal"
-version = "1.19.7"
-dependencies = [
- "bitflags 2.13.2",
- "serde",
- "serde_json",
- "serde_yaml",
- "shell_color",
- "tracing",
- "unicode-width",
- "vte",
-]
-
-[[package]]
 name = "aligned"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1529,54 +1515,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "figterm"
-version = "1.19.7"
-dependencies = [
- "alacritty_terminal",
- "anyhow",
- "assert_cmd",
- "async-trait",
- "bitflags 2.13.2",
- "bstr",
- "bytes",
- "clap",
- "fig_ipc",
- "fig_log",
- "fig_os_shim",
- "fig_proto",
- "fig_settings",
- "fig_util",
- "filedescriptor",
- "flume",
- "fnv",
- "memmem",
- "mimalloc",
- "nix 0.31.3",
- "num-traits",
- "portable-pty",
- "predicates",
- "serde_json",
- "shell_color",
- "shlex",
- "sysinfo",
- "tokio",
- "tracing",
- "uuid",
- "which",
-]
-
-[[package]]
 name = "figterm2"
 version = "1.19.7"
 dependencies = [
  "anyhow",
  "async-trait",
- "fig_integrations",
- "fig_ipc",
  "fig_proto",
  "fig_remote_ipc",
  "fig_util",
- "libc",
  "portable-pty",
  "serde_json",
  "tempfile",
@@ -2734,12 +2680,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "memmem"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a64a92489e2744ce060c349162be1c5f33c6969234104dbd99ddb5feb08b8c15"
 
 [[package]]
 name = "memoffset"
@@ -4176,12 +4116,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "ryu"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4303,19 +4237,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
-]
-
-[[package]]
 name = "serial2"
 version = "0.2.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4370,10 +4291,6 @@ name = "shell-words"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
-
-[[package]]
-name = "shell_color"
-version = "1.19.7"
 
 [[package]]
 name = "shellexpand"
@@ -5134,12 +5051,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5210,16 +5121,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vte"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5924018406ce0063cd67f8e008104968b74b563ee1b85dde3ed1f7cb87d3dbd"
-dependencies = [
- "arrayvec",
- "memchr",
-]
 
 [[package]]
 name = "wait-timeout"

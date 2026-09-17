@@ -53,9 +53,9 @@ web:
     test -f packages/autocomplete-app/dist/index.html
     test -f packages/dashboard-app/dist/index.html
 
-# Only the three binaries that go into the bundle.
+# Only the binaries that go into the bundle.
 rust:
-    cargo build --locked --release --target {{target}} -p fig_desktop -p fig_cli -p figterm
+    cargo build --locked --release --target {{target}} -p fig_desktop -p fig_cli
 
 # Assemble build/<APP_NAME>.app
 bundle:
@@ -173,30 +173,22 @@ hooks:
         echo "note: this is a linked worktree; re-run 'just hooks' from the main checkout before removing it"; \
     fi
 
-# Keystroke -> edit buffer hook at a stub desktop, release build; prints median/p90 for bash through
-# the pty binary, for zsh through the shell hook on hook.sock and for a bare zsh (docs/16-latency.md).
-# Stage 0 latency, figterm and zsh hook paths
+# Keystroke -> edit buffer hook at a stub desktop, release build; prints median/p90 for zsh through
+# the shell hook on hook.sock and for a bare zsh (docs/16-latency.md).
+# Stage 0 latency, zsh hook path
 latency:
-    cargo build --locked --release -p figterm -p fig_cli
+    cargo build --locked --release -p fig_cli
     cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- latency_
 
-# Re-records crates/figterm/tests/ref/fig_* from a real /bin/zsh and replays them through figterm's
-# edit-buffer code without a pty. The expected edit buffers are zsh's own $PREBUFFER$BUFFER/$CURSOR,
-# not figterm's output, so a diff in edit_buffer.json means zsh changed, not figterm. Pass a
-# comma-separated subset to record only those (`just golden-record fig_plain,fig_ps2`).
+# Re-records tests/figterm2/ref/fig_*/edit_buffer.json from a real /bin/zsh and replays every case
+# into a zsh running the hook. The expected edit buffers are zsh's own $PREBUFFER$BUFFER/$CURSOR,
+# so a diff in edit_buffer.json means zsh changed, not the hook. Pass a comma-separated subset to
+# record only those (`just golden-record fig_plain,fig_ps2`).
 # Edit-buffer goldens (docs/15-architecture-study.md §4 stage 2)
 golden-record cases="":
-    cargo build --locked -p figterm -p fig_cli
+    cargo build --locked -p fig_cli
     FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p figterm2 --run-ignored only --no-capture -- golden_record
-    cargo nextest run --locked -p figterm -- golden::
-
-# Same keys with FIG_LOG_LEVEL=figterm::latency=trace: median/p90 per segment of the pty binary's
-# pass-through (stdin read, input batching, pty write, shell, pty read, parse, echo, edit buffer,
-# hook), joined by wall clock (docs/10-execution-plan.md open item 22).
-# Stage 0 latency, pty binary segments
-latency-segments:
-    cargo build --locked --release -p figterm -p fig_cli
-    FIG_LOG_LEVEL=figterm::latency=trace cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- segments_
+    cargo nextest run --locked -p figterm2 -- hook_golden_
 
 # Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
 # Stage 0 latency, desktop half

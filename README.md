@@ -16,7 +16,6 @@ locally, and is not published anywhere.
 | --- | --- |
 | Desktop app (WebView host, tray, window positioning) | `crates/fig_desktop/` |
 | CLI (`fig`) | `crates/fig_cli/` |
-| PTY shim (`figterm`) that watches the edit buffer | `crates/figterm/` |
 | Shell integration (zsh, bash) | `crates/fig_integrations/src/shell/` |
 | Autocomplete UI (React) | `packages/autocomplete-app/` |
 | Settings dashboard (React) | `packages/dashboard-app/` |

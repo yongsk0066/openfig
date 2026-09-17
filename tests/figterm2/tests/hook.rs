@@ -21,7 +21,8 @@ const QUIET: Duration = Duration::from_millis(150);
 const STEP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// zsh's own edit buffer after every step of a golden case must be the last one the hook reported
-/// for that step — for all eleven, including the three the pty binary reads wrong off the screen.
+/// for that step — for all eleven, including the three a screen reader of the pty got wrong
+/// (`fig_paste`, `fig_ps2`, `fig_line_taller_than_screen`).
 /// The recording's `edit_buffer.json` is the expectation; the steps are replayed as recorded.
 async fn golden_variant(name: &str) {
     let case = golden::case(name).expect("no such golden case");

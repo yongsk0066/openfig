@@ -1,9 +1,8 @@
 //! `RunProcess` for a hook session.
 //!
-//! The pty binary runs generator commands itself, as a child that sees the shell's environment and
-//! working directory. A shell hook has no process to run them in, so the desktop runs them — with
-//! the environment and directory the shell last reported, the way the pty binary would have
-//! (`crates/figterm/src/message.rs`, `create_command` and `working_directory`).
+//! Generator commands have to see the shell's environment and working directory. A shell hook has
+//! no process of its own to run them in, so the desktop runs them — with the environment and
+//! directory the shell last reported.
 
 use std::path::PathBuf;
 use std::time::Duration;

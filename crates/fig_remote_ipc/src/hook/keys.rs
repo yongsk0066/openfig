@@ -1,9 +1,8 @@
 //! Which keys a hook session sends to the desktop instead of zsh.
 //!
-//! The pty binary sees every keystroke and decides per key (`crates/figterm/src/interceptor.rs`).
 //! A hook session only sees the keys `fig.zsh` binds, and it has to know *before* the key is
-//! pressed whether to forward it, so the same decision is made here for each of those keys up front
-//! and pushed to the shell as `INTERCEPT` whenever the answer changes.
+//! pressed whether to forward it, so the decision is made here for each of those keys up front and
+//! pushed to the shell as `INTERCEPT` whenever the answer changes.
 
 use std::collections::{
     BTreeSet,

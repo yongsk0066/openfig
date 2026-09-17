@@ -1,27 +1,19 @@
 //! Edit-buffer golden recordings (docs/15-architecture-study.md §4 stage 2).
 //!
 //! Each [`Case`] drives a real `/bin/zsh -i` in a pty with a throwaway `ZDOTDIR` that loads this
-//! build's shell integration, and records what the pty binary would read from its pty master: the
-//! raw output bytes with their read boundaries, and the input and resizes that produced them. The
-//! recordings live next to the code that derives edit buffers from them, in upstream alacritty's
-//! `tests/ref/<case>/` shape:
+//! build's shell integration, types the case's steps, and records zsh's own edit buffer after every
+//! one of them:
 //!
 //! ```text
-//! crates/figterm/tests/ref/<case>/
-//!   alacritty.recording   raw pty output, every chunk concatenated
-//!   size.json             initial {"columns","screen_lines"}, as upstream
-//!   config.json           {"history_size","session_id"} the pty binary runs its `Term` with
-//!   events.json           chunk lengths, inputs and resizes in the order they happened, with µs
-//!   edit_buffer.json      the expected edit buffer after every input
+//! tests/figterm2/ref/<case>/edit_buffer.json   the expected edit buffer before any input and after
+//!                                              every step
 //! ```
 //!
-//! `edit_buffer.json` is not what the pty binary happened to derive. It is zsh's own view: a
-//! `line-pre-redraw` hook appends `$PREBUFFER$BUFFER` and `$CURSOR` to a side file (never to the
-//! pty, so the recording is unaffected) and the last record before the next input becomes that
-//! step's expectation, with the cursor converted from characters to the UTF-8 byte offset
-//! `EditBufferHook.cursor` carries. `crates/figterm/src/golden.rs` replays the bytes through the
-//! pty binary's own parser and edit-buffer code and compares; a case where the two disagree is a
-//! defect in the pty binary's screen scraping, not in the recording.
+//! The expectation is zsh's view, not any reader's: a `line-pre-redraw` hook appends
+//! `$PREBUFFER$BUFFER` and `$CURSOR` to a side file (never to the pty) and the last record before
+//! the next input becomes that step's expectation, with the cursor converted from characters to the
+//! UTF-8 byte offset `EditBufferHook.cursor` carries. The hook tests (`tests/hook.rs`) replay the
+//! steps into a shell running `fig.zsh` and compare what reached the desktop.
 //!
 //! Regenerate with `just golden-record` (all cases) or `just golden-record fig_plain,fig_ps2`.
 
@@ -61,14 +53,7 @@ pub const ZSH: &str = "/bin/zsh";
 /// `TERM` for every case.
 pub const TERM: &str = "xterm-256color";
 
-/// `FIGTERM_SESSION_ID` of the recorded shell. The integration prints it in `NewCmd`, and `Term`
-/// ignores a `NewCmd` for any other session, so the replay has to construct its `Term` with it.
-pub const SESSION_ID: &str = "golden";
-
-/// `max_scroll_limit` the pty binary passes to `Term::new` (`crates/figterm/src/main.rs`).
-pub const HISTORY_SIZE: usize = 1;
-
-/// Size of one read from the pty master, the pty binary's `BUFFER_SIZE`.
+/// Size of one read from the pty master.
 const READ_SIZE: usize = 16384;
 
 /// No output for this long after an input means zsh is done with it.
@@ -77,8 +62,7 @@ const QUIET: Duration = Duration::from_millis(120);
 /// Upper bound for a single input to settle, and for the first prompt.
 const STEP_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// One thing done to the shell. Every write is its own step in `events.json` and
-/// `edit_buffer.json`.
+/// One thing done to the shell. Every write is its own step in `edit_buffer.json`.
 #[derive(Debug, Clone, Copy)]
 pub enum Step {
     /// One write per character, the way a person types.
@@ -87,7 +71,7 @@ pub enum Step {
     Write(&'static str),
     /// `ESC [200~ … ESC [201~` in a single write, the way a terminal delivers a bracketed paste.
     Paste(&'static str),
-    /// `TIOCSWINSZ` on the pty master, which is what the pty binary does on `SIGWINCH`.
+    /// `TIOCSWINSZ` on the pty master, which is what a terminal does when its window is resized.
     Resize { columns: u16, screen_lines: u16 },
 }
 
@@ -125,8 +109,8 @@ fi
 /// zsh-autosuggestions' display mechanism without the plugin: a `line-pre-redraw` hook puts the
 /// rest of a matching history entry in `POSTDISPLAY` and paints it with
 /// `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE` through `region_highlight`, which is exactly how the plugin
-/// renders its ghost text. The integration reports the style in `ZshAutosuggestionColor`, and the
-/// pty binary is supposed to leave cells in that color out of the buffer.
+/// renders its ghost text. `POSTDISPLAY` is not part of `$BUFFER`, so none of it may reach the edit
+/// buffer.
 const AUTOSUGGEST: &str = r#"ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
 _golden_history=('echo hello world' 'git status --short')
 _golden_suggest() {
@@ -259,8 +243,7 @@ pub const CASES: &[Case] = &[
     },
     // Not one of the ten in docs/15-architecture-study.md §4: a line taller than the screen. zsh
     // then draws only a window of the buffer, marked `>....` at the top and `<....` at the
-    // bottom, and the pty binary (one line of scrollback, anchored on the prompt) has only that
-    // window to read.
+    // bottom; the edit buffer is still the whole line.
     Case {
         name: "fig_line_taller_than_screen",
         columns: 20,
@@ -325,9 +308,9 @@ pub fn case(name: &str) -> Option<&'static Case> {
     CASES.iter().find(|case| case.name == name)
 }
 
-/// `crates/figterm/tests/ref`.
+/// `tests/figterm2/ref`.
 pub fn ref_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/figterm/tests/ref")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("ref")
 }
 
 /// One write to the pty master, as it is split into steps.
@@ -399,7 +382,7 @@ pub fn apply_env(cmd: &mut CommandBuilder, home: &Path, zdotdir: &Path, tmpdir: 
     cmd.env("SHELL", ZSH);
 }
 
-/// A recording read back from `crates/figterm/tests/ref/<case>`.
+/// An edit buffer read back from `ref/<case>/edit_buffer.json`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditBuffer {
     pub text: String,
@@ -428,11 +411,6 @@ pub fn edit_buffers(case: &Case) -> Result<Vec<Option<EditBuffer>>> {
             })
         })
         .collect()
-}
-
-enum Recorded {
-    Output(Vec<u8>),
-    Input(Input),
 }
 
 /// zsh's `$PREBUFFER$BUFFER` and `$CURSOR`, as an edit-buffer hook would carry them.
@@ -473,39 +451,37 @@ pub fn record(case: &Case, cli: &Path, out: &Path) -> Result<()> {
     let mut cmd = CommandBuilder::new(ZSH);
     cmd.arg("-i");
     apply_env(&mut cmd, &home, &zdotdir, tempdir.path());
-    cmd.env("FIGTERM_SESSION_ID", SESSION_ID);
     cmd.env("GOLDEN_ZLE_LOG", &zle_log);
-    // `Term::dir` `chdir`s the replaying process into whatever the prompt reports; `/` exists
-    // everywhere and does not vary between recordings.
+    // The hook tests start their shells in `/` as well.
     cmd.cwd("/");
     let mut child = pair.slave.spawn_command(cmd)?;
     drop(pair.slave);
 
     let mut writer = pair.master.take_writer()?;
     let mut reader = pair.master.try_clone_reader()?;
-    let (tx, rx) = mpsc::channel::<(Instant, Vec<u8>)>();
+    // The output is only drained, so zsh never blocks on a full pty, and timed, to tell when it is
+    // done with an input.
+    let (tx, rx) = mpsc::channel::<()>();
     std::thread::spawn(move || {
         let mut buf = vec![0; READ_SIZE];
         while let Ok(n) = reader.read(&mut buf) {
-            if n == 0 || tx.send((Instant::now(), buf[..n].to_vec())).is_err() {
+            if n == 0 || tx.send(()).is_err() {
                 break;
             }
         }
     });
 
-    let start = Instant::now();
-    let mut timeline: Vec<(Instant, Recorded)> = Vec::new();
     let mut zle_seen = 0;
     // One entry per step, the first being "before any input".
     let mut expected: Vec<Option<EditBuffer>> = Vec::new();
     let mut current: Option<EditBuffer> = None;
 
     // Collects output until zsh has been quiet for `QUIET`, then takes zsh's latest edit buffer.
-    let mut settle = |timeline: &mut Vec<(Instant, Recorded)>, need_zle: bool| -> Result<Option<EditBuffer>> {
+    let mut settle = |need_zle: bool| -> Result<Option<EditBuffer>> {
         let deadline = Instant::now() + STEP_TIMEOUT;
         loop {
             match rx.recv_timeout(QUIET) {
-                Ok((at, bytes)) => timeline.push((at, Recorded::Output(bytes))),
+                Ok(()) => {},
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     let records = parse_zle_log(&std::fs::read(&zle_log).unwrap_or_default())?;
                     if !need_zle || !records.is_empty() {
@@ -524,10 +500,9 @@ pub fn record(case: &Case, cli: &Path, out: &Path) -> Result<()> {
         }
     };
 
-    expected.push(settle(&mut timeline, true)?);
+    expected.push(settle(true)?);
     let inputs = case.inputs();
     for input in &inputs {
-        let at = Instant::now();
         match input {
             Input::Bytes(bytes) => {
                 writer.write_all(bytes.as_bytes())?;
@@ -542,51 +517,13 @@ pub fn record(case: &Case, cli: &Path, out: &Path) -> Result<()> {
                 })?;
             },
         }
-        timeline.push((at, Recorded::Input(input.clone())));
-        expected.push(settle(&mut timeline, false)?);
+        expected.push(settle(false)?);
     }
 
     child.kill().ok();
     child.wait().ok();
 
-    // The reader thread stamps a chunk after `read` returns and the writer before `write`, so
-    // sorting by time puts every input ahead of the output it caused.
-    timeline.sort_by_key(|(at, _)| *at);
-
     std::fs::create_dir_all(out)?;
-    let mut recording = Vec::new();
-    let mut events = Vec::new();
-    for (at, event) in &timeline {
-        let t_us = at.saturating_duration_since(start).as_micros() as u64;
-        events.push(match event {
-            Recorded::Output(bytes) => {
-                recording.extend_from_slice(bytes);
-                json!({ "t_us": t_us, "output": bytes.len() })
-            },
-            Recorded::Input(input) => {
-                let mut value = input.to_json();
-                value["t_us"] = json!(t_us);
-                value
-            },
-        });
-    }
-    std::fs::write(out.join("alacritty.recording"), &recording)?;
-    std::fs::write(
-        out.join("size.json"),
-        format!(
-            "{}\n",
-            json!({ "columns": case.columns, "screen_lines": case.screen_lines })
-        ),
-    )?;
-    std::fs::write(
-        out.join("config.json"),
-        format!(
-            "{}\n",
-            json!({ "history_size": HISTORY_SIZE, "session_id": SESSION_ID })
-        ),
-    )?;
-    std::fs::write(out.join("events.json"), json_lines(&events))?;
-
     let steps: Vec<Value> = std::iter::once(Value::Null)
         .chain(inputs.iter().map(Input::to_json))
         .zip(&expected)

@@ -1,12 +1,17 @@
-//! Stage 0 latency benchmark, zsh hook path (docs/16-latency.md), next to `latency.rs`'s pty binary
-//! path and measured at the same points: `key→hook` from the write to the pty master until the edit
-//! buffer is decoded by the desktop's server (`fig_remote_ipc::hook`, handler entry), `key→echo`
-//! until the first output. No pty binary: the terminal talks to zsh directly, and `fig.zsh` reports
-//! from `zle-line-pre-redraw` over `hook.sock`.
+//! Stage 0 latency benchmark, zsh hook path (docs/16-latency.md): `key→hook` from the write to the
+//! pty master until the edit buffer is decoded by the desktop's server (`fig_remote_ipc::hook`,
+//! handler entry), `key→echo` until the first output. The terminal talks to zsh directly, and
+//! `fig.zsh` reports from `zle-line-pre-redraw` over `hook.sock`. `bare echo` is the same keys into
+//! `zsh -f`, the floor the other two sit on.
 //!
-//! Ignored because it is a measurement: `just latency`, or
+//! Ignored because they are measurements, not checks: they only fail when a keystroke produces no
+//! report or no echo at all. `just latency`, or
 //! `cargo nextest run -p figterm2 --run-ignored only --no-capture -- latency_`.
 
+use std::io::{
+    Read as _,
+    Write as _,
+};
 use std::time::{
     Duration,
     Instant,
@@ -20,15 +25,22 @@ use figterm2::hook::{
     Rc,
 };
 use figterm2::latency::Summary;
+use portable_pty::{
+    CommandBuilder,
+    PtySize,
+    native_pty_system,
+};
 
-/// The same keys, pace and rounds as `latency.rs`.
+/// Typed and then erased key by key, so both inserts and deletes are sampled and the line never
+/// wraps.
 const TEXT: &str = "git status --short";
 const ROUNDS: usize = 2;
+/// Gap between the report for one key and the next write: ~120 wpm, a fast typist.
 const PACE: Duration = Duration::from_millis(50);
 const TIMEOUT: Duration = Duration::from_secs(2);
 const BACKSPACE: &str = "\x7f";
 
-/// `zsh`: a path, or a bare name looked up on the test runner's `PATH` as `latency.rs` does.
+/// `zsh`: a path, or a bare name looked up on the test runner's `PATH`.
 async fn measure(zsh: &str) {
     let path = if zsh.contains('/') {
         zsh.into()
@@ -44,7 +56,8 @@ async fn measure(zsh: &str) {
         .await
         .unwrap();
 
-    // As `latency.rs`: the first report of a line carries the environment; keep it out.
+    // The first report after a prompt follows the environment (`C`). That is a real per-prompt
+    // cost, but it is one key in a line, so it is kept out of the per-keystroke numbers.
     shell.keystroke("x", "x", TIMEOUT).await.unwrap();
     tokio::time::sleep(PACE).await;
     shell.keystroke(BACKSPACE, "", TIMEOUT).await.unwrap();
@@ -89,12 +102,80 @@ async fn latency_zsh_hook() {
     measure("/bin/zsh").await;
 }
 
-/// The zsh on `PATH`, the one `latency.rs` measures the pty binary with, so the two paths compare
-/// on the same shell.
+/// The zsh on `PATH` (Homebrew's on this machine).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "benchmark: `just latency`"]
 async fn latency_zsh_hook_path_zsh() {
     measure("zsh").await;
+}
+
+/// The same keys into `zsh -f` on `PATH` with nothing loaded: what the terminal echo costs on its
+/// own, so `key→echo` above reads as "the hook adds X".
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: `just latency`"]
+async fn latency_zsh_bare() {
+    let tempdir = tempfile::TempDir::new().unwrap();
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            cols: 80,
+            rows: 24,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .unwrap();
+    let mut cmd = CommandBuilder::new("zsh");
+    cmd.args(["-f", "-i"]);
+    cmd.env("HOME", tempdir.path());
+    let mut child = pair.slave.spawn_command(cmd).unwrap();
+    drop(pair.slave);
+
+    let mut writer = pair.master.take_writer().unwrap();
+    let mut reader = pair.master.try_clone_reader().unwrap();
+    let (tx, mut output_at) = tokio::sync::mpsc::unbounded_channel();
+    std::thread::spawn(move || {
+        let mut buf = [0; 1024];
+        while let Ok(n) = reader.read(&mut buf) {
+            let at = Instant::now();
+            if n == 0 || tx.send(at).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Wait out the first prompt: output has been quiet for 300 ms.
+    while let Ok(Some(_)) = tokio::time::timeout(Duration::from_millis(300), output_at.recv()).await {}
+
+    let mut press = async |key: &str| -> Duration {
+        while output_at.try_recv().is_ok() {}
+        let start = Instant::now();
+        writer.write_all(key.as_bytes()).unwrap();
+        writer.flush().unwrap();
+        let at = tokio::time::timeout(TIMEOUT, output_at.recv())
+            .await
+            .unwrap_or_else(|_| panic!("no echo for {key:?}"))
+            .expect("pty closed");
+        tokio::time::sleep(PACE).await;
+        at.saturating_duration_since(start)
+    };
+
+    let mut echoes = Vec::new();
+    for _ in 0..ROUNDS {
+        for c in TEXT.chars() {
+            echoes.push(press(&c.to_string()).await);
+        }
+        for _ in 0..TEXT.len() {
+            echoes.push(press(BACKSPACE).await);
+        }
+    }
+    println!(
+        "latency zsh {:<9} {:<6} {}",
+        "bare echo",
+        "all",
+        Summary::of(&echoes).expect("no samples")
+    );
+
+    child.kill().ok();
+    child.wait().ok();
 }
 
 /// How long after Tab an insertion reaches zsh when the app answers at once: Tab → the intercepted

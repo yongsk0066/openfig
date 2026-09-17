@@ -9,7 +9,7 @@ yanked = "deny"
 
 ignore = [
   # paste 1.0.15 is unmaintained but has no replacement and no known defect;
-  # fig_desktop, fig_util and alacritty_terminal all use it directly.
+  # fig_desktop and fig_util use it directly.
   "RUSTSEC-2024-0436",
 ]
 

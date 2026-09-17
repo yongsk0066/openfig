@@ -5,7 +5,6 @@
 # to edit, so keep them out of the analysis:
 #
 #   cargo +1.98.1 hawk check --manifest-path Cargo.toml \
-#       --exclude-crate alacritty_terminal \
 #       --exclude-crate accessibility \
 #       --exclude-crate accessibility_sys
 #
@@ -16,7 +15,7 @@
 # hawk is experimental and stays out of the CI gate; run it by hand now and
 # then.
 
-# Only these three binaries ship. Without a hawk.toml hawk would treat every
+# Only these two binaries ship. Without a hawk.toml hawk would treat every
 # workspace binary as production, which would include the `fig-api-mock` test
 # server and make everything it touches look reachable.
 
@@ -29,11 +28,6 @@ reason = "shipped desktop app binary"
 package = "fig_cli"
 bin = "fig_cli"
 reason = "shipped CLI binary"
-
-[[production]]
-package = "figterm"
-bin = "figterm"
-reason = "shipped shell integration binary"
 
 # `fig_proto::proto` is `include!`d from prost's build-script output in OUT_DIR.
 # The files hawk points at live in the target directory and are regenerated on

@@ -2,7 +2,7 @@
 //!
 //! [`HookShell`] runs `/bin/zsh -i` with a throwaway `HOME` and `ZDOTDIR` whose `.zshrc` loads this
 //! build's integration through `init zsh pre` / `init zsh post`, so the shell sources `fig.zsh`
-//! exactly as a user's would and no pty binary is involved. On the other end of
+//! exactly as a user's would. On the other end of
 //! `<TMPDIR>/figrun/hook.sock` is a [`Daemon`]: the desktop's own server code with a handler that
 //! records what reached it, or a bare stub for the failure cases.
 
@@ -95,7 +95,7 @@ struct Recorder(UnboundedSender<(Instant, HookEvent)>);
 
 impl Recorder {
     fn record(&self, event: HookEvent) {
-        // Stamped on arrival, the same point `Shell::keystroke` measures the pty binary's hook at.
+        // Stamped on arrival: the desktop's handler entry, where `keystroke` stops the clock.
         let _ = self.0.send((Instant::now(), event));
     }
 }
@@ -426,7 +426,7 @@ impl HookShell {
 
     /// Writes `key` and waits for the edit buffer `text` to arrive at the daemon: how long that
     /// took, and how long until the first output came back (the echo the user sees). Both from
-    /// the write to the pty master, as `Shell::keystroke` measures the pty binary.
+    /// the write to the pty master.
     pub async fn keystroke(
         &mut self,
         key: &str,

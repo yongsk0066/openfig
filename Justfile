@@ -173,6 +173,13 @@ hooks:
         echo "note: this is a linked worktree; re-run 'just hooks' from the main checkout before removing it"; \
     fi
 
+# Keystroke -> edit buffer hook at a stub desktop, bash and zsh, release build; prints
+# median/p90 per shell (docs/16-latency.md).
+# Stage 0 latency, figterm half
+latency:
+    cargo build --locked --release -p figterm -p fig_cli
+    cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- latency_
+
 # Run only to refresh them.
 # ~/oss/fig/themes -> resources/themes (committed)
 vendor-themes:

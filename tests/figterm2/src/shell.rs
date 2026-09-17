@@ -4,7 +4,10 @@ use std::io::{
 };
 use std::os::unix::fs::PermissionsExt as _;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use anyhow::{
     Context,
@@ -31,6 +34,11 @@ use portable_pty::{
 use tempfile::TempDir;
 use tokio::net::UnixListener;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{
+    UnboundedReceiver,
+    UnboundedSender,
+    unbounded_channel,
+};
 use uuid::Uuid;
 
 /// Session id handed to the pty binary; it names the socket under `<runtime dir>/t/`.
@@ -62,10 +70,21 @@ const LAUNCH_BLOCKING_ENV: &[&str] = &[
     "SHOULD_FIGTERM_LAUNCH",
 ];
 
+/// One `EditBufferHook` as the stub desktop saw it.
+#[derive(Debug, Clone)]
+pub struct EditBufferEvent {
+    /// Taken on arrival, after the hook has been read off the socket and decoded, before anything
+    /// else is done with it — the same point where the desktop's handler starts.
+    pub at: Instant,
+    pub text: String,
+    pub cursor: i64,
+}
+
 #[derive(Debug, Clone)]
 struct RemoteHook {
     buffer: Arc<Mutex<Option<String>>>,
     shell_context: Arc<Mutex<Option<ShellContext>>>,
+    events: UnboundedSender<EditBufferEvent>,
 }
 
 #[async_trait::async_trait]
@@ -78,6 +97,13 @@ impl RemoteHookHandler for RemoteHook {
         _session_id: Uuid,
         _figterm_state: &Arc<FigtermState>,
     ) -> Result<(), Self::Error> {
+        let at = Instant::now();
+        // The receiver lives as long as the `Shell`; after that nobody is listening.
+        let _ = self.events.send(EditBufferEvent {
+            at,
+            text: edit_buffer_hook.text.clone(),
+            cursor: edit_buffer_hook.cursor,
+        });
         *self.buffer.lock().await = Some(edit_buffer_hook.text.clone());
         Ok(())
     }
@@ -167,7 +193,10 @@ pub fn cli_binary() -> Result<std::path::PathBuf> {
 
 pub struct Shell {
     // pub remote_socket: UnixListener,
-    pub desktop_socket: UnixListener,
+    /// Bound for [`Desktop::Stub`] only.
+    pub desktop_socket: Option<UnixListener>,
+    /// `<TMPDIR>/<RUNTIME_DIR_NAME>` as the pty binary sees it.
+    runtime_dir: std::path::PathBuf,
 
     pty_pair: PtyPair,
     writer: Box<dyn std::io::Write + Send>,
@@ -176,39 +205,97 @@ pub struct Shell {
 
     buffer: Arc<Mutex<Option<String>>>,
     pub shell_context: Arc<Mutex<Option<ShellContext>>>,
+    events: UnboundedReceiver<EditBufferEvent>,
+    /// Arrival time of every chunk of terminal output, as the terminal emulator would see it.
+    output_at: UnboundedReceiver<Instant>,
+}
+
+/// What one keystroke cost, both measured from the `write` to the pty master.
+#[derive(Debug, Clone, Copy)]
+pub struct KeystrokeTiming {
+    /// Until the first byte of output came back through the pty binary: what the user sees.
+    pub echo: Option<Duration>,
+    /// Until the edit buffer hook for the new text was decoded by the stub desktop.
+    pub hook: Duration,
+}
+
+/// Who is on the other end of `remote.sock`.
+#[derive(Debug, Clone)]
+pub enum Desktop {
+    /// An in-process stub (`fig_remote_ipc::remote::start_remote_ipc`, the desktop's own server
+    /// code) in the test's private runtime dir. Hooks show up in [`Shell::buffer`] and
+    /// [`Shell::keystroke`].
+    Stub,
+    /// A desktop that is already running with `TMPDIR` set to this directory — an isolated
+    /// `fig_desktop --allow-multiple`, never the installed app. The pty binary connects to it
+    /// instead; nothing is observed on this side, so only [`Shell::press`] is useful.
+    External(std::path::PathBuf),
+}
+
+/// Where the shell's terminal output goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Echo {
+    /// Copied to the test's stdout, which nextest captures and shows on failure.
+    Stdout,
+    /// Read and dropped. The pty still has to be drained or the pty binary blocks on write.
+    Discard,
 }
 
 impl Shell {
     pub async fn init(shell: &str) -> Result<Shell> {
+        Self::spawn(shell, Echo::Stdout).await
+    }
+
+    pub async fn spawn(shell: &str, echo: Echo) -> Result<Shell> {
+        Self::spawn_with(shell, echo, Desktop::Stub).await
+    }
+
+    pub async fn spawn_with(shell: &str, echo: Echo, desktop: Desktop) -> Result<Shell> {
         let tempdir = TempDir::new()?;
         println!("{tempdir:?}");
 
-        let figterm_state = Arc::new(FigtermState::new());
-
-        let runtime_dir = tempdir.path().join(RUNTIME_DIR_NAME);
-        tokio::fs::create_dir_all(&runtime_dir).await?;
-        tokio::fs::set_permissions(&runtime_dir, std::fs::Permissions::from_mode(0o700)).await?;
-
+        // `TMPDIR` of the pty binary, which puts its runtime dir (and so `remote.sock`) under it.
+        let runtime_parent = match &desktop {
+            Desktop::Stub => tempdir.path().to_path_buf(),
+            Desktop::External(tmpdir) => tmpdir.clone(),
+        };
+        let runtime_dir = runtime_parent.join(RUNTIME_DIR_NAME);
         println!("{runtime_dir:?} {}", runtime_dir.to_str().unwrap().len());
 
-        let path = runtime_dir.join("remote.sock");
         let buffer = Arc::new(Mutex::new(None));
         let shell_context = Arc::new(Mutex::new(None));
-        tokio::spawn({
-            let buffer = buffer.clone();
-            let shell_context = shell_context.clone();
-            async move {
-                fig_remote_ipc::remote::start_remote_ipc(path, figterm_state.clone(), RemoteHook {
-                    buffer,
-                    shell_context,
-                })
-                .await
-                .unwrap();
-            }
-        });
+        let (events_tx, events) = unbounded_channel();
 
-        let desktop_socket =
-            UnixListener::bind(runtime_dir.join("desktop.sock")).context("Failed to make desktop.socket")?;
+        let desktop_socket = match &desktop {
+            Desktop::Stub => {
+                let figterm_state = Arc::new(FigtermState::new());
+                tokio::fs::create_dir_all(&runtime_dir).await?;
+                tokio::fs::set_permissions(&runtime_dir, std::fs::Permissions::from_mode(0o700)).await?;
+
+                let path = runtime_dir.join("remote.sock");
+                tokio::spawn({
+                    let buffer = buffer.clone();
+                    let shell_context = shell_context.clone();
+                    async move {
+                        fig_remote_ipc::remote::start_remote_ipc(path, figterm_state.clone(), RemoteHook {
+                            buffer,
+                            shell_context,
+                            events: events_tx,
+                        })
+                        .await
+                        .unwrap();
+                    }
+                });
+
+                Some(UnixListener::bind(runtime_dir.join("desktop.sock")).context("Failed to make desktop.socket")?)
+            },
+            Desktop::External(_) => {
+                if !runtime_dir.join("remote.sock").exists() {
+                    anyhow::bail!("no desktop listening at {}", runtime_dir.join("remote.sock").display());
+                }
+                None
+            },
+        };
 
         let pty_system = native_pty_system();
 
@@ -272,21 +359,26 @@ impl Shell {
         cmd.env("FIG_TERM_PATH", pty_binary()?);
         cmd.env("FIG_NEW_SESSION", "1");
         cmd.env("MOCK_FIGTERM_SESSION_ID", SESSION_ID);
-        cmd.env("TMPDIR", tempdir.path());
-        cmd.env("XDG_RUNTIME_DIR", tempdir.path());
+        cmd.env("TMPDIR", &runtime_parent);
+        cmd.env("XDG_RUNTIME_DIR", &runtime_parent);
 
         let child = pty_pair.slave.spawn_command(cmd)?;
         let writer = pty_pair.master.take_writer()?;
 
         let mut res = pty_pair.master.try_clone_reader().unwrap();
+        let (output_at_tx, output_at) = unbounded_channel();
         std::thread::spawn(move || {
             let mut buf = [0; 1024];
             while let Ok(a) = res.read(&mut buf) {
+                let at = Instant::now();
                 if a == 0 {
                     break;
                 }
-                stdout().write_all(&buf[..a]).unwrap();
-                stdout().flush().unwrap();
+                let _ = output_at_tx.send(at);
+                if echo == Echo::Stdout {
+                    stdout().write_all(&buf[..a]).unwrap();
+                    stdout().flush().unwrap();
+                }
             }
         });
 
@@ -294,15 +386,35 @@ impl Shell {
         // a fixed delay: the tests run right after a build, when the machine is still busy, and a
         // 500 ms guess made them flaky.
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
-        while shell_context.lock().await.is_none() {
-            if std::time::Instant::now() > deadline {
-                anyhow::bail!("{} never connected within 15 s", fig_util::consts::PTY_BINARY_NAME);
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+        match desktop {
+            Desktop::Stub => {
+                while shell_context.lock().await.is_none() {
+                    if std::time::Instant::now() > deadline {
+                        anyhow::bail!("{} never connected within 15 s", fig_util::consts::PTY_BINARY_NAME);
+                    }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            },
+            // Nothing to observe the handshake with; the session socket is bound right after it.
+            Desktop::External(_) => {
+                let session_socket = runtime_dir.join("t").join(format!("{SESSION_ID}.sock"));
+                while !session_socket.exists() {
+                    if std::time::Instant::now() > deadline {
+                        anyhow::bail!(
+                            "{} never bound {}",
+                            fig_util::consts::PTY_BINARY_NAME,
+                            session_socket.display()
+                        );
+                    }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            },
         }
 
         Ok(Shell {
             desktop_socket,
+            runtime_dir,
 
             pty_pair,
             writer,
@@ -311,7 +423,16 @@ impl Shell {
 
             buffer,
             shell_context,
+            events,
+            output_at,
         })
+    }
+
+    /// Writes `key` to the pty and returns without waiting for anything.
+    pub fn press(&mut self, key: &str) -> Result<()> {
+        self.writer.write_all(key.as_bytes())?;
+        self.writer.flush()?;
+        Ok(())
     }
 
     pub async fn typed(&mut self, text: &str) -> Result<()> {
@@ -337,6 +458,43 @@ impl Shell {
         self.writer.flush()?;
         tokio::time::sleep(Duration::from_millis(2000)).await;
         Ok(())
+    }
+
+    /// Writes `key` to the pty and measures how long it took until an edit buffer hook with `text`
+    /// reached the stub desktop, and until the first output came back.
+    ///
+    /// The clock starts right before the `write` to the pty master — the moment a terminal
+    /// emulator hands the keystroke over — and the hook clock stops when the hook is decoded on
+    /// the desktop side of `remote.sock`. In between: the pty binary reads the key and forwards it
+    /// to the shell, the line editor echoes and redraws, the pty binary parses that output back
+    /// into an edit buffer and sends the hook. Anything that arrived before the write (a late
+    /// redraw of the previous key) is discarded first so it cannot be taken for the answer.
+    pub async fn keystroke(&mut self, key: &str, text: &str, timeout: Duration) -> Result<KeystrokeTiming> {
+        while self.events.try_recv().is_ok() {}
+        while self.output_at.try_recv().is_ok() {}
+
+        let start = Instant::now();
+        self.writer.write_all(key.as_bytes())?;
+        self.writer.flush()?;
+
+        let deadline = start + timeout;
+        let hook = loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match tokio::time::timeout(remaining, self.events.recv()).await {
+                Ok(Some(event)) if event.text == text => break event.at.saturating_duration_since(start),
+                Ok(Some(_)) => continue,
+                Ok(None) => anyhow::bail!("the stub desktop stopped"),
+                Err(_) => anyhow::bail!("no edit buffer {text:?} within {timeout:?} after writing {key:?}"),
+            }
+        };
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let echo = match tokio::time::timeout(remaining, self.output_at.recv()).await {
+            Ok(Some(at)) => Some(at.saturating_duration_since(start)),
+            _ => None,
+        };
+
+        Ok(KeystrokeTiming { echo, hook })
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
@@ -371,11 +529,7 @@ impl Shell {
 
     /// Path of the session socket the pty binary binds inside this test's runtime dir.
     pub fn session_socket(&self) -> std::path::PathBuf {
-        self.tempdir
-            .path()
-            .join(RUNTIME_DIR_NAME)
-            .join("t")
-            .join(format!("{SESSION_ID}.sock"))
+        self.runtime_dir.join("t").join(format!("{SESSION_ID}.sock"))
     }
 
     pub async fn buffer(&mut self) -> Option<String> {

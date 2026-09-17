@@ -91,9 +91,7 @@ export const figStateTransition = (
     typeof newFigState === "function" ? newFigState(state.figState) : newFigState;
   const figState = { ...nextFigState };
 
-  // `aliases` is read before this update applies `shellContext.alias`, so a changed alias
-  // list takes effect from the next buffer update (as it always has).
-  const { sshContextString, cwd, buffer, cursorLocation, aliases, shellContext } = figState;
+  const { sshContextString, cwd, buffer, cursorLocation, shellContext } = figState;
   const globals: ShellGlobals = {};
 
   // Set globalCWD and SSH string for completion specs that use executeShellCommand
@@ -143,7 +141,9 @@ export const figStateTransition = (
   const bufferSliced = buffer.slice(0, cursorLocation);
 
   try {
-    const command = getCommandMemoized(bufferSliced, aliases, cursorLocation);
+    // Read after `shellContext.alias` is applied above: figterm sends the alias list only
+    // when it changed, so the update that carries it must also expand its own buffer.
+    const command = getCommandMemoized(bufferSliced, figState.aliases, cursorLocation);
     return { state: { figState, command }, effects };
   } catch (err) {
     return error(`Failed to get token array: ${err}`);

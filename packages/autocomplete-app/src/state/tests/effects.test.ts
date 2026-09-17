@@ -69,6 +69,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const commandTokens = () => useAutocompleteStore.getState().command?.tokens.map((t) => t.text);
+const withAlias = (alias: string) => ({ sessionId: "session-1", alias }) as never;
+
 describe("transitions return effects instead of performing them", () => {
   it("a new argument plans its generator run without starting it", () => {
     const state = typed("tool switch ");
@@ -131,6 +134,25 @@ describe("transitions return effects instead of performing them", () => {
     expect(next.state.figState).not.toBe(figState);
     expect(next.state.figState?.aliases).toEqual({ t: "tool" });
     expect(next.state.command?.tokens.map((t) => t.text)).toEqual(["tool", ""]);
+  });
+
+  it("an alias list expands the buffer of the update that carries it", () => {
+    // figterm sends the alias list only when it changed, together with a buffer.
+    useAutocompleteStore.getState().setFigState((figState) => ({
+      ...figState,
+      buffer: "t ",
+      cursorLocation: 2,
+      shellContext: withAlias("t='tool'"),
+    }));
+    expect(useAutocompleteStore.getState().figState.aliases).toEqual({ t: "tool" });
+    expect(commandTokens()).toEqual(["tool", ""]);
+
+    // A new definition applies at once too, even if the buffer did not change.
+    useAutocompleteStore.getState().setFigState((figState) => ({
+      ...figState,
+      shellContext: withAlias("t='tree'"),
+    }));
+    expect(commandTokens()).toEqual(["tree", ""]);
   });
 });
 

@@ -1551,11 +1551,84 @@ impl InputParser {
         self.parse(bytes, |_, event| result.push(event), false);
         result
     }
+
+    /// True when a `parse(.., maybe_more = true)` left bytes it could not yet decide on — a lone
+    /// ESC that may start an Alt chord or an escape sequence, a partial sequence, half a UTF-8
+    /// character — which a later `parse(&[], .., false)` resolves. An unfinished bracketed paste
+    /// does not count: it waits for its end marker whatever `maybe_more` says.
+    pub fn needs_flush(&self) -> bool {
+        !self.buf.is_empty() && !matches!(self.state, InputState::Pasting(_))
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn parse_maybe_more(p: &mut InputParser, bytes: &[u8]) -> Vec<InputEvent> {
+        let mut result = Vec::new();
+        p.parse(bytes, |_, event| result.push(event), true);
+        result
+    }
+
+    fn key(key: KeyCode, modifiers: Modifiers) -> InputEvent {
+        InputEvent::Key(KeyEvent { key, modifiers })
+    }
+
+    /// `maybe_more` decodes every complete key at once and holds only what could still grow.
+    #[test]
+    fn maybe_more_holds_only_undecidable_input() {
+        let mut p = InputParser::new();
+
+        assert_eq!(parse_maybe_more(&mut p, b"ab"), vec![
+            key(KeyCode::Char('a'), Modifiers::NONE),
+            key(KeyCode::Char('b'), Modifiers::NONE),
+        ]);
+        assert!(!p.needs_flush());
+
+        assert_eq!(parse_maybe_more(&mut p, b"\x7f"), vec![key(
+            KeyCode::Backspace,
+            Modifiers::NONE
+        )]);
+        assert!(!p.needs_flush());
+
+        // A lone ESC could be Escape, Alt+<next key> or the start of a sequence.
+        assert_eq!(parse_maybe_more(&mut p, b"\x1b"), vec![]);
+        assert!(p.needs_flush());
+        assert_eq!(p.parse_as_vec(b""), vec![key(KeyCode::Escape, Modifiers::NONE)]);
+        assert!(!p.needs_flush());
+
+        // A complete escape sequence is a key of its own.
+        assert_eq!(parse_maybe_more(&mut p, b"\x1b[A"), vec![key(
+            KeyCode::UpArrow,
+            Modifiers::NONE
+        )]);
+        assert!(!p.needs_flush());
+
+        // Split across two reads, it is still one key.
+        assert_eq!(parse_maybe_more(&mut p, b"\x1b"), vec![]);
+        assert_eq!(parse_maybe_more(&mut p, b"b"), vec![key(
+            KeyCode::Char('b'),
+            Modifiers::ALT
+        )]);
+        assert!(!p.needs_flush());
+
+        // Half of a two-byte character.
+        assert_eq!(parse_maybe_more(&mut p, &[0xc3]), vec![]);
+        assert!(p.needs_flush());
+        assert_eq!(parse_maybe_more(&mut p, &[0xa9]), vec![key(
+            KeyCode::Char('\u{e9}'),
+            Modifiers::NONE
+        )]);
+        assert!(!p.needs_flush());
+
+        // A paste waits for its end marker; there is nothing a flush could decide.
+        assert_eq!(parse_maybe_more(&mut p, b"\x1b[200~echo"), vec![]);
+        assert!(!p.needs_flush());
+        assert_eq!(parse_maybe_more(&mut p, b" hi\x1b[201~"), vec![InputEvent::Paste(
+            "echo hi".into()
+        )]);
+    }
 
     #[test]
     fn simple() {

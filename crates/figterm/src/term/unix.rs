@@ -329,17 +329,20 @@ impl Terminal for UnixTerminal {
             let mut stdin = io::stdin();
             let mut parser = InputParser::new();
             let mut buf = BytesMut::with_capacity(crate::BUFFER_SIZE);
+            // Only armed while the parser holds input it cannot decide on yet; see below.
             let mut read_timeout = tokio::time::interval(Duration::from_millis(1));
             read_timeout.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
             macro_rules! parse_buf {
-                () => {
+                ($maybe_more:expr) => {
                     async {
                         let mut events = vec![];
-                        parser.parse(&buf, |raw, evt| events.push(Ok((raw, evt))), false);
+                        parser.parse(&buf, |raw, evt| events.push(Ok((raw, evt))), $maybe_more);
                         buf.clear();
                         trace!(target: crate::latency::TARGET, t_us = crate::latency::now_us(), "input_parsed");
-                        if let Err(err) = input_tx.send_async(events).await {
+                        if !events.is_empty()
+                            && let Err(err) = input_tx.send_async(events).await
+                        {
                             error!(%err, "Error sending event");
                         }
                     }
@@ -358,9 +361,18 @@ impl Terminal for UnixTerminal {
                                 if full {
                                     buf.reserve(buf.len());
                                 }
-                                if IMMEDIATE_MODE.load(Ordering::SeqCst) {
-                                    parse_buf!().await;
-                                }
+                                // Every key that is complete goes to the main loop now. At the
+                                // prompt (not immediate mode) a terminal may split one keypress
+                                // over several writes, so what could still grow — a lone ESC, a
+                                // partial escape sequence, half a UTF-8 character — stays in the
+                                // parser (`maybe_more`) until the next read or `read_timeout`.
+                                //
+                                // This used to hold *every* read until `read_timeout` ticked. The
+                                // interval is 1 ms, but tokio rounds a deadline up to the end of
+                                // the next millisecond, so each keystroke at the prompt waited
+                                // 2.3 ms (median over 216 keys) before reaching the shell: 2.3 of
+                                // the 2.55 ms a key took to echo through figterm.
+                                parse_buf!(!IMMEDIATE_MODE.load(Ordering::SeqCst)).await;
                                 read_timeout.reset();
                             }
                             Err(err) => {
@@ -370,9 +382,9 @@ impl Terminal for UnixTerminal {
                             }
                         }
                     }
-                    _ = read_timeout.tick(), if !buf.is_empty() && !IMMEDIATE_MODE.load(Ordering::SeqCst) => {
-                        tracing::debug!(?buf, "Parsing input");
-                        parse_buf!().await;
+                    _ = read_timeout.tick(), if parser.needs_flush() && !IMMEDIATE_MODE.load(Ordering::SeqCst) => {
+                        tracing::debug!("Flushing held input");
+                        parse_buf!(false).await;
                     }
                     _ = window_change_signal.recv() => {
                         let event = InputEvent::Resized;

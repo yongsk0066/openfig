@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { LruCache } from "@fig/shared/lru";
+import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
+import { getCommand } from "@fig/shell-parser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCache, generateSpecCache, resetCaches, specCache } from "../src/caches";
+import { loadSubcommandCached } from "../src/loadSpec";
+import { clearFigCaches, parseArguments } from "../src/parseArguments";
+
+vi.mock("../src/loadSpec", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/loadSpec")>()),
+  loadSubcommandCached: vi.fn(),
+}));
 
 describe("parser caches", () => {
   it("createCache defaults to 1,000 entries (the parseArguments caches)", () => {
@@ -31,5 +41,68 @@ describe("parser caches", () => {
     resetCaches();
     expect(cache.size).toBe(0);
     expect(specCache.size).toBe(0);
+  });
+});
+
+const generateSpec = vi.fn(async () => ({ name: "fig", subcommands: [{ name: "doctor" }] }));
+const fig = convertSubcommand({ name: "fig", generateSpec }, initializeDefault);
+
+/** `fig ` typed in `cwd`: a generated-spec parse, cached under a key per directory. */
+const parseFigIn = (cwd: string) =>
+  parseArguments(getCommand("fig ", {}), {
+    currentWorkingDirectory: cwd,
+    currentProcess: "zsh",
+    sshPrefix: "",
+    environmentVariables: {},
+  });
+
+/** How many parse-cache entries `clearFigCaches` still thinks it has to drop. */
+const indexedKeys = () => {
+  const deletes = vi.spyOn(LruCache.prototype, "delete");
+  clearFigCaches();
+  const count = deletes.mock.calls.length;
+  deletes.mockRestore();
+  return count;
+};
+
+describe("fig command parse cache index (figCaches)", () => {
+  beforeEach(() => {
+    globalThis.fig = { ...globalThis.fig, settings: {} };
+    vi.mocked(loadSubcommandCached).mockResolvedValue(fig);
+    resetCaches();
+    clearFigCaches();
+    generateSpec.mockClear();
+  });
+
+  afterEach(() => {
+    vi.mocked(loadSubcommandCached).mockReset();
+  });
+
+  it("clearFigCaches drops the cached `fig` parses, once", async () => {
+    await parseFigIn("/repo");
+    await parseFigIn("/repo");
+    expect(generateSpec).toHaveBeenCalledTimes(1);
+
+    expect(indexedKeys()).toBe(1);
+    await parseFigIn("/repo");
+    expect(generateSpec).toHaveBeenCalledTimes(2);
+
+    // The index was emptied along with the entries it pointed at.
+    clearFigCaches();
+    expect(indexedKeys()).toBe(0);
+  });
+
+  it("indexes no more parses than the cache it points into holds", async () => {
+    for (let i = 0; i < 1_200; i += 1) {
+      await parseFigIn(`/repo-${i}`);
+    }
+    expect(indexedKeys()).toBeLessThanOrEqual(1_000);
+  });
+
+  it("resetCaches forgets the index with the parse caches", async () => {
+    await parseFigIn("/a");
+    await parseFigIn("/b");
+    resetCaches();
+    expect(indexedKeys()).toBe(0);
   });
 });

@@ -696,11 +696,14 @@ export const initialParserState = getResultFromState(
 // prefix per directory, which never stops growing over a long session without a bound.
 const parseArgumentsCache = createCache<ArgumentParserState>(1000);
 const parseArgumentsGenerateSpecCache = createCache<ArgumentParserState>(1000);
-const figCaches = new Set<string>();
+// Keys of the `fig …` entries in `parseArgumentsGenerateSpecCache`, so `clearFigCaches` can
+// drop just those. As bounded as the cache it indexes, and emptied by `resetCaches` with it.
+const figCaches = createCache<true>(1000);
 export const clearFigCaches = () => {
-  for (const cache of figCaches) {
-    parseArgumentsGenerateSpecCache.delete(cache);
+  for (const cacheKey of figCaches.keys()) {
+    parseArgumentsGenerateSpecCache.delete(cacheKey);
   }
+  figCaches.clear();
   return { unsubscribe: false };
 };
 
@@ -930,7 +933,7 @@ const parseArgumentsCached = async (
   }
 
   if (generatedSpec) {
-    if (tokenText[0] === "fig") figCaches.add(cacheKey);
+    if (tokenText[0] === "fig") figCaches.set(cacheKey, true);
     parseArgumentsGenerateSpecCache.set(cacheKey, state);
   } else {
     parseArgumentsCache.set(cacheKey, state);

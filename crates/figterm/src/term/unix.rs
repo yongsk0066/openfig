@@ -293,12 +293,23 @@ impl Terminal for UnixTerminal {
 
     fn get_screen_size(&mut self) -> Result<ScreenSize> {
         let size = self.write.get_size()?;
-        Ok(ScreenSize {
+        let reported = ScreenSize {
             rows: cast(size.ws_row)?,
             cols: cast(size.ws_col)?,
             xpixel: cast(size.ws_xpixel)?,
             ypixel: cast(size.ws_ypixel)?,
-        })
+        };
+        // Both the initial size and every resize come through here, so this is the one place a
+        // zero dimension has to be stopped before it reaches the pty and alacritty's grid.
+        let size = reported.or_vt100_default();
+        if size != reported {
+            warn!(
+                ?reported,
+                ?size,
+                "The terminal reports a zero dimension; using the VT100 default"
+            );
+        }
+        Ok(size)
     }
 
     fn set_screen_size(&mut self, size: ScreenSize) -> Result<()> {
@@ -413,5 +424,34 @@ impl Drop for UnixTerminal {
         if let Err(err) = self.write.flush() {
             warn!(%err, "Failed to flush the terminal on shutdown");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alacritty_terminal::Term;
+    use alacritty_terminal::ansi::Processor;
+    use alacritty_terminal::event::VoidListener;
+    use alacritty_terminal::term::SizeInfo;
+
+    use super::*;
+
+    /// A pty nobody sized reports 0×0 through `TIOCGWINSZ`. Built from that, alacritty's grid
+    /// fails a `debug_assert` in debug builds and SIGSEGVs in release.
+    #[test]
+    fn unsized_tty_gets_a_usable_screen_size() {
+        let pty = nix::pty::openpty(None, None).unwrap();
+        let mut terminal = UnixTerminal::new_with(&pty.slave, &pty.slave).unwrap();
+
+        let raw = terminal.write.get_size().unwrap();
+        assert_eq!((raw.ws_row, raw.ws_col), (0, 0), "precondition: a fresh pty is 0x0");
+
+        let size = terminal.get_screen_size().unwrap();
+        assert_eq!((size.rows, size.cols), (24, 80));
+
+        let mut term = Term::new(SizeInfo::new(size.rows, size.cols), VoidListener, 1, "0x0".into());
+        let mut processor = Processor::new();
+        processor.advance(&mut term, b"hello\r\nworld\r\n\x1b[2J\x1b[H$ ");
+        assert!(term.get_current_buffer().is_none());
     }
 }

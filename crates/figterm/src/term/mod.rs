@@ -35,6 +35,32 @@ pub struct ScreenSize {
     pub ypixel: usize,
 }
 
+/// Rows assumed for a terminal that reports zero of them; see [`ScreenSize::or_vt100_default`].
+pub const DEFAULT_ROWS: usize = 24;
+/// Columns assumed for a terminal that reports zero of them; see [`ScreenSize::or_vt100_default`].
+pub const DEFAULT_COLS: usize = 80;
+
+impl ScreenSize {
+    /// Replaces a zero row or column count with the VT100's 24 rows or 80 columns.
+    ///
+    /// A tty nobody ever sized — no `TIOCSWINSZ` from whatever opened it (`script`, `expect`, a
+    /// test harness) — reports 0×0. figterm must not build its grid from that: alacritty's grid
+    /// needs at least one line and one column. With zero lines a debug build fails a
+    /// `debug_assert` in `grid/storage.rs` and a release build indexes out of bounds; with zero
+    /// columns a release build writes through the dangling pointer of an empty `Vec` in
+    /// `Row::new` and dies with SIGSEGV. Either way the user's shell goes down with figterm.
+    ///
+    /// 80×24 is also what line editors assume for a tty that reports no size, and the inner pty
+    /// is given the same numbers, so the shell and figterm's grid agree on the width.
+    pub fn or_vt100_default(self) -> Self {
+        Self {
+            rows: if self.rows == 0 { DEFAULT_ROWS } else { self.rows },
+            cols: if self.cols == 0 { DEFAULT_COLS } else { self.cols },
+            ..self
+        }
+    }
+}
+
 /// Coordinates of a cell on the terminal screen.
 pub struct CellCoordinate {
     pub rows: usize,
@@ -91,6 +117,21 @@ pub fn cast<T: NumCast + Display + Copy, U: NumCast>(n: T) -> Result<U> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_dimensions_become_the_vt100_default() {
+        let size = |rows, cols| ScreenSize {
+            rows,
+            cols,
+            xpixel: 7,
+            ypixel: 14,
+        };
+        assert_eq!(size(0, 0).or_vt100_default(), size(24, 80));
+        assert_eq!(size(0, 120).or_vt100_default(), size(24, 120));
+        assert_eq!(size(40, 0).or_vt100_default(), size(40, 80));
+        assert_eq!(size(40, 120).or_vt100_default(), size(40, 120));
+        assert_eq!(size(1, 1).or_vt100_default(), size(1, 1));
+    }
 
     #[test]
     fn test_cast() {

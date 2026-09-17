@@ -1,5 +1,9 @@
 //! Utiities for IPC with Tauri App
 
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::sync::atomic::{
     AtomicBool,
     Ordering,
@@ -163,21 +167,57 @@ where
     }
 }
 
-/// Spawns a local unix socket for communicating with figterm on a local machine.
+/// Room for a path in `sockaddr_un`, terminating NUL included: 104 bytes on macOS.
+const SUN_PATH_LEN: usize =
+    std::mem::size_of::<nix::libc::sockaddr_un>() - std::mem::offset_of!(nix::libc::sockaddr_un, sun_path);
+
+/// The session socket path is too long to bind a unix socket to.
 ///
-/// Returns the path the socket was bound to so the caller can unlink it on shutdown; the listener
-/// task itself never terminates.
+/// The path is `$TMPDIR/<runtime dir>/t/<32 hex digits>.sock`, so a `TMPDIR` of a little over 50
+/// bytes is enough. That is the environment, not a figterm bug the user can act on from inside
+/// the new shell, so `main` falls back to a plain shell without printing anything and the reason
+/// is only logged.
+#[derive(Debug)]
+pub struct SessionSocketPathTooLong {
+    pub path: PathBuf,
+}
+
+impl std::fmt::Display for SessionSocketPathTooLong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the session socket path is {} bytes, a unix socket path must be shorter than {SUN_PATH_LEN}: {}",
+            self.path.as_os_str().len(),
+            self.path.display()
+        )
+    }
+}
+
+impl std::error::Error for SessionSocketPathTooLong {}
+
+/// Fails if `path` cannot be bound as a unix socket because it does not fit in `sun_path`.
+///
+/// `bind` would fail the same way ("path must be shorter than SUN_LEN"), but only after the shell
+/// had been spawned into the pty and the terminal put into raw mode; checking up front lets
+/// figterm give up before it has touched either.
+pub fn check_session_socket_path(path: &Path) -> Result<(), SessionSocketPathTooLong> {
+    if path.as_os_str().len() < SUN_PATH_LEN {
+        Ok(())
+    } else {
+        Err(SessionSocketPathTooLong { path: path.to_owned() })
+    }
+}
+
+/// Binds the session socket at `socket_path` for requests from the CLI and the desktop app.
+///
+/// The caller unlinks `socket_path` on shutdown; the listener task itself never terminates.
 pub async fn spawn_figterm_ipc(
-    session_id: impl std::fmt::Display,
-) -> Result<(
-    std::path::PathBuf,
-    Receiver<(FigtermRequestMessage, Sender<FigtermResponseMessage>)>,
-)> {
+    socket_path: &Path,
+) -> Result<Receiver<(FigtermRequestMessage, Sender<FigtermResponseMessage>)>> {
     trace!("Spawning incoming receiver");
 
     let (incoming_tx, incoming_rx) = unbounded();
 
-    let socket_path = directories::figterm_socket_path(session_id)?;
     if let Some(parent) = socket_path.parent() {
         if let Err(err) = std::fs::create_dir_all(parent) {
             error!(%err, "Failed to create {PTY_BINARY_NAME} socket directory");
@@ -190,8 +230,8 @@ pub async fn spawn_figterm_ipc(
         }
     }
 
-    tokio::fs::remove_file(&socket_path).await.ok();
-    let socket_listener = tokio::net::UnixListener::bind(&socket_path)?;
+    tokio::fs::remove_file(socket_path).await.ok();
+    let socket_listener = tokio::net::UnixListener::bind(socket_path)?;
 
     tokio::spawn(async move {
         loop {
@@ -261,7 +301,7 @@ pub async fn spawn_figterm_ipc(
         }
     });
 
-    Ok((socket_path, incoming_rx))
+    Ok(incoming_rx)
 }
 
 /// Connects to the desktop app and allows for a remote connection from remote hosts
@@ -407,6 +447,42 @@ mod tests {
             reject_reason: reject_reason.into(),
             protocol_version,
         })
+    }
+
+    /// A path of `len` bytes under `/tmp`.
+    fn path_of_len(len: usize) -> PathBuf {
+        let prefix = "/tmp/";
+        PathBuf::from(format!("{prefix}{}", "x".repeat(len - prefix.len())))
+    }
+
+    #[test]
+    fn session_socket_path_must_leave_room_for_the_nul() {
+        assert_eq!(SUN_PATH_LEN, 104, "macOS sockaddr_un.sun_path");
+
+        assert!(check_session_socket_path(&path_of_len(103)).is_ok());
+        let err = check_session_socket_path(&path_of_len(104)).unwrap_err();
+        assert!(err.to_string().contains("104 bytes"), "{err}");
+        assert!(check_session_socket_path(&path_of_len(200)).is_err());
+
+        // The same boundary std enforces when binding, so the check cannot pass a path that
+        // `bind` then rejects, or refuse one it would have accepted.
+        for len in [103, 104] {
+            assert_eq!(
+                check_session_socket_path(&path_of_len(len)).is_ok(),
+                std::os::unix::net::SocketAddr::from_pathname(path_of_len(len)).is_ok(),
+                "{len} bytes"
+            );
+        }
+    }
+
+    /// The failure mode this guards against: a session id under a long `TMPDIR`.
+    #[test]
+    fn long_runtime_dir_is_refused_up_front() {
+        let tmpdir = format!("/var/folders/{}/T/", "d".repeat(60));
+        let path = Path::new(&tmpdir)
+            .join("figrun/t")
+            .join(format!("{}.sock", uuid::Uuid::new_v4().simple()));
+        assert!(check_session_socket_path(&path).is_err());
     }
 
     #[tokio::test]

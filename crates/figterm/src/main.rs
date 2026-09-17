@@ -661,6 +661,14 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         },
     };
 
+    // Before the shell is spawned into the pty and before raw mode: when the socket cannot be
+    // bound there is nothing figterm can do, and `main` then execs a plain shell in its place.
+    let figterm_socket_path = directories::figterm_socket_path(&session_id)?;
+    if let Err(err) = ipc::check_session_socket_path(&figterm_socket_path) {
+        error!(%err, "Running the shell without {PTY_BINARY_NAME}");
+        return Err(err.into());
+    }
+
     logger::stdio_debug_log(format!("pty name: {pty_name}"));
     logger::stdio_debug_log("Forking child shell process");
 
@@ -702,7 +710,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         let history_sender = history::spawn_history_task();
 
         // Spawn thread to handle figterm ipc
-        let (figterm_socket_path, incoming_receiver) = spawn_figterm_ipc(&session_id).await?;
+        let incoming_receiver = spawn_figterm_ipc(&figterm_socket_path).await?;
 
         // Spawn thread to handle remote ipc
         let (remote_sender, remote_receiver, stop_ipc_tx) = spawn_remote_ipc(
@@ -1054,6 +1062,18 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     runtime_result
 }
 
+/// What to print into the terminal when figterm gives up and `main` falls back to a plain shell.
+///
+/// `None` for a session socket path that is too long ([`ipc::SessionSocketPathTooLong`]): that
+/// comes from the environment (a long `TMPDIR`), so it would be printed above the prompt of every
+/// new shell, and `figterm_main` has already written it to the log file.
+fn error_for_terminal(err: &anyhow::Error) -> Option<String> {
+    if err.downcast_ref::<ipc::SessionSocketPathTooLong>().is_some() {
+        return None;
+    }
+    Some(format!("{PRODUCT_NAME} had an Error!: {err:?}"))
+}
+
 fn main() {
     let cli = Cli::parse();
     let command = cli.command.as_deref();
@@ -1072,7 +1092,9 @@ fn main() {
         },
         Err(err) => {
             error!("Error in async runtime: {err}");
-            println!("{PRODUCT_NAME} had an Error!: {err:?}");
+            if let Some(message) = error_for_terminal(&err) {
+                println!("{message}");
+            }
             // capture_anyhow(&err);
 
             // Fallback to normal shell
@@ -1149,6 +1171,15 @@ mod tests {
         assert_eq!(rx.len(), 4);
 
         crate::ipc::set_desktop_connected(false);
+    }
+
+    #[test]
+    fn a_session_socket_path_that_is_too_long_is_not_printed() {
+        let too_long = ipc::check_session_socket_path(std::path::Path::new(&"x".repeat(200))).unwrap_err();
+        assert_eq!(error_for_terminal(&too_long.into()), None);
+
+        let other = anyhow::anyhow!("Failed to open pty");
+        assert!(error_for_terminal(&other).is_some_and(|message| message.contains("Failed to open pty")));
     }
 
     #[test]

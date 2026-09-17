@@ -101,6 +101,35 @@ async fn get_forwarded_stream() -> Result<(ReadHalf<tokio::net::UnixStream>, Wri
     Ok(tokio::io::split(stream))
 }
 
+/// How often figterm tries to reach the desktop app while it is not connected.
+const RECONNECT_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Throttles the "desktop unreachable" log to one `warn!` per outage.
+///
+/// While the app is not running, every figterm on the machine retries each
+/// [`RECONNECT_INTERVAL`], and every retry used to log an `error!` — 720 lines an hour per shell,
+/// at the default log level, for the ordinary state "the app is not open". The interval itself
+/// stays: backing off towards a minute would leave the shells that were open before the app
+/// started without autocomplete for up to that long, while a `connect` to a socket that does not
+/// exist costs one failed syscall. So only the log is throttled: the first failure after startup
+/// or after a successful connection is a `warn!`, the rest of that outage `debug!`.
+#[derive(Debug, Default)]
+struct UnreachableLog {
+    reported: bool,
+}
+
+impl UnreachableLog {
+    /// Records a failed attempt; true if it is the first of this outage.
+    fn first_failure(&mut self) -> bool {
+        !std::mem::replace(&mut self.reported, true)
+    }
+
+    /// Records a successful connection, so the next failure starts a new outage.
+    fn connected(&mut self) {
+        self.reported = false;
+    }
+}
+
 /// How long to wait for the desktop's `HandshakeResponse`. It answers on receipt, so running out
 /// means something is wrong with the other end; the attempt is dropped and retried at the next
 /// tick instead of waiting forever.
@@ -306,10 +335,11 @@ pub async fn spawn_figterm_ipc(
 
 /// Connects to the desktop app and allows for a remote connection from remote hosts
 ///
-/// Reconnects every 5 s while the desktop is unreachable. If the desktop refuses this binary's
-/// `PROTOCOL_VERSION`, it stops trying and parks until `stop_ipc` fires: the returned channels
-/// stay open (a closed `Clientbound` receiver would spin figterm's main loop), `desktop_connected`
-/// stays false so no hook is queued, and the shell keeps working as a plain pty.
+/// Reconnects every [`RECONNECT_INTERVAL`] while the desktop is unreachable. If the desktop refuses
+/// this binary's `PROTOCOL_VERSION`, it stops trying and parks until `stop_ipc` fires: the returned
+/// channels stay open (a closed `Clientbound` receiver would spin figterm's main loop),
+/// `desktop_connected` stays false so no hook is queued, and the shell keeps working as a plain
+/// pty.
 pub async fn spawn_remote_ipc(
     session_id: String,
     main_loop_sender: Sender<MainLoopEvent>,
@@ -319,8 +349,9 @@ pub async fn spawn_remote_ipc(
     let (incoming_tx, incoming_rx) = unbounded::<Clientbound>();
 
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_secs(5));
+        let mut interval = interval(RECONNECT_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut unreachable = UnreachableLog::default();
 
         loop {
             interval.tick().await;
@@ -330,9 +361,16 @@ pub async fn spawn_remote_ipc(
                 }
                 res = get_forwarded_stream() => {
                     let (reader, mut writer) = match res {
-                        Ok((reader, writer)) => (reader, writer),
+                        Ok((reader, writer)) => {
+                            unreachable.connected();
+                            (reader, writer)
+                        },
                         Err(err) => {
-                            error!("failed to get forwarded stream: {err}");
+                            if unreachable.first_failure() {
+                                warn!("failed to get forwarded stream, retrying every {RECONNECT_INTERVAL:?}: {err}");
+                            } else {
+                                debug!("failed to get forwarded stream: {err}");
+                            }
                             continue;
                         },
                     };
@@ -447,6 +485,19 @@ mod tests {
             reject_reason: reject_reason.into(),
             protocol_version,
         })
+    }
+
+    #[test]
+    fn unreachable_desktop_is_reported_once_per_outage() {
+        let mut log = UnreachableLog::default();
+        assert!(log.first_failure(), "the first failure after startup is reported");
+        for _ in 0..100 {
+            assert!(!log.first_failure(), "retries of the same outage are not");
+        }
+
+        log.connected();
+        assert!(log.first_failure(), "losing the desktop again is a new outage");
+        assert!(!log.first_failure());
     }
 
     /// A path of `len` bytes under `/tmp`.

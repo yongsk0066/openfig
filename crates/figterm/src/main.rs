@@ -103,6 +103,7 @@ use crate::input::{
     InputEvent,
     KeyCode,
     KeyCodeEncodeModes,
+    KeyEvent,
     KeyboardEncoding,
     Modifiers,
 };
@@ -500,6 +501,20 @@ async fn send_edit_buffer(
     Ok(())
 }
 
+/// The action a key press is intercepted for, or `None` if the key goes to the shell.
+///
+/// Nothing is intercepted while a command runs (`preexec`), nor while no desktop app is attached.
+/// The other hooks are only sent while one is (see [`ipc::desktop_connected`]), because nothing
+/// drains the outgoing channel in the meantime. This one also swallows the key: with no desktop
+/// to act on the action, an interception left over from a desktop that went away used to eat
+/// Tab, the arrows or Enter and queue a hook that was discarded unread at the next handshake.
+fn intercepted_action<'a>(key_interceptor: &'a KeyInterceptor, event: &KeyEvent, preexec: bool) -> Option<&'a str> {
+    if preexec || !ipc::desktop_connected() {
+        return None;
+    }
+    key_interceptor.intercept_key(event)
+}
+
 fn get_parent_shell() -> Result<String> {
     match env::var(FIG_SHELL).ok().filter(|s| !s.is_empty()) {
         Some(v) => Ok(v),
@@ -858,25 +873,21 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                             })
                                         };
 
-                                        let handled_action = if !preexec {
-                                            if let Some(action) = key_interceptor.intercept_key(&event) {
-                                                debug!(?action, "Intercepted action");
-                                                let s = raw.clone()
-                                                    .and_then(|b| String::from_utf8(b.to_vec()).ok())
-                                                    .unwrap_or_default();
-                                                let context = shell_state_to_context(term.shell_state());
-                                                let hook = fig_proto::remote_hooks::new_intercepted_key_hook(context, action, s);
-                                                if let Err(err) = remote_sender.send(hook_to_message(hook)) {
-                                                    error!(%err, "Failed to send intercepted key hook");
-                                                }
-
-                                                if event.key == KeyCode::Escape {
-                                                    key_interceptor.reset();
-                                                }
-                                                true
-                                            } else {
-                                                false
+                                        let handled_action = if let Some(action) = intercepted_action(&key_interceptor, &event, preexec) {
+                                            debug!(?action, "Intercepted action");
+                                            let s = raw.clone()
+                                                .and_then(|b| String::from_utf8(b.to_vec()).ok())
+                                                .unwrap_or_default();
+                                            let context = shell_state_to_context(term.shell_state());
+                                            let hook = fig_proto::remote_hooks::new_intercepted_key_hook(context, action, s);
+                                            if let Err(err) = remote_sender.send(hook_to_message(hook)) {
+                                                error!(%err, "Failed to send intercepted key hook");
                                             }
+
+                                            if event.key == KeyCode::Escape {
+                                                key_interceptor.reset();
+                                            }
+                                            true
                                         } else {
                                             false
                                         };
@@ -1171,6 +1182,35 @@ mod tests {
         assert_eq!(rx.len(), 4);
 
         crate::ipc::set_desktop_connected(false);
+    }
+
+    /// Every other hook is only sent while the desktop is attached; the intercepted-key hook
+    /// also decides whether the key reaches the shell, so without a desktop it must not swallow it.
+    #[test]
+    fn keys_are_only_intercepted_while_the_desktop_is_attached() {
+        let _globals = EDIT_BUFFER_TEST_LOCK.blocking_lock();
+        let mut key_interceptor = KeyInterceptor::new();
+        key_interceptor.load_key_intercepts().unwrap();
+        key_interceptor.set_intercept(true);
+        key_interceptor.set_window_visible(true);
+        let tab = KeyEvent {
+            key: KeyCode::Tab,
+            modifiers: Modifiers::NONE,
+        };
+
+        crate::ipc::set_desktop_connected(true);
+        assert_eq!(
+            intercepted_action(&key_interceptor, &tab, false),
+            Some("insertCommonPrefix")
+        );
+        assert_eq!(
+            intercepted_action(&key_interceptor, &tab, true),
+            None,
+            "a command is running"
+        );
+
+        crate::ipc::set_desktop_connected(false);
+        assert_eq!(intercepted_action(&key_interceptor, &tab, false), None);
     }
 
     #[test]

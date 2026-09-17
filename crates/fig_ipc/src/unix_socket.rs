@@ -51,7 +51,10 @@ pub async fn validate_socket(socket: impl AsRef<Path>) -> Result<(), ConnectErro
         warn!(?socket, mode =% OctalU32(mode), "Socket folder permissions are not 0o700");
     }
 
-    error!(?socket, "Incorrect socket permissions, not connecting to socket");
+    // `debug!`, like the failed connect below: the caller gets the error and decides how loud it
+    // is. figterm retries every 5 s while the app is not running, and at `error!` each retry put
+    // a line in every shell's log.
+    debug!(?socket, "Incorrect socket permissions, not connecting to socket");
     Err(ConnectError::IncorrectSocketPermissions)
 }
 
@@ -64,7 +67,9 @@ pub async fn socket_connect(socket_path: impl AsRef<Path>) -> Result<UnixStream,
     let stream = match UnixStream::connect(&socket_path).await {
         Ok(stream) => stream,
         Err(err) => {
-            error!(%err, ?socket_path, "Failed to connect");
+            // Not `error!`: a socket nobody is listening on is the normal state of an app that is
+            // not running, and every caller logs the returned error at the level it warrants.
+            debug!(%err, ?socket_path, "Failed to connect");
             return Err(err.into());
         },
     };

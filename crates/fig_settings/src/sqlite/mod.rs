@@ -82,9 +82,7 @@ const MIGRATIONS: &[Migration] = migrations![
 /// (so `build()` blocked until ten connections to the same local file were open), a
 /// `ScheduledThreadPool` of three worker threads, a 30 s reaper, and `test_on_check_out` firing a
 /// round trip before every single statement. Nothing here is concurrent enough to need any of
-/// that: the callers are a CLI, one desktop process and one figterm per terminal tab, all doing
-/// short key/value reads. The three pool threads also existed at figterm's `fork` (see
-/// docs/13-unsafe-review.md #21/#22).
+/// that: the callers are a CLI and one desktop process, all doing short key/value reads.
 #[derive(Debug, Clone)]
 pub struct Db {
     conn: Arc<Mutex<Connection>>,

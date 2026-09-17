@@ -157,8 +157,7 @@ async fn write_lines(mut writer: OwnedWriteHalf, mut lines: mpsc::UnboundedRecei
     }
 }
 
-/// What a hook session has told the desktop so far. The pty binary keeps the same things in its
-/// `ShellState` and builds every hook's `ShellContext` from them.
+/// What a hook session has told the desktop so far; every hook's `ShellContext` is built from it.
 struct Session {
     id: Uuid,
     shell: String,
@@ -181,8 +180,8 @@ struct Session {
 }
 
 impl Session {
-    /// With `full`, the environment and aliases too; the pty binary sends them with every hook but
-    /// the edit-buffer ones, which carry them only after they changed.
+    /// With `full`, the environment and aliases too: every hook but the edit-buffer ones carries
+    /// them, and those only after they changed.
     fn context(&self, full: bool) -> ShellContext {
         let non_empty = |s: &str| (!s.is_empty()).then(|| s.to_owned());
         ShellContext {
@@ -354,7 +353,7 @@ async fn handle_connection(
                 })
             },
             ShellLine::Prompt { exit_code, cwd } => {
-                // As the pty binary: the prompt first, then the command that just finished.
+                // The prompt first, then the command that just finished.
                 let (context, finished) = {
                     let mut session = session.lock();
                     session.preexec = false;
@@ -398,7 +397,7 @@ async fn handle_connection(
                     let mut session = session.lock();
                     session.preexec = true;
                     session.running = Some((command.trim().to_owned(), SystemTime::now()));
-                    // The pty binary stops intercepting when a command starts.
+                    // A running command gets its keys: interception stops.
                     session.interceptor.reset();
                     (session.context(true), session.intercept_update())
                 };

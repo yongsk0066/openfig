@@ -1,12 +1,11 @@
 //! `InsertText` for a shell that edits its own buffer.
 //!
-//! The pty binary carries an insertion out by typing it: it turns the request into the bytes a
-//! user would press (`InsertTextRequest::to_term_string` — arrows for `offset`, backspaces for
-//! `deletion`, the text, a carriage return for `immediate`), and the autocomplete app itself puts
-//! backspaces and `ESC [ D` into the text. Before that it compares the buffer the app based the
-//! insertion on with the one on screen and types the difference. A hook session gets the same
-//! keystrokes computed the same way, then replayed here as [`Insert`] edits of `LBUFFER`, which
-//! is what `fig.zsh` can apply atomically.
+//! The autocomplete app phrases an insertion as keystrokes: the request becomes the bytes a user
+//! would press (`InsertTextRequest::to_term_string` — arrows for `offset`, backspaces for
+//! `deletion`, the text, a carriage return for `immediate`), and the app itself puts backspaces and
+//! `ESC [ D` into the text. The buffer the app based the insertion on is compared with the shell's
+//! first and the difference typed. Those keystrokes are replayed here as [`Insert`] edits of
+//! `LBUFFER`, which is what `fig.zsh` can apply atomically.
 
 use fig_proto::shell::InsertTextRequest;
 
@@ -20,14 +19,13 @@ enum Op {
     Char(char),
 }
 
-/// The keystrokes the pty binary would have typed for `request` while the shell's buffer was
-/// `buffer`.
+/// The keystrokes `request` stands for while the shell's buffer is `buffer`.
 fn keystrokes(request: &InsertTextRequest, buffer: &str) -> String {
     let mut typed = String::new();
     if let Some(expected) = request.insertion_buffer.as_deref()
         && buffer != expected
     {
-        // Counted in characters: the pty binary counts bytes, which over-deletes after an emoji.
+        // Counted in characters, not bytes, which would over-delete after an emoji.
         if let Some(extra) = buffer.strip_prefix(expected) {
             typed.extend(std::iter::repeat_n('\x08', extra.chars().count()));
         } else if let Some(missing) = expected.strip_prefix(buffer) {
@@ -63,9 +61,9 @@ fn ops(typed: &str) -> Vec<Op> {
     ops
 }
 
-/// The edits that leave zsh's buffer as the pty binary's keystrokes would have. An Enter ends them
-/// with `accept` (see [`super::wire`] for when the shell can honour it); what follows it would in a
-/// pty have gone to the command it started, so it is dropped.
+/// The edits that leave zsh's buffer as those keystrokes would have. An Enter ends them with
+/// `accept` (see [`super::wire`] for when the shell can honour it); what follows it would have gone
+/// to the command it started, so it is dropped.
 pub fn edits(request: &InsertTextRequest, buffer: &str) -> Vec<Insert> {
     let mut edits = Vec::new();
     let mut current = Insert::default();
@@ -158,7 +156,7 @@ mod tests {
         assert_eq!(edits(&request("ok", Some("a")), "a\u{1F600}"), vec![insert(1, "ok", 0)]);
         // The shell is behind: type what it is missing.
         assert_eq!(edits(&request("\x08x", Some("git c")), "git "), vec![insert(0, "x", 0)]);
-        // Unrelated buffers are left alone, as the pty binary does.
+        // Unrelated buffers are left alone.
         assert_eq!(edits(&request("x", Some("abc")), "zzz"), vec![insert(0, "x", 0)]);
     }
 

@@ -14,11 +14,11 @@ export interface ShellContext {
   currentWorkingDirectory?: string;
   /** the value of $TERM_SESSION_ID */
   sessionId?: string;
-  /** the integration version of figterm */
+  /** the version of the shell integration */
   integrationVersion?: number;
-  /** the parent terminal of figterm */
+  /** the terminal the shell runs in */
   terminal?: string;
-  /** the hostname of the computer figterm is running on */
+  /** the hostname of the computer the shell runs on */
   hostname?: string;
   /** path to the shell being used in the terminal */
   shellPath?: string;

@@ -1,7 +1,7 @@
 //! Handing a URL to the user's default handler via `NSWorkspace`.
 //!
-//! This was `fig_util::open`, and it was the only reason `fig_util` — linked by the CLI, the pty
-//! binary and every library crate — pulled in `objc2`, `objc2-app-kit` and `objc2-foundation`.
+//! This was `fig_util::open`, and it was the only reason `fig_util` — linked by the CLI and every
+//! library crate — pulled in `objc2`, `objc2-app-kit` and `objc2-foundation`.
 //! Both callers (`fig_desktop_api::requests::other`, `fig_desktop::local_ipc::commands`) already
 //! depend on this crate, which is where the Objective-C bridging belongs.
 

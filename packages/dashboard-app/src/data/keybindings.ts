@@ -1,7 +1,7 @@
 // Mirrors `crates/fig_settings/src/actions.json` and
 // `packages/autocomplete-app/src/fig.json`: same 28 actions, same default bindings.
 // All three lists are edited together — `actions.json` is the source of truth, the app's
-// `fig.json` is what figterm actually intercepts, and this file is only what the dashboard
+// `fig.json` is what the shell hook actually intercepts, and this file is only what the dashboard
 // shows. They had drifted five ways (10 actions missing, 4 commented out, `toggleDescription`
 // shown as `control+k`, `navigateUp`/`navigateDown` missing their emacs keys, no window-size
 // bindings).

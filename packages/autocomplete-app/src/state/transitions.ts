@@ -56,8 +56,7 @@ const getEnvVarsMemoized = memoizeOne(
     a.every((elem, index) => elem.key === b[index].key && elem.value === b[index].value),
 );
 
-// `alias` output is `name=value` in bash and zsh, the only shells the integration installs
-// into. The separator used to be chosen per shell because fish prints `name value`; the
+// `alias` output is `name=value` in zsh, the only shell the integration installs into. The separator used to be chosen per shell because fish prints `name value`; the
 // `shellPath` argument existed only for that test and went with the fish integration.
 const getAliasMemoized = memoizeOne(
   (alias: string) =>
@@ -103,8 +102,8 @@ export const figStateTransition = (
     globals.globalTerminalSessionId = shellContext.sessionId;
 
     // protobuf-es decodes an absent repeated field as `[]`, which is truthy — so a
-    // hook that deliberately omits the environment (figterm only re-sends it when the
-    // shell context is dirty) would otherwise wipe the vars we already have.
+    // hook that deliberately omits the environment (a shell session only re-sends it after it
+    // changed) would otherwise wipe the vars we already have.
     if (shellContext.environmentVariables?.length) {
       figState.environmentVariables = getEnvVarsMemoized(shellContext.environmentVariables);
     }
@@ -141,8 +140,8 @@ export const figStateTransition = (
   const bufferSliced = buffer.slice(0, cursorLocation);
 
   try {
-    // Read after `shellContext.alias` is applied above: figterm sends the alias list only
-    // when it changed, so the update that carries it must also expand its own buffer.
+    // Read after `shellContext.alias` is applied above: a shell session sends the alias list
+    // only when it changed, so the update that carries it must also expand its own buffer.
     const command = getCommandMemoized(bufferSliced, figState.aliases, cursorLocation);
     return { state: { figState, command }, effects };
   } catch (err) {

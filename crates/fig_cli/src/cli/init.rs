@@ -159,7 +159,7 @@ mod tests {
         String::from_utf8(output.stdout).unwrap()
     }
 
-    /// zsh's `post` is `fig.zsh` and nothing else, and its `pre` never starts the pty binary.
+    /// zsh's `post` is `fig.zsh` and nothing else, and its `pre` starts nothing.
     #[test]
     fn zsh_integration_is_the_hook() {
         let pre = Shell::Zsh.get_fig_integration_source(&When::Pre).unwrap();

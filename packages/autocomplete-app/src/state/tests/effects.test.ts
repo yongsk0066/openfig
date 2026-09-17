@@ -137,7 +137,7 @@ describe("transitions return effects instead of performing them", () => {
   });
 
   it("an alias list expands the buffer of the update that carries it", () => {
-    // figterm sends the alias list only when it changed, together with a buffer.
+    // A shell session sends the alias list only when it changed, together with a buffer.
     useAutocompleteStore.getState().setFigState((figState) => ({
       ...figState,
       buffer: "t ",

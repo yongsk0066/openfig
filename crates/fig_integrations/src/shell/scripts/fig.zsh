@@ -1,6 +1,6 @@
 # {{PRODUCT_NAME}} zsh hook (docs/15-architecture-study.md §3.3): zsh reports its own edit buffer over a
-# unix socket instead of a pty wrapper reading it off the screen. No process is spawned, every hook
-# returns 0, and a socket failure disarms the hook, leaving a plain shell. Wire format and the reasons
+# unix socket. No process is spawned, every hook returns 0, and a socket failure disarms the hook,
+# leaving a plain shell. Wire format and the reasons
 # behind it: crates/fig_shell_ipc/src/hook/wire.rs.
 if [[ -o interactive && -z ${_fig_sock-} ]] && autoload -Uz is-at-least add-zle-hook-widget add-zsh-hook \
   && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system zsh/datetime 2>/dev/null; then

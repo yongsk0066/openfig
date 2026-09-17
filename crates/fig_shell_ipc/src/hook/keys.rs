@@ -31,7 +31,6 @@ pub const SHELL_KEYS: &[&str] = &[
     "control+r",
 ];
 
-// Same lists as the pty binary's interceptor.
 const GLOBAL_ACTIONS: &[&str] = &["toggleAutocomplete", "showAutocomplete"];
 const IGNORE_ACTION: &str = "ignore";
 
@@ -57,7 +56,7 @@ static ONLY_SHOW_ON_TAB: LazyLock<bool> =
     LazyLock::new(|| fig_settings::settings::get_bool_or("autocomplete.onlyShowOnTab", false));
 
 /// A keybinding (`"ctrl+shift+Tab"`, `"arrowup"`) spelled the way [`SHELL_KEYS`] are, or `None`
-/// for text the pty binary's `key_from_text` would not accept either.
+/// for text that names no key.
 pub fn key_name(binding: &str) -> Option<String> {
     let (mut control, mut alt, mut shift, mut meta) = (false, false, false, false);
     let mut rest = binding;
@@ -111,7 +110,7 @@ pub fn key_name(binding: &str) -> Option<String> {
     Some(name)
 }
 
-/// The pty binary's `KeyInterceptor`, keyed by name.
+/// Which action each bound key triggers, and whether keys are forwarded at all right now.
 #[derive(Debug, Clone)]
 pub struct Interceptor {
     intercept: bool,
@@ -121,7 +120,7 @@ pub struct Interceptor {
 }
 
 impl Default for Interceptor {
-    /// The built-in bindings, as the pty binary starts with.
+    /// The built-in bindings.
     fn default() -> Self {
         let mut interceptor = Interceptor {
             intercept: false,
@@ -166,7 +165,7 @@ impl Interceptor {
         }
     }
 
-    /// Escape does this in the pty binary, and so does a command starting.
+    /// Escape does this, and so does a command starting.
     pub fn reset(&mut self) {
         self.intercept = false;
         self.intercept_global = false;

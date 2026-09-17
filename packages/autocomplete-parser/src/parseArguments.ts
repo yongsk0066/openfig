@@ -954,17 +954,10 @@ const firstTokenSpec: Internal.Subcommand = {
       generators: [
         {
           custom: async (_tokens, _exec, context) => {
-            // No fish branch: the shell integration is only installed into bash and zsh, so
-            // `currentProcess` is one of those or a bare `sh`/`dash` (figterm's third case,
-            // which has no way to list commands).
+            // The shell integration is only installed into zsh, so `currentProcess` is zsh; any
+            // other shell has no way to list commands here.
             let result: Fig.Suggestion[] = [];
-            if (context?.currentProcess.includes("bash")) {
-              const commands = await executeLoginShell({
-                command: "compgen -c",
-                executable: context.currentProcess,
-              });
-              result = commands.split("\n").map((name) => ({ name, type: "subcommand" }));
-            } else if (context?.currentProcess.includes("zsh")) {
+            if (context?.currentProcess.includes("zsh")) {
               const commands = await executeLoginShell({
                 command: `for key in \${(k)commands}; do echo $key; done && alias +r`,
                 executable: context.currentProcess,

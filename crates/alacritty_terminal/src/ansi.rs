@@ -311,13 +311,6 @@ impl<'a, H: Handler + 'a> Performer<'a, H> {
     }
 }
 
-/// Indicates if a handler has handled an action
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum HandledStatus {
-    Handled,
-    Unhandled,
-}
-
 /// Type that handles actions from the parser.
 ///
 /// XXX Should probably not provide default impls for everything, but it makes
@@ -535,53 +528,6 @@ pub trait Handler {
 
     /// Fig OSCUnlock OSC
     fn osc_unlock(&mut self, _: &str) {}
-
-    /// Unhandled `execute` fallthrough
-    fn unhandled_execute(&mut self, _byte: u8) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `hook` fallthrough
-    fn unhandled_hook(
-        &mut self,
-        _params: &Params,
-        _intermediates: &[u8],
-        _ignore: bool,
-        _action: char,
-    ) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `put` fallthrough
-    fn unhandled_put(&mut self, _byte: u8) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `unhook` fallthrough
-    fn unhandled_unhook(&mut self) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `osc_dispatch` fallthrough
-    fn unhandled_osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `csi_dispatch` fallthrough
-    fn unhandled_csi_dispatch(
-        &mut self,
-        _params: &Params,
-        _intermediates: &[u8],
-        _ignore: bool,
-        _action: char,
-    ) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
-
-    /// Unhandled `esc_dispatch` fallthrough
-    fn unhandled_esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) -> HandledStatus {
-        HandledStatus::Unhandled
-    }
 }
 
 /// Terminal cursor configuration.
@@ -1015,9 +961,7 @@ where
             C0::SI => self.handler.set_active_charset(CharsetIndex::G0),
             C0::SO => self.handler.set_active_charset(CharsetIndex::G1),
             _ => {
-                if self.handler.unhandled_execute(byte) == HandledStatus::Unhandled {
-                    debug!("[unhandled] execute byte={:02x}", byte);
-                }
+                debug!("[unhandled] execute byte={:02x}", byte);
             },
         }
     }
@@ -1032,21 +976,17 @@ where
                 }
             },
             _ => {
-                if self.handler.unhandled_hook(params, intermediates, ignore, action) == HandledStatus::Unhandled {
-                    debug!(
-                        "[unhandled hook] params={:?}, ints: {:?}, ignore: {:?}, action: {:?}",
-                        params, intermediates, ignore, action
-                    );
-                }
+                debug!(
+                    "[unhandled hook] params={:?}, ints: {:?}, ignore: {:?}, action: {:?}",
+                    params, intermediates, ignore, action
+                );
             },
         }
     }
 
     #[inline]
     fn put(&mut self, byte: u8) {
-        if self.handler.unhandled_put(byte) == HandledStatus::Unhandled {
-            debug!("[unhandled put] byte={:?}", byte);
-        }
+        debug!("[unhandled put] byte={:?}", byte);
     }
 
     #[inline]
@@ -1059,28 +999,24 @@ where
             },
             Some(Dcs::SyncEnd) => (),
             _ => {
-                if self.handler.unhandled_unhook() == HandledStatus::Unhandled {
-                    debug!("[unhandled unhook]");
-                }
+                debug!("[unhandled unhook]");
             },
         }
     }
 
     #[inline]
-    fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         macro_rules! unhandled {
             () => {{
-                if self.handler.unhandled_osc_dispatch(params, bell_terminated) == HandledStatus::Unhandled {
-                    let mut buf = String::new();
-                    for items in params {
-                        buf.push('[');
-                        for item in *items {
-                            write!(buf, "{:?},", *item as char).ok();
-                        }
-                        buf.push_str("],");
+                let mut buf = String::new();
+                for items in params {
+                    buf.push('[');
+                    for item in *items {
+                        write!(buf, "{:?},", *item as char).ok();
                     }
-                    debug!("[unhandled osc_dispatch]: [{}] at line {}", &buf, line!());
+                    buf.push_str("],");
                 }
+                debug!("[unhandled osc_dispatch]: [{}] at line {}", &buf, line!());
             }};
         }
 
@@ -1243,10 +1179,6 @@ where
                                         },
                                         Err(err) => error!("Error decoding ExitCode: {err}"),
                                     },
-                                    // b"Hostname" => match str::from_utf8(&val[1..]) {
-                                    //     Ok(s) => self.handler.hostname(s),
-                                    //     Err(err) => tracing::error!("Error decoding Hostname: {err}"),
-                                    // },
                                     b"User" => match str::from_utf8(&val[1..]) {
                                         Ok(s) => self.handler.username(s),
                                         Err(err) => error!("Error decoding Username: {err}"),
@@ -1283,16 +1215,10 @@ where
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], has_ignored_intermediates: bool, action: char) {
         macro_rules! unhandled {
             () => {{
-                if self
-                    .handler
-                    .unhandled_csi_dispatch(params, intermediates, has_ignored_intermediates, action)
-                    == HandledStatus::Unhandled
-                {
-                    debug!(
-                        "[Unhandled CSI] action={:?}, params={:?}, intermediates={:?}",
-                        action, params, intermediates
-                    );
-                }
+                debug!(
+                    "[Unhandled CSI] action={:?}, params={:?}, intermediates={:?}",
+                    action, params, intermediates
+                );
             }};
         }
 
@@ -1451,15 +1377,13 @@ where
     }
 
     #[inline]
-    fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
+    fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
         macro_rules! unhandled {
             () => {{
-                if self.handler.unhandled_esc_dispatch(intermediates, ignore, byte) == HandledStatus::Unhandled {
-                    debug!(
-                        "[unhandled] esc_dispatch ints={:?}, byte={:?} ({:02x})",
-                        intermediates, byte as char, byte
-                    );
-                }
+                debug!(
+                    "[unhandled] esc_dispatch ints={:?}, byte={:?} ({:02x})",
+                    intermediates, byte as char, byte
+                );
             }};
         }
 

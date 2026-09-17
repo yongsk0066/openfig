@@ -439,17 +439,6 @@ impl<T> Grid<T> {
 
     /// Iterate over all cells in the grid starting at a specific point.
     #[inline]
-    pub fn iter_from_to(&self, point: Point, end: Point) -> GridIterator<'_, T> {
-        GridIterator {
-            grid: self,
-            point,
-            end,
-            post_increment: false,
-        }
-    }
-
-    /// Iterate over all cells in the grid starting at a specific point.
-    #[inline]
     pub fn iter_from_to_post_increment(&self, point: Point, end: Point) -> GridIterator<'_, T> {
         GridIterator {
             grid: self,

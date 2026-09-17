@@ -559,7 +559,7 @@ struct PtySocketCheck;
 #[async_trait]
 impl DoctorCheck for PtySocketCheck {
     fn name(&self) -> Cow<'static, str> {
-        "Qterm Socket Check".into()
+        format!("{PTY_BINARY_NAME} socket check").into()
     }
 
     async fn check(&self, _: &()) -> Result<(), DoctorError> {
@@ -601,9 +601,9 @@ impl DoctorCheck for PtySocketCheck {
         };
 
         // Try sending an insert event and ensure it inserts what is expected
-        enable_raw_mode().with_context(
-            || "Your terminal doesn't support raw mode, which is required to verify that the {PTY_BINARY_NAME} socket works",
-        )?;
+        enable_raw_mode().with_context(|| {
+            format!("Your terminal doesn't support raw mode, which is required to verify that the {PTY_BINARY_NAME} socket works")
+        })?;
 
         let test_message = format!("Testing {PTY_BINARY_NAME}...\n");
         let test_message_ = test_message.clone();

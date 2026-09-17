@@ -18,6 +18,7 @@ import {
   executeLoginShell,
   SETTINGS,
   getSetting,
+  type SettingsMap,
 } from "@fig/api-bindings/wrappers";
 import { History } from "@fig/api-bindings";
 import {
@@ -39,12 +40,14 @@ type HistoryArgValues = {
 
 type HistoryValueIndex = Record<string, Internal.Subcommand<HistoryArgValues, unknown, unknown>>;
 
-type HistorySource = {
+export type HistorySource = {
   entries: HistoryEntry[];
   entryGraph?: Graph;
   subcommandGraph?: Graph;
   historyValueIndex?: HistoryValueIndex;
 };
+
+export type HistorySources = Readonly<Record<string, HistorySource>>;
 
 const historySources: Record<string, HistorySource> = {
   zsh: { entries: [] },
@@ -52,6 +55,9 @@ const historySources: Record<string, HistorySource> = {
   bash: { entries: [] },
   customCommand: { entries: [] },
 };
+
+/** The live history sources; `loadHistory` replaces their entries once loaded. */
+export const getHistorySources = (): HistorySources => historySources;
 
 const indexArgumentValues = (
   historyValueIndex: HistoryValueIndex,
@@ -372,10 +378,13 @@ export const getHistoryArgSuggestions = (
   return allValues;
 };
 
+/** Pure: reads only its arguments (`sources` is `getHistorySources()` in the app). */
 export const getFullHistorySuggestions = (
   buffer: string,
   command: Command | null,
   currentProcess: string,
+  sources: HistorySources,
+  settings: SettingsMap,
 ): Suggestion[] => {
   const shell = currentProcess.slice(currentProcess.lastIndexOf("/") + 1);
   const tokens = command?.tokens ?? [];
@@ -390,12 +399,12 @@ export const getFullHistorySuggestions = (
   const suggestions: string[] = [];
   const historyEntries: HistoryEntry[] = [];
 
-  if (getSetting(SETTINGS.HISTORY_COMMAND)) {
-    historyEntries.push(...historySources.customCommand.entries);
-  } else if (getSetting(SETTINGS.HISTORY_MERGE_SHELLS) && ["bash", "zsh"].includes(shell)) {
-    historyEntries.push(...historySources.zsh.entries, ...historySources.bash.entries);
-  } else if (shell in historySources) {
-    historyEntries.push(...historySources[shell].entries);
+  if (settings[SETTINGS.HISTORY_COMMAND]) {
+    historyEntries.push(...sources.customCommand.entries);
+  } else if (settings[SETTINGS.HISTORY_MERGE_SHELLS] && ["bash", "zsh"].includes(shell)) {
+    historyEntries.push(...sources.zsh.entries, ...sources.bash.entries);
+  } else if (shell in sources) {
+    historyEntries.push(...sources[shell].entries);
   }
 
   for (let i = 0; i < historyEntries.length; i += 1) {

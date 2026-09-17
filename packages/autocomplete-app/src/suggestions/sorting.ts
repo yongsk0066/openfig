@@ -1,10 +1,10 @@
 import { makeArray } from "@fig/shared/utils";
 import type { Suggestion } from "@fig/shared/internal";
-import { SETTINGS, getSetting } from "@fig/api-bindings/wrappers";
 
 // { command: { commandParam: count/lastUsedDate } }
 // e.g. git: { add: 2, push: 4 }
 type Index = Record<string, Record<string, number>>;
+export type RecencyIndex = Readonly<Index>;
 
 const frequencyIndex: Index = JSON.parse(
   localStorage.getItem("term_frequency_index_fig_only") || "{}",
@@ -37,17 +37,20 @@ export const updateAutocompleteIndexFromUserInsert = (cmd: string, param: string
   localStorage.setItem("term_frequency_index_fig_only_recency", JSON.stringify(recencyIndex));
 };
 
-export const updatePriorities = (suggestions: Suggestion[], cmd: string) => {
-  let idxToUse;
+/** The live recency index; `updateAutocompleteIndexFromUserInsert` mutates it in place. */
+export const getRecencyIndex = (): RecencyIndex => recencyIndex;
 
-  // Default setting for autocomplete.sortMethod is "recency".
-  try {
-    if (getSetting(SETTINGS.SORT_METHOD) !== "alphabetical") {
-      idxToUse = recencyIndex;
-    }
-  } catch (_err) {
-    idxToUse = recencyIndex;
-  }
+/**
+ * Pure: `sortMethod` is the `autocomplete.sortMethod` setting (default "recency") and
+ * `lastInserted` the recency index to boost by (`getRecencyIndex()` in the app).
+ */
+export const updatePriorities = (
+  suggestions: Suggestion[],
+  cmd: string,
+  sortMethod: unknown,
+  lastInserted: RecencyIndex,
+) => {
+  const idxToUse = sortMethod !== "alphabetical" ? lastInserted : undefined;
 
   const cmdRecency = idxToUse && idxToUse[cmd];
 

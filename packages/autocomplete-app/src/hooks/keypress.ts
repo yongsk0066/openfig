@@ -2,17 +2,10 @@ import { useCallback } from "react";
 import logger from "loglevel";
 import { Keybindings, Shell } from "@fig/api-bindings";
 import { SETTINGS, getSetting } from "@fig/api-bindings/wrappers";
-import { ACTIONS, AutocompleteAction } from "../actions";
+import { AutocompleteAction } from "../actions";
 import { useShallow } from "zustand/shallow";
 import { useAutocompleteStore } from "../state";
 import { Visibility } from "../state/types";
-
-export const setInterceptKeystrokes = (
-  intercept: boolean,
-  globalIntercept?: boolean,
-  currentTerminalSessionId?: string,
-) =>
-  Keybindings.setInterceptKeystrokes(ACTIONS, intercept, globalIntercept, currentTerminalSessionId);
 
 enum KeyCode {
   TAB = 48,

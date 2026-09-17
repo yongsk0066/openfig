@@ -21,11 +21,8 @@ import { useShallow } from "zustand/shallow";
 
 import { useAutocompleteStore } from "./state";
 import { Visibility } from "./state/types";
-import {
-  useAutocompleteKeypressCallback,
-  setInterceptKeystrokes,
-  Direction,
-} from "./hooks/keypress";
+import { useAutocompleteKeypressCallback, Direction } from "./hooks/keypress";
+import { applyEffect, interceptKeystrokesEffect } from "./state/effects";
 import { useShake, useDynamicResizeObserver, useSystemTheme } from "./hooks/helpers";
 
 import Suggestion from "./components/Suggestion";
@@ -98,7 +95,6 @@ function App() {
     visibleState,
     buffer,
     cwd,
-    shellContext,
     searchTerm,
     currentArg,
     settings,
@@ -111,7 +107,6 @@ function App() {
       visibleState: state.visibleState,
       buffer: state.figState.buffer,
       cwd: state.figState.cwd,
-      shellContext: state.figState.shellContext,
       searchTerm: state.parserResult.searchTerm,
       currentArg: state.parserResult.currentArg,
       settings: state.settings,
@@ -277,16 +272,12 @@ function App() {
 
   // Make sure fig dimensions align with our desired dimensions.
   const isHidden = visibleState !== Visibility.VISIBLE;
-  const interceptKeystrokes = Boolean(!isHidden && suggestions.length > 0);
 
+  // The store sends every later change of keystroke interception itself (`storeEffects`);
+  // this sends the initial state once, as the effect it replaced did on mount.
   useEffect(() => {
-    logger.info("Setting intercept keystrokes", {
-      suggestions,
-      interceptKeystrokes,
-    });
-    setInterceptKeystrokes(interceptKeystrokes, suggestions.length > 0, shellContext?.sessionId);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [interceptKeystrokes, suggestions.length]);
+    applyEffect(interceptKeystrokesEffect(useAutocompleteStore.getState()));
+  }, []);
   useEffect(() => {
     setTheme(systemTheme, theme as string);
   }, [theme, systemTheme]);

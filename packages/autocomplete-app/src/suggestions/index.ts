@@ -160,7 +160,7 @@ export const getAllSuggestions = (
   completionObj: Subcommand | null,
   passedOptions: Option[],
   suggestionFlags: SuggestionFlags,
-  generatorStates: GeneratorState[],
+  generatorStates: readonly GeneratorState[],
   annotations: Annotation[],
 ): Suggestion[] => {
   // Memoized computation of static suggestions.
@@ -385,9 +385,12 @@ export const filterSuggestions = (
   suggestCurrentToken: boolean,
   settings: SettingsMap | undefined = undefined,
 ): Suggestion[] => {
+  // With `settings` this reads nothing global (the store passes its copy, which
+  // `useFigSettings` keeps identical to the module-level one).
+  const setting = (key: SETTINGS) => (settings ? settings[key] : getSetting(key)) ?? false;
   const shouldHideAutoExecute =
-    getSetting<boolean>(SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION, false) ||
-    getSetting<boolean>(SETTINGS.ONLY_SHOW_ON_TAB, false);
+    (setting(SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION) as boolean) ||
+    (setting(SETTINGS.ONLY_SHOW_ON_TAB) as boolean);
   const execDangerous = settings?.[SETTINGS.IMMEDIATELY_RUN_DANGEROUS_COMMANDS] as boolean;
 
   if (!searchTerm) {

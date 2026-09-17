@@ -2,150 +2,39 @@ import React from "react";
 import logger from "loglevel";
 import { create, type Mutate, type StateCreator, type StoreApi } from "zustand";
 
-import type { Suggestion } from "@fig/shared/internal";
-import { fieldsAreEqual, makeArray, memoizeOne } from "@fig/shared/utils";
-import { type AliasMap, getCommand } from "@fig/shell-parser";
-import { type ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
-import type { Types } from "@fig/api-bindings";
+import { fieldsAreEqual } from "@fig/shared/utils";
+import type { ArgumentParserResult } from "@fig/autocomplete-parser";
+import type { SettingsMap } from "@fig/api-bindings/wrappers";
 import { detailedDiff } from "deep-object-diff";
-import { type FigState, initialFigState } from "../fig/hooks";
+import type { FigState } from "../fig/hooks";
 import { type AutocompleteState, type NamedSetState, Visibility } from "./types";
 
-import { updatePriorities } from "../suggestions/sorting";
-import { deduplicateSuggestions, filterSuggestions, getAllSuggestions } from "../suggestions";
-
-import type { GeneratorState } from "../generators/helpers";
-
-import { getFullHistorySuggestions } from "../history";
-import { createGeneratorState } from "./generators";
+import { getHistorySources } from "../history";
+import { getRecencyIndex } from "../suggestions/sorting";
+import { applyEffect, type Effect, storeEffects } from "./effects";
+import { createGeneratorRunner } from "./generators";
 import { createInsertionState } from "./insertion";
+import { computeSuggestions, type SuggestionsInput } from "./pipeline";
+import {
+  figStateTransition,
+  initialState,
+  parserResultTransition,
+  type Transition,
+} from "./transitions";
 
-const initialState: Partial<AutocompleteState> = {
-  figState: initialFigState,
-  parserResult: initialParserState,
-  generatorStates: [] as GeneratorState[],
-  command: null,
-
-  visibleState: Visibility.HIDDEN_UNTIL_KEYPRESS,
-  lastInsertedSuggestion: null,
-  justInserted: false,
-
-  selectedIndex: 0,
-  suggestions: [] as Suggestion[],
-  hasChangedIndex: false,
-
-  historyModeEnabled: false,
-  fuzzySearchEnabled: false,
-  userFuzzySearchEnabled: getSetting(SETTINGS.FUZZY_SEARCH, false) as boolean,
-  settings: {} as SettingsMap,
-};
-
-const getCommandMemoized = memoizeOne(getCommand);
-
-const getEnvVarsMemoized = memoizeOne(
-  (arr: Types.EnvironmentVariable[]) =>
-    Object.fromEntries(
-      arr.map((pair) => [pair.key, pair.value]).filter((pair) => pair[0] && pair[1]),
-    ),
-  ([a], [b]) =>
-    a.length === b.length &&
-    a.every((elem, index) => elem.key === b[index].key && elem.value === b[index].value),
-);
-
-// `alias` output is `name=value` in bash and zsh, the only shells the integration installs
-// into. The separator used to be chosen per shell because fish prints `name value`; the
-// `shellPath` argument existed only for that test and went with the fish integration.
-const getAliasMemoized = memoizeOne(
-  (alias: string) =>
-    alias
-      .replace(/^alias\s/gm, "")
-      .split("\n")
-      .reduce((acc, a) => {
-        try {
-          const [key, ...value] = a.split("=");
-          acc[key] = value.join("=").replace(/^'/, "").replace(/'$/, "");
-        } catch (err) {
-          logger.error(`Error parsing alias: ${a}`, err);
-        }
-        return acc;
-      }, {} as AliasMap),
-  ([aliasA], [aliasB]) => aliasA === aliasB,
-);
-
-const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => {
-  const {
-    parserResult,
-    command,
-    figState: { buffer, processUserIsIn },
-  } = state;
-  const { annotations } = parserResult;
-
-  // A scan over every history entry; only the three history branches below use it.
-  const getHistorySuggestions = () =>
-    getFullHistorySuggestions(buffer, command, processUserIsIn || "");
-
-  const specSuggestions = getAllSuggestions(
-    parserResult.currentArg,
-    parserResult.completionObj,
-    parserResult.passedOptions,
-    parserResult.suggestionFlags,
-    state.generatorStates,
-    annotations,
-  );
-
-  let suggestions = specSuggestions;
-  const historyMode = settings[SETTINGS.HISTORY_MODE] as string;
-  if (historyMode === "show") {
-    const historySuggestions = getHistorySuggestions();
-    const existingNames = new Set();
-    suggestions.forEach((suggestion) => {
-      makeArray(suggestion.name || []).forEach((name) => existingNames.add(name || ""));
-    });
-    // Remove suggestions whose names are already in fig's suggestions
-    suggestions.push(...historySuggestions.filter((x) => !existingNames.has(x.name)));
-
-    const historyPriorities: Record<string, number> = {};
-    for (let i = 0; i < historySuggestions.length; i += 1) {
-      const name = makeArray(historySuggestions[i].name)[0] || "";
-      historyPriorities[name.split(" ", 1)[0]] = historySuggestions[i].priority || 50;
-    }
-    suggestions = updatePriorities(suggestions, command?.tokens[0]?.text ?? "");
-
-    // Take highest priority if suggestion was in historySuggestions
-    suggestions = suggestions.map((suggestion) => ({
-      ...suggestion,
-      priority: Math.max(
-        suggestion.priority || 0,
-        ...makeArray(suggestion.name).map((name) => historyPriorities[name || ""] || 0),
-      ),
-    }));
-  } else if (historyMode === "history_only") {
-    suggestions = getHistorySuggestions();
-  } else if (state.historyModeEnabled) {
-    suggestions = getHistorySuggestions();
-  }
-
-  suggestions = updatePriorities(suggestions, command?.tokens[0]?.text ?? "").sort(
-    (a, b) => (b.priority || 0) - (a.priority || 0),
-  );
-
-  const filtered = filterSuggestions(
-    suggestions,
-    parserResult.searchTerm,
-    state.fuzzySearchEnabled,
-    parserResult.currentArg?.suggestCurrentToken ??
-      getSetting(SETTINGS.ALWAYS_SUGGEST_CURRENT_TOKEN, false),
-    settings,
-  );
-
-  // Deduplication is relatively slow, so we only do it if there aren't
-  // enough suggestions to cause any noticeable performance issues.
-  if (filtered.length > 0 && filtered.length <= 50) {
-    return deduplicateSuggestions(filtered, ["name", "insertValue", "displayName", "args"]);
-  }
-  return filtered;
-};
+/*
+ * The store holds inputs (edit buffer and shell context, settings, parser result, generator
+ * results, visibility and history/fuzzy toggles) and the outputs computed from them
+ * (`command`, `fuzzySearchEnabled`, `suggestions`, `selectedIndex`, `hasChangedIndex`).
+ *
+ * Data flow of one write:
+ *   action → pure transition (./transitions)        → { state, effects }
+ *          → updateSuggestions middleware: when the list may change,
+ *            pure computeSuggestions (./pipeline)     → suggestions, selection
+ *          → state written
+ *          → effects run: intercept keystrokes (from the before/after states), shell
+ *            globals and generator runs (from the transition).
+ */
 
 // zustand 5 types `replace` as a literal: `set(partial)` or `set(state, true)`.
 const applySet = <T>(
@@ -159,6 +48,31 @@ const applySet = <T>(
     set(value as Partial<T> | ((s: T) => Partial<T>));
   }
 };
+
+/** The pipeline input for `updatedState`, with the list currently on screen in `state`. */
+const suggestionsInput = (
+  state: AutocompleteState,
+  updatedState: AutocompleteState,
+): SuggestionsInput => ({
+  buffer: updatedState.figState.buffer,
+  command: updatedState.command,
+  context: { currentProcess: updatedState.figState.processUserIsIn || "" },
+  parserResult: updatedState.parserResult,
+  generatorStates: updatedState.generatorStates,
+  settings: updatedState.settings,
+  history: {
+    modeEnabled: updatedState.historyModeEnabled,
+    sources: getHistorySources(),
+    recency: getRecencyIndex(),
+  },
+  fuzzy: updatedState.fuzzySearchEnabled,
+  selection: {
+    suggestions: state.suggestions,
+    selectedIndex: state.selectedIndex,
+    hasChangedIndex: state.hasChangedIndex,
+    visible: updatedState.visibleState === Visibility.VISIBLE,
+  },
+});
 
 const updateSuggestions =
   (creator: StateCreator<AutocompleteState>): StateCreator<AutocompleteState> =>
@@ -193,40 +107,15 @@ const updateSuggestions =
           (willBeVisible === wasVisible && !suggestionsMayChange)
         ) {
           applySet(set, updatedState, replace);
-          return;
+        } else {
+          // Recompute suggestions if we change visibility state or will be visible and
+          // suggestions might change.
+          const output = computeSuggestions(suggestionsInput(state, updatedState));
+          logger.info("Recomputed suggestions", { suggestions: output.suggestions });
+          applySet(set, { ...updatedState, ...output }, replace);
         }
 
-        // Recompute suggestions if we change visibility state or will be visible and
-        // suggestions might change.
-        const suggestions = computeSuggestions(updatedState, updatedState.settings);
-        logger.info("Recomputed suggestions", { suggestions });
-
-        // If old state is visible, and user has changed the selected item try to
-        // keep the same item selected.
-        let selectedIndex = 0;
-        let hasChangedIndex = false;
-        const lastSelected = state.suggestions[state.selectedIndex];
-
-        if (state.hasChangedIndex && willBeVisible && lastSelected) {
-          const newIndex = suggestions.findIndex((suggestion: Suggestion) =>
-            fieldsAreEqual(suggestion, lastSelected, [
-              "name",
-              "type",
-              "insertValue",
-              "description",
-            ]),
-          );
-          if (newIndex !== -1) {
-            selectedIndex = newIndex;
-            hasChangedIndex = state.hasChangedIndex;
-          }
-        }
-
-        applySet(
-          set,
-          { ...state, ...update, suggestions, selectedIndex, hasChangedIndex },
-          replace,
-        );
+        storeEffects(state, get()).forEach(applyEffect);
       },
       get,
       api,
@@ -257,8 +146,29 @@ const log =
 export const useAutocompleteStore = create<AutocompleteState>()(
   updateSuggestions(
     log((setNamed, get) => {
-      const generatorState = createGeneratorState(setNamed, get);
+      const generators = createGeneratorRunner(setNamed);
       const insertionState = createInsertionState(setNamed, get);
+
+      const runEffects = (effects: readonly Effect[]) => {
+        for (const effect of effects) {
+          if (effect.kind === "runGenerator") {
+            generators.runGenerator(effect);
+          } else {
+            applyEffect(effect);
+          }
+        }
+      };
+
+      /** Writes a transition's state, then runs its effects. */
+      const dispatch = (name: string, transition: (state: AutocompleteState) => Transition) => {
+        let effects: readonly Effect[] = [];
+        setNamed(name, (state) => {
+          const next = transition(state);
+          effects = next.effects;
+          return next.state;
+        });
+        runEffects(effects);
+      };
 
       return {
         ...(initialState as AutocompleteState),
@@ -269,94 +179,9 @@ export const useAutocompleteStore = create<AutocompleteState>()(
           hasBackspacedToNewToken: boolean,
           largeBufferChange: boolean,
         ) =>
-          setNamed("setParserResult", (state) => {
-            let { visibleState, generatorStates } = state;
-
-            // Trigger all generators on currentArg change.
-            const hasNewArg = !fieldsAreEqual(parserResult, state.parserResult, [
-              "currentArg",
-              "completionObj",
-            ]);
-
-            logger.debug({ parserResult });
-
-            const newGeneratorStates = generatorState.triggerGenerators(parserResult);
-            if (
-              newGeneratorStates.length !== generatorStates.length ||
-              generatorStates.some((s, idx) => s !== newGeneratorStates[idx])
-            ) {
-              // Update if we've triggered at least one generator.
-              generatorStates = newGeneratorStates;
-            }
-
-            const originalVisibleState = visibleState;
-            switch (originalVisibleState) {
-              case Visibility.HIDDEN_UNTIL_KEYPRESS: {
-                visibleState = Visibility.VISIBLE;
-                break;
-              }
-              case Visibility.HIDDEN_BY_INSERTION: {
-                const insertionTriggeredGenerator = state.generatorStates.some(
-                  (oldState, idx) =>
-                    oldState.generator === state.lastInsertedSuggestion?.generator &&
-                    generatorStates[idx] !== oldState,
-                );
-
-                visibleState =
-                  hasNewArg || insertionTriggeredGenerator
-                    ? Visibility.VISIBLE
-                    : Visibility.HIDDEN_UNTIL_KEYPRESS;
-                break;
-              }
-              default:
-                break;
-            }
-
-            if (getSetting<boolean>(SETTINGS.ONLY_SHOW_ON_TAB, false)) {
-              visibleState = originalVisibleState;
-              if (hasNewArg) {
-                visibleState = Visibility.HIDDEN_UNTIL_SHOWN;
-              }
-            }
-
-            if (hasBackspacedToNewToken) {
-              visibleState = Visibility.HIDDEN_UNTIL_KEYPRESS;
-            }
-
-            if (largeBufferChange && !state.justInserted) {
-              visibleState = Visibility.HIDDEN_UNTIL_KEYPRESS;
-            }
-
-            const userFuzzySearchEnabled = hasNewArg
-              ? getSetting<boolean>(SETTINGS.FUZZY_SEARCH, false)
-              : state.userFuzzySearchEnabled;
-
-            const isFuzzySearchEnabled = () => {
-              // here we decide whether to use user's fuzzy search setting or not
-              switch (
-                parserResult.currentArg
-                  ? parserResult.currentArg.filterStrategy
-                  : parserResult.completionObj.filterStrategy
-              ) {
-                case "prefix":
-                  return false;
-                case "fuzzy":
-                  return true;
-                case "default":
-                default:
-                  return userFuzzySearchEnabled;
-              }
-            };
-
-            return {
-              parserResult,
-              visibleState,
-              fuzzySearchEnabled: isFuzzySearchEnabled(),
-              userFuzzySearchEnabled,
-              generatorStates,
-              justInserted: false,
-            };
-          }),
+          dispatch("setParserResult", (state) =>
+            parserResultTransition(state, parserResult, hasBackspacedToNewToken, largeBufferChange),
+          ),
 
         scroll: (index: number, visibleState: Visibility) =>
           setNamed("scroll", (state) => {
@@ -388,67 +213,7 @@ export const useAutocompleteStore = create<AutocompleteState>()(
           })),
 
         setFigState: (newFigState: React.SetStateAction<FigState>) =>
-          /*
-           * IMPORTANT: any computation in this function must be memoized,
-           * otherwise it will trigger setParserResult every time it's called
-           */
-          setNamed("setFigState", (state) => {
-            const figState =
-              typeof newFigState === "function" ? newFigState(state.figState) : newFigState;
-
-            const { sshContextString, cwd, buffer, cursorLocation, aliases, shellContext } =
-              figState;
-
-            // Set globalCWD and SSH string for completion specs that use executeShellCommand
-            if (sshContextString) {
-              window.globalSSHString = sshContextString;
-            }
-
-            if (shellContext) {
-              window.globalTerminalSessionId = shellContext.sessionId;
-
-              // protobuf-es decodes an absent repeated field as `[]`, which is truthy — so a
-              // hook that deliberately omits the environment (figterm only re-sends it when the
-              // shell context is dirty) would otherwise wipe the vars we already have.
-              if (shellContext.environmentVariables?.length) {
-                figState.environmentVariables = getEnvVarsMemoized(
-                  shellContext.environmentVariables,
-                );
-              }
-
-              if (shellContext.alias) {
-                figState.aliases = getAliasMemoized(shellContext.alias);
-              }
-            }
-
-            const error = (msg: string): AutocompleteState => {
-              logger.debug(msg);
-              return {
-                ...state,
-                ...initialState,
-                settings: state.settings,
-                figState,
-              };
-            };
-
-            if (cwd) {
-              window.globalCWD = cwd;
-            }
-
-            const cursorChar = buffer.charAt(cursorLocation);
-            if (cursorChar.trim()) {
-              return error("Cursor is in the middle of a word.");
-            }
-
-            const bufferSliced = buffer.slice(0, cursorLocation);
-
-            try {
-              const command = getCommandMemoized(bufferSliced, aliases, cursorLocation);
-              return { figState, command };
-            } catch (err) {
-              return error(`Failed to get token array: ${err}`);
-            }
-          }),
+          dispatch("setFigState", (state) => figStateTransition(state, newFigState)),
 
         error: (error: string) =>
           setNamed("error", (state) => {

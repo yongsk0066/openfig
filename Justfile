@@ -180,6 +180,11 @@ latency:
     cargo build --locked --release -p figterm -p fig_cli
     cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- latency_
 
+# Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
+# Stage 0 latency, desktop half
+latency-trace log=(env("TMPDIR", "/tmp") / "figlog" / "fig_desktop.log"):
+    scripts/latency-trace.sh "{{log}}"
+
 # Run only to refresh them.
 # ~/oss/fig/themes -> resources/themes (committed)
 vendor-themes:

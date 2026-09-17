@@ -409,16 +409,26 @@ pub struct EditBuffer {
 
 /// The expected edit buffer after the last step of `case`, from `edit_buffer.json`.
 pub fn final_edit_buffer(case: &Case) -> Result<Option<EditBuffer>> {
+    edit_buffers(case)?.pop().context("edit_buffer.json is empty")
+}
+
+/// The expected edit buffer before any input and after every step of `case`, from
+/// `edit_buffer.json`.
+pub fn edit_buffers(case: &Case) -> Result<Vec<Option<EditBuffer>>> {
     let path = ref_dir().join(case.name).join("edit_buffer.json");
     let steps: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
-    let last = steps.last().context("edit_buffer.json is empty")?;
-    Ok(match &last["edit_buffer"] {
-        Value::Null => None,
-        buffer => Some(EditBuffer {
-            text: buffer["text"].as_str().context("text")?.into(),
-            cursor: buffer["cursor"].as_i64().context("cursor")?,
-        }),
-    })
+    steps
+        .iter()
+        .map(|step| {
+            Ok(match &step["edit_buffer"] {
+                Value::Null => None,
+                buffer => Some(EditBuffer {
+                    text: buffer["text"].as_str().context("text")?.into(),
+                    cursor: buffer["cursor"].as_i64().context("cursor")?,
+                }),
+            })
+        })
+        .collect()
 }
 
 enum Recorded {

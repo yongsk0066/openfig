@@ -11,6 +11,7 @@ license.workspace = true
 anyhow.workspace = true
 libc.workspace = true
 async-trait.workspace = true
+fig_integrations.workspace = true
 fig_ipc.workspace = true
 fig_proto.workspace = true
 fig_remote_ipc.workspace = true

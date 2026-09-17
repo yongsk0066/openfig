@@ -1,4 +1,5 @@
 pub mod golden;
+pub mod hook;
 pub mod latency;
 mod shell;
 pub use shell::{

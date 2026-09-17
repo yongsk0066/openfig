@@ -272,6 +272,9 @@ pub struct Shell {
 /// What one keystroke cost, both measured from the `write` to the pty master.
 #[derive(Debug, Clone, Copy)]
 pub struct KeystrokeTiming {
+    /// Wall clock right before the `write`, to line the keystroke up with timestamps another
+    /// process logged (`figterm::latency`).
+    pub written_at: std::time::SystemTime,
     /// Until the first byte of output came back through the pty binary: what the user sees.
     pub echo: Option<Duration>,
     /// Until the edit buffer hook for the new text was decoded by the stub desktop.
@@ -611,6 +614,7 @@ impl Shell {
         while self.events.try_recv().is_ok() {}
         while self.output_at.try_recv().is_ok() {}
 
+        let written_at = std::time::SystemTime::now();
         let start = Instant::now();
         self.writer.write_all(key.as_bytes())?;
         self.writer.flush()?;
@@ -632,7 +636,7 @@ impl Shell {
             _ => None,
         };
 
-        Ok(KeystrokeTiming { echo, hook })
+        Ok(KeystrokeTiming { written_at, echo, hook })
     }
 
     /// Every edit buffer hook that reached the stub desktop since the last call (or the last

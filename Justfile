@@ -190,6 +190,14 @@ golden-record cases="":
     FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p figterm2 --run-ignored only --no-capture -- golden_record
     cargo nextest run --locked -p figterm -- golden::
 
+# Same keys with FIG_LOG_LEVEL=figterm::latency=trace: median/p90 per segment of the pty binary's
+# pass-through (stdin read, input batching, pty write, shell, pty read, parse, echo, edit buffer,
+# hook), joined by wall clock (docs/10-execution-plan.md open item 22).
+# Stage 0 latency, pty binary segments
+latency-segments:
+    cargo build --locked --release -p figterm -p fig_cli
+    FIG_LOG_LEVEL=figterm::latency=trace cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- segments_
+
 # Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
 # Stage 0 latency, desktop half
 latency-trace log=(env("TMPDIR", "/tmp") / "figlog" / "fig_desktop.log"):

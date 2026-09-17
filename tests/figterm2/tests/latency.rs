@@ -208,3 +208,131 @@ async fn latency_desktop_drive() {
     }
     println!("latency_desktop_drive: {keys} keys into {shell_name}");
 }
+
+/// Keys for [`segments`]: `TEXT` typed and erased this many times, 216 keys.
+const SEGMENT_ROUNDS: usize = 6;
+
+/// Where the pass-through time goes (docs/10-execution-plan.md open item 22): the same keystrokes
+/// as [`measure`], lined up against the pty binary's own `figterm::latency` marks by wall clock.
+/// Needs `FIG_LOG_LEVEL=figterm::latency=trace` in the environment, which the shell and the pty
+/// binary inherit; `just latency-segments` sets it. Every other target stays at the default level,
+/// so the marks are the only logging on the path.
+async fn segments(shell_name: &str) {
+    let level = std::env::var("FIG_LOG_LEVEL").unwrap_or_default();
+    if !level.contains("figterm::latency=trace") {
+        println!("segments: FIG_LOG_LEVEL=figterm::latency=trace is not set, nothing measured");
+        return;
+    }
+
+    let mut shell = Shell::spawn(shell_name, Echo::Discard).await.unwrap();
+    shell.keystroke("x", "x", TIMEOUT).await.unwrap();
+    tokio::time::sleep(PACE).await;
+    shell.keystroke(BACKSPACE, "", TIMEOUT).await.unwrap();
+    tokio::time::sleep(PACE).await;
+
+    let mut keys: Vec<KeystrokeTiming> = Vec::new();
+    for _ in 0..SEGMENT_ROUNDS {
+        for (i, c) in TEXT.char_indices() {
+            let expected = &TEXT[..i + c.len_utf8()];
+            keys.push(shell.keystroke(&c.to_string(), expected, TIMEOUT).await.unwrap());
+            tokio::time::sleep(PACE).await;
+        }
+        for len in (0..TEXT.len()).rev() {
+            keys.push(shell.keystroke(BACKSPACE, &TEXT[..len], TIMEOUT).await.unwrap());
+            tokio::time::sleep(PACE).await;
+        }
+    }
+    // The pty binary's log writer is a background thread.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let mut log = String::new();
+    let mut logs = Vec::new();
+    let mut dirs = vec![shell.tempdir.path().to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "log") {
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                logs.push((path, text.len()));
+                log.push_str(&text);
+            }
+        }
+    }
+    let marks = figterm2::latency::parse_marks(&log);
+    assert!(
+        !marks.is_empty(),
+        "{shell_name}: no figterm::latency marks in the pty binary's logs {logs:?}; first lines:\n{}",
+        log.lines().take(5).collect::<Vec<_>>().join("\n")
+    );
+
+    let wall_us = |t: std::time::SystemTime| t.duration_since(std::time::UNIX_EPOCH).unwrap().as_micros() as u64;
+    let names: Vec<String> = std::iter::once("key")
+        .chain(figterm2::latency::POINTS.iter().copied())
+        .collect::<Vec<_>>()
+        .windows(2)
+        .map(|pair| format!("{}→{}", pair[0], pair[1]))
+        .chain([
+            "hook_queued→stub".to_owned(),
+            "key→echo".to_owned(),
+            "key→hook".to_owned(),
+        ])
+        .collect();
+    let mut samples: Vec<Vec<Duration>> = vec![Vec::new(); names.len()];
+    let mut incomplete = 0;
+    for (i, key) in keys.iter().enumerate() {
+        let written = wall_us(key.written_at);
+        let until = keys.get(i + 1).map_or(u64::MAX, |next| wall_us(next.written_at));
+        let Some(points) = figterm2::latency::chain(&marks, written, until) else {
+            incomplete += 1;
+            continue;
+        };
+        let hook = written + key.hook.as_micros() as u64;
+        let times: Vec<u64> = std::iter::once(written)
+            .chain(points.iter().copied())
+            .chain([hook])
+            .collect();
+        for (j, pair) in times.windows(2).enumerate() {
+            samples[j].push(Duration::from_micros(pair[1].saturating_sub(pair[0])));
+        }
+        samples[names.len() - 2].extend(key.echo);
+        samples[names.len() - 1].push(key.hook);
+    }
+
+    println!(
+        "segments {shell_name}: {} keys, {incomplete} without a complete chain",
+        keys.len()
+    );
+    println!(
+        "segments {shell_name}: {:<24} {:>4} {:>9} {:>9} {:>9}",
+        "segment (µs)", "n", "median", "p90", "max"
+    );
+    for (name, samples) in names.iter().zip(&samples) {
+        let summary = Summary::of(samples).expect("no samples");
+        println!(
+            "segments {shell_name}: {name:<24} {:>4} {:>9} {:>9} {:>9}",
+            summary.n,
+            summary.median.as_micros(),
+            summary.p90.as_micros(),
+            summary.max.as_micros()
+        );
+    }
+    assert!(
+        keys.len() - incomplete >= 200,
+        "{shell_name}: only {} complete keys",
+        keys.len() - incomplete
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: `just latency-segments`"]
+async fn segments_zsh() {
+    segments("zsh").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: `just latency-segments`"]
+async fn segments_bash() {
+    segments("bash").await;
+}

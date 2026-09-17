@@ -48,8 +48,9 @@ pub(crate) async fn read_file(request: ReadFileRequest, env: &Env) -> RequestRes
 pub(crate) async fn write_file(request: WriteFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::write_file_request::Data;
     let path = request.path.as_ref().ok_or_else(|| "No path provided".to_string())?;
+    let data = request.data.ok_or("No data provided")?;
     let resolved_path = resolve_filepath(path, env);
-    match request.data.unwrap() {
+    match data {
         Data::Binary(data) => tokio::fs::write(&*resolved_path, data)
             .await
             .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?,
@@ -64,6 +65,7 @@ pub(crate) async fn write_file(request: WriteFileRequest, env: &Env) -> RequestR
 pub(crate) async fn append_to_file(request: AppendToFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::append_to_file_request::Data;
     let path = request.path.as_ref().ok_or_else(|| "No path provided".to_string())?;
+    let data = request.data.ok_or("No data provided")?;
     let resolved_path = resolve_filepath(path, env);
     let mut file = OpenOptions::new()
         .append(true)
@@ -71,16 +73,20 @@ pub(crate) async fn append_to_file(request: AppendToFileRequest, env: &Env) -> R
         .await
         .map_err(|err| format!("Failed opening file at {resolved_path}: {err}"))?;
 
-    match request.data.unwrap() {
-        Data::Binary(data) => file
-            .write(&data)
-            .await
-            .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?,
-        Data::Text(data) => file
-            .write(data.as_bytes())
-            .await
-            .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?,
+    let bytes = match &data {
+        Data::Binary(data) => data.as_slice(),
+        Data::Text(data) => data.as_bytes(),
     };
+    // `write` is one `write(2)`, and tokio's `File` also caps a single write at 2 MiB, so a larger
+    // append used to report success after writing only part of the data. `File` hands the bytes
+    // to a blocking task and returns before they reach the file; `flush` waits for that write, so
+    // its error is reported here and a read that follows this response sees the appended data.
+    file.write_all(bytes)
+        .await
+        .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?;
+    file.flush()
+        .await
+        .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?;
 
     RequestResult::success()
 }
@@ -149,6 +155,7 @@ pub(crate) async fn create_directory_request(
 mod tests {
     use camino::Utf8PathBuf;
     use fig_proto::fig::{
+        AppendToFileRequest,
         FilePath,
         ReadFileRequest,
         WriteFileRequest,
@@ -158,6 +165,21 @@ mod tests {
 
     fn temp_file(dir: &tempfile::TempDir, name: &str) -> Utf8PathBuf {
         Utf8PathBuf::try_from(dir.path().join(name)).unwrap()
+    }
+
+    fn file_path(path: &Utf8PathBuf) -> Option<FilePath> {
+        Some(FilePath {
+            path: path.to_string(),
+            relative_to: None,
+            expand_tilde_in_path: None,
+        })
+    }
+
+    fn error_message(result: RequestResult) -> String {
+        match result {
+            Err(err) => err.to_string(),
+            Ok(response) => panic!("expected an error, got {response:?}"),
+        }
     }
 
     #[tokio::test]
@@ -230,5 +252,82 @@ mod tests {
 
         let read_content = std::fs::read(&path).unwrap();
         assert_eq!(content.as_bytes(), &read_content[..]);
+    }
+
+    /// A request with a path but no `data` used to hit `request.data.unwrap()` and panic the
+    /// handler instead of answering with an error.
+    #[tokio::test]
+    async fn write_file_without_data_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = temp_file(&dir, "test.txt");
+
+        let request = WriteFileRequest {
+            path: file_path(&path),
+            data: None,
+        };
+        assert_eq!(
+            error_message(write_file(request, &Env::new()).await),
+            "No data provided"
+        );
+        assert!(!path.exists(), "a request without data must not create the file");
+    }
+
+    #[tokio::test]
+    async fn append_to_file_without_data_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = temp_file(&dir, "test.txt");
+        std::fs::write(&path, "unchanged").unwrap();
+
+        let request = AppendToFileRequest {
+            path: file_path(&path),
+            data: None,
+        };
+        assert_eq!(
+            error_message(append_to_file(request, &Env::new()).await),
+            "No data provided"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "unchanged");
+    }
+
+    #[tokio::test]
+    async fn append_to_file_appends_text_and_binary() {
+        use fig_proto::fig::append_to_file_request::Data;
+
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::new();
+        let path = temp_file(&dir, "test.txt");
+        std::fs::write(&path, "a").unwrap();
+
+        for data in [Data::Text("b".into()), Data::Binary(b"c".to_vec())] {
+            let request = AppendToFileRequest {
+                path: file_path(&path),
+                data: Some(data),
+            };
+            append_to_file(request, &env).await.unwrap();
+        }
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "abc");
+    }
+
+    /// tokio's `File::write` takes at most 2 MiB per call, so with `write` instead of `write_all`
+    /// this append reported success after writing two thirds of the data.
+    #[tokio::test]
+    async fn append_to_file_writes_everything() {
+        use fig_proto::fig::append_to_file_request::Data;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = temp_file(&dir, "test.bin");
+        std::fs::write(&path, b"").unwrap();
+
+        let data: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+        let request = AppendToFileRequest {
+            path: file_path(&path),
+            data: Some(Data::Binary(data.clone())),
+        };
+        append_to_file(request, &Env::new()).await.unwrap();
+
+        let written = std::fs::read(&path).unwrap();
+        assert_eq!(written.len(), data.len());
+        assert!(written == data);
     }
 }

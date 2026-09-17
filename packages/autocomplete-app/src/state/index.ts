@@ -81,7 +81,9 @@ const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => 
   } = state;
   const { annotations } = parserResult;
 
-  const historySuggestions = getFullHistorySuggestions(buffer, command, processUserIsIn || "");
+  // A scan over every history entry; only the three history branches below use it.
+  const getHistorySuggestions = () =>
+    getFullHistorySuggestions(buffer, command, processUserIsIn || "");
 
   const specSuggestions = getAllSuggestions(
     parserResult.currentArg,
@@ -95,6 +97,7 @@ const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => 
   let suggestions = specSuggestions;
   const historyMode = settings[SETTINGS.HISTORY_MODE] as string;
   if (historyMode === "show") {
+    const historySuggestions = getHistorySuggestions();
     const existingNames = new Set();
     suggestions.forEach((suggestion) => {
       makeArray(suggestion.name || []).forEach((name) => existingNames.add(name || ""));
@@ -118,9 +121,9 @@ const computeSuggestions = (state: AutocompleteState, settings: SettingsMap) => 
       ),
     }));
   } else if (historyMode === "history_only") {
-    suggestions = historySuggestions;
+    suggestions = getHistorySuggestions();
   } else if (state.historyModeEnabled) {
-    suggestions = historySuggestions;
+    suggestions = getHistorySuggestions();
   }
 
   suggestions = updatePriorities(suggestions, command?.tokens[0]?.text ?? "").sort(

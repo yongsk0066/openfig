@@ -46,6 +46,7 @@ use tracing::{
     trace,
     warn,
 };
+use tray_icon::TrayIcon;
 use window::WindowState;
 use wry::{
     Theme as WryTheme,
@@ -288,11 +289,12 @@ impl WebviewManager {
 
         init_webview_notification_listeners(self.event_loop.create_proxy()).await;
 
+        // The tray icon is created inside the loop, at `StartCause::Init`, not here: tray-icon
+        // (0.24) requires the macOS event loop to be running on the main thread when the status
+        // item is created. Built before `event_loop.run`, it silently never appeared in the
+        // menu bar (observed after the tao/wry/tray-icon bump, 2026-09-17).
         let tray_visible = !fig_settings::settings::get_bool_or("app.hideMenubarIcon", false);
-        let tray = build_tray().unwrap();
-        if let Err(err) = tray.set_visible(tray_visible) {
-            error!(%err, "Failed to set tray visible");
-        }
+        let mut tray: Option<TrayIcon> = None;
 
         let menu_bar = menu_bar();
         menu_bar.init_for_nsapp();
@@ -319,7 +321,18 @@ impl WebviewManager {
             trace!(?event, "Main loop event");
 
             match event {
-                WryEvent::NewEvents(StartCause::Init) => info!("{PRODUCT_NAME} has started"),
+                WryEvent::NewEvents(StartCause::Init) => {
+                    info!("{PRODUCT_NAME} has started");
+                    match build_tray() {
+                        Ok(icon) => {
+                            if let Err(err) = icon.set_visible(tray_visible) {
+                                error!(%err, "Failed to set tray visible");
+                            }
+                            tray = Some(icon);
+                        },
+                        Err(err) => error!(%err, "Failed to build the tray icon"),
+                    }
+                },
                 WryEvent::WindowEvent { event, window_id, .. } => {
                     if let Some(window_state) = self.window_id_map.get(&window_id) {
                         match event {
@@ -429,7 +442,9 @@ impl WebviewManager {
                             });
                         },
                         Event::SetTrayVisible(visible) => {
-                            if let Err(err) = tray.set_visible(visible) {
+                            if let Some(tray) = tray.as_ref()
+                                && let Err(err) = tray.set_visible(visible)
+                            {
                                 error!(%err, "Failed to set tray visible");
                             }
                         },

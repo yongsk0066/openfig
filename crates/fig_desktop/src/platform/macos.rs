@@ -321,6 +321,30 @@ impl PlatformState {
             },
             PlatformBoundEvent::InitializePostRun => {
                 super::objc_overrides::install(window_map);
+
+                // Accessibility trust is only re-evaluated on the `com.apple.accessibility.api`
+                // distributed notification, which fires when the user flips the switch — never
+                // at login. Launched by the LaunchAgent early in the session, `AXIsProcessTrusted`
+                // can answer `false` before TCC is ready, and the app then tracked nothing until
+                // the next restart (2026-09-17). Poll cheaply and reconcile on change.
+                let proxy = self.proxy.clone();
+                tokio::runtime::Handle::current().spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    loop {
+                        interval.tick().await;
+                        let enabled = accessibility_is_enabled();
+                        if enabled != ACCESSIBILITY_ENABLED.load(Ordering::SeqCst)
+                            && proxy
+                                .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::AccessibilityUpdated {
+                                    enabled,
+                                }))
+                                .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
                 Ok(())
             },
             PlatformBoundEvent::EditBufferChanged => {

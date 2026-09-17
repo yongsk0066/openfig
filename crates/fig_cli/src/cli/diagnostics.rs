@@ -106,10 +106,7 @@ pub async fn get_diagnostics() -> Result<DiagnosticsResponse> {
 
 use std::collections::BTreeMap;
 
-use fig_os_shim::{
-    Context,
-    Os,
-};
+use fig_os_shim::Context;
 use fig_util::consts::build::HASH;
 use fig_util::{
     Shell,
@@ -270,7 +267,7 @@ impl EnvVarDiagnostic {
 pub struct CurrentEnvironment {
     cwd: Option<String>,
     cli_path: Option<String>,
-    os: Os,
+    os: &'static str,
     shell_path: Option<String>,
     shell_version: Option<String>,
     #[serde(serialize_with = "serialize_display_option")]
@@ -307,7 +304,8 @@ impl CurrentEnvironment {
             .ok()
             .map(|path| path.to_string_lossy().replace(&username, "/USER"));
 
-        let os = Os::Mac;
+        // The only platform this fork builds for; the report has always spelled it `Mac`.
+        let os = "Mac";
         let terminal = Terminal::parent_terminal(&ctx);
 
         let in_ssh = crate::util::system_info::in_ssh();

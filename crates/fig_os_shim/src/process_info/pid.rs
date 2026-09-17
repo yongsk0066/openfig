@@ -1,9 +1,6 @@
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::Weak;
-use std::{
-    fmt,
-    str,
-};
 
 use super::macos::{
     cmdline,
@@ -44,51 +41,20 @@ impl std::fmt::Display for Pid {
     }
 }
 
-macro_rules! pid_decl {
-    ($typ:ty) => {
-        /// Wrapper around the platform's actual process id type.
-        #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-        #[repr(transparent)]
-        pub struct RawPid(pub(crate) $typ);
+/// Wrapper around the platform's actual process id type.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct RawPid(pub(crate) nix::libc::pid_t);
 
-        impl From<$typ> for RawPid {
-            fn from(v: $typ) -> Self {
-                Self(v)
-            }
-        }
-        impl From<RawPid> for $typ {
-            fn from(v: RawPid) -> Self {
-                v.0
-            }
-        }
-        impl str::FromStr for RawPid {
-            type Err = <$typ as str::FromStr>::Err;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                Ok(Self(<$typ>::from_str(s)?))
-            }
-        }
-        impl fmt::Display for RawPid {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{}", self.0)
-            }
-        }
-    };
+impl fmt::Display for RawPid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
-
-use nix::libc::pid_t;
-
-pid_decl!(pid_t);
 
 impl From<nix::unistd::Pid> for RawPid {
     fn from(pid: nix::unistd::Pid) -> Self {
         RawPid(pid.as_raw())
-    }
-}
-
-impl From<RawPid> for nix::unistd::Pid {
-    fn from(pid: RawPid) -> Self {
-        nix::unistd::Pid::from_raw(pid.0)
     }
 }
 

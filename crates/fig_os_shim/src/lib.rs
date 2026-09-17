@@ -1,21 +1,15 @@
 mod env;
-mod fs;
-mod platform;
 pub mod process_info;
 mod providers;
 
 use std::sync::Arc;
 
 pub use env::Env;
-pub use fs::Fs;
-pub use platform::Os;
-use process_info::FakePid;
 pub use process_info::ProcessInfo;
 pub use providers::{
     ContextArcProvider,
     ContextProvider,
     EnvProvider,
-    FsProvider,
 };
 
 pub trait Shim {
@@ -23,15 +17,13 @@ pub trait Shim {
     fn is_real(&self) -> bool;
 }
 
-/// Struct that contains the interface to every system related IO operation.
+/// The process environment and the process tree, each either real or faked.
 ///
-/// Every operation that accesses the file system, environment, or other related platform
-/// primitives should be done through a [Context] as this enables testing otherwise untestable
-/// code paths in unit tests.
+/// These are the two things tests cannot otherwise control without `unsafe` environment writes
+/// or a real parent process chain: `should_figterm_launch` decides from the parent and
+/// grandparent executables, and several code paths read `HOME` and friends.
 #[derive(Debug, Clone)]
 pub struct Context {
-    #[allow(dead_code)]
-    fs: Fs,
     env: Env,
     process_info: ProcessInfo,
 }
@@ -40,22 +32,9 @@ impl Context {
     /// Returns a new [Context] with real implementations of each OS shim.
     pub fn new() -> Arc<Self> {
         Arc::new_cyclic(|ctx| Self {
-            fs: Default::default(),
             env: Default::default(),
             process_info: ProcessInfo::new(ctx.clone()),
         })
-    }
-
-    pub fn new_fake() -> Arc<Self> {
-        Arc::new(Self {
-            fs: Fs::new_fake(),
-            env: Env::new_fake(),
-            process_info: ProcessInfo::new_fake(FakePid::default()),
-        })
-    }
-
-    fn fs(&self) -> &Fs {
-        &self.fs
     }
 
     pub fn env(&self) -> &Env {
@@ -69,7 +48,6 @@ impl Context {
 
 #[derive(Default, Debug)]
 pub struct ContextBuilder {
-    fs: Option<Fs>,
     env: Option<Env>,
     process_info: Option<ProcessInfo>,
 }
@@ -81,10 +59,8 @@ impl ContextBuilder {
 
     /// Builds an immutable [Context] using real implementations for each field by default.
     pub fn build(self) -> Arc<Context> {
-        let fs = self.fs.unwrap_or_default();
         let env = self.env.unwrap_or_default();
         Arc::new_cyclic(|ctx| Context {
-            fs,
             env,
             process_info: if let Some(process_info) = self.process_info {
                 process_info
@@ -102,18 +78,6 @@ impl ContextBuilder {
     pub fn with_process_info(mut self, process_info: ProcessInfo) -> Self {
         self.process_info = Some(process_info);
         self
-    }
-
-    /// Creates a chroot filesystem and fake environment so that `$HOME`
-    /// points to `<tempdir>/home/testuser`. Note that this replaces the
-    /// [Fs] and [Env] currently set with the builder.
-    pub async fn with_test_home(mut self) -> Result<Self, std::io::Error> {
-        let home = "/home/testuser";
-        let fs = Fs::new_chroot();
-        fs.create_dir_all(home).await?;
-        self.fs = Some(fs);
-        self.env = Some(Env::from_slice(&[("HOME", "/home/testuser"), ("USER", "testuser")]));
-        Ok(self)
     }
 
     pub fn with_env_var(mut self, key: &str, value: &str) -> Self {
@@ -147,20 +111,20 @@ mod tests {
     #[test]
     fn context_builder_returns_real_impls_by_default() {
         let ctx = ContextBuilder::new().build();
-        assert!(ctx.fs().is_real());
         assert!(ctx.env().is_real());
         assert!(ctx.process_info().is_real());
     }
 
-    #[tokio::test]
-    async fn test_context_builder_with_test_home() {
+    /// `with_env_var` on a builder that already holds a fake environment adds to it: the
+    /// `!env.is_real()` arm, whose `Env::set_var` call the `SAFETY` proof in `with_env_var`
+    /// covers.
+    #[test]
+    fn with_env_var_extends_a_fake_env() {
         let ctx = ContextBuilder::new()
-            .with_test_home()
-            .await
-            .unwrap()
+            .with_env(Env::from_slice(&[("HOME", "/home/testuser")]))
             .with_env_var("hello", "world")
             .build();
-        assert!(ctx.fs().try_exists("/home/testuser").await.unwrap());
+        assert!(!ctx.env().is_real());
         assert_eq!(ctx.env().get("HOME").unwrap(), "/home/testuser");
         assert_eq!(ctx.env().get("hello").unwrap(), "world");
     }

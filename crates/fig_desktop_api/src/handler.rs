@@ -5,7 +5,6 @@ use fig_os_shim::{
     ContextArcProvider,
     ContextProvider,
     EnvProvider,
-    FsProvider,
 };
 pub use fig_proto::fig::client_originated_message::Submessage as ClientOriginatedSubMessage;
 pub use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
@@ -40,7 +39,7 @@ pub struct Wrapped<Ctx, Req> {
 
 #[async_trait::async_trait]
 pub trait EventHandler {
-    type Ctx: EnvProvider + FsProvider + Sync + Send;
+    type Ctx: EnvProvider + Sync + Send;
 
     async fn notification(&self, request: Wrapped<Self::Ctx, NotificationRequest>) -> RequestResult {
         RequestResult::unimplemented(request.request)
@@ -168,14 +167,14 @@ where
                 // figterm
                 InsertTextRequest(request) => event_handler.insert_text(request!(request)).await,
                 // fs
-                ReadFileRequest(request) => fs::read_file(request, ctx.env(), ctx.fs()).await,
-                WriteFileRequest(request) => fs::write_file(request, ctx.env(), ctx.fs()).await,
+                ReadFileRequest(request) => fs::read_file(request, ctx.env()).await,
+                WriteFileRequest(request) => fs::write_file(request, ctx.env()).await,
                 AppendToFileRequest(request) => fs::append_to_file(request, ctx.env()).await,
                 DestinationOfSymbolicLinkRequest(request) => {
                     requests::fs::destination_of_symbolic_link(request, ctx.env()).await
                 },
                 ContentsOfDirectoryRequest(request) => fs::contents_of_directory(request, ctx.env()).await,
-                CreateDirectoryRequest(request) => fs::create_directory_request(request, ctx.env(), ctx.fs()).await,
+                CreateDirectoryRequest(request) => fs::create_directory_request(request, ctx.env()).await,
                 // notifications
                 NotificationRequest(request) => event_handler.notification(request!(request)).await,
                 // process

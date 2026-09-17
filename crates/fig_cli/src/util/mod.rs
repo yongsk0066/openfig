@@ -1,4 +1,3 @@
-mod cli_context;
 pub mod desktop;
 pub mod system_info;
 
@@ -21,7 +20,6 @@ use std::time::Duration;
 
 use anstream::println;
 use anstream::stream::IsTerminal;
-pub use cli_context::CliContext;
 use crossterm::style::Stylize;
 use desktop::desktop_app_running;
 use dialoguer::Select;

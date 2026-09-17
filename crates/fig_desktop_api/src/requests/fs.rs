@@ -1,8 +1,5 @@
 use camino::Utf8PathBuf;
-use fig_os_shim::{
-    Env,
-    Fs,
-};
+use fig_os_shim::Env;
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     AppendToFileRequest,
@@ -26,19 +23,19 @@ use crate::util::{
     resolve_filepath,
 };
 
-pub(crate) async fn read_file(request: ReadFileRequest, env: &Env, fs: &Fs) -> RequestResult {
+pub(crate) async fn read_file(request: ReadFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::read_file_response::Type;
     let path = request.path.as_ref().ok_or("No path provided")?;
     let resolved_path = resolve_filepath(path, env);
     let kind = if request.is_binary_file() {
         Type::Data(
-            fs.read(&*resolved_path)
+            tokio::fs::read(&*resolved_path)
                 .await
                 .map_err(|err| format!("Failed reading file at {resolved_path}: {err}"))?,
         )
     } else {
         Type::Text(
-            fs.read_to_string(&*resolved_path)
+            tokio::fs::read_to_string(&*resolved_path)
                 .await
                 .map_err(|err| format!("Failed reading file at {resolved_path}: {err}"))?,
         )
@@ -48,17 +45,15 @@ pub(crate) async fn read_file(request: ReadFileRequest, env: &Env, fs: &Fs) -> R
     Ok(response.into())
 }
 
-pub(crate) async fn write_file(request: WriteFileRequest, env: &Env, fs: &Fs) -> RequestResult {
+pub(crate) async fn write_file(request: WriteFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::write_file_request::Data;
     let path = request.path.as_ref().ok_or_else(|| "No path provided".to_string())?;
     let resolved_path = resolve_filepath(path, env);
     match request.data.unwrap() {
-        Data::Binary(data) => fs
-            .write(&*resolved_path, data)
+        Data::Binary(data) => tokio::fs::write(&*resolved_path, data)
             .await
             .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?,
-        Data::Text(data) => fs
-            .write(&*resolved_path, data.as_bytes())
+        Data::Text(data) => tokio::fs::write(&*resolved_path, data.as_bytes())
             .await
             .map_err(|err| format!("Failed writing to file at {resolved_path}: {err}"))?,
     }
@@ -134,16 +129,15 @@ pub(crate) async fn contents_of_directory(request: ContentsOfDirectoryRequest, e
 pub(crate) async fn create_directory_request(
     request: fig_proto::fig::CreateDirectoryRequest,
     env: &Env,
-    fs: &Fs,
 ) -> RequestResult {
     let path = request.path.as_ref().ok_or("No path provided")?;
     let resolved_path = resolve_filepath(path, env);
     if request.recursive() {
-        fs.create_dir_all(&*resolved_path)
+        tokio::fs::create_dir_all(&*resolved_path)
             .await
             .map_err(|err| format!("Failed to create dir: {err}"))?;
     } else {
-        fs.create_dir(&*resolved_path)
+        tokio::fs::create_dir(&*resolved_path)
             .await
             .map_err(|err| format!("Failed to create dir: {err}"))?;
     }
@@ -162,16 +156,20 @@ mod tests {
 
     use super::*;
 
+    fn temp_file(dir: &tempfile::TempDir, name: &str) -> Utf8PathBuf {
+        Utf8PathBuf::try_from(dir.path().join(name)).unwrap()
+    }
+
     #[tokio::test]
     async fn test_read_file() {
         use fig_proto::fig::read_file_response::Type;
 
-        let fs = Fs::new_fake();
+        let dir = tempfile::tempdir().unwrap();
         let env = Env::new();
 
-        let path = Utf8PathBuf::from("/test.txt");
+        let path = temp_file(&dir, "test.txt");
         let content = "Hello, World!";
-        fs.write(&path, content.as_bytes()).await.unwrap();
+        std::fs::write(&path, content).unwrap();
 
         let mut request = ReadFileRequest {
             path: Some(FilePath {
@@ -182,7 +180,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = read_file(request.clone(), &env, &fs).await.unwrap();
+        let result = read_file(request.clone(), &env).await.unwrap();
         let text = match *result {
             ServerOriginatedSubMessage::ReadFileResponse(ReadFileResponse {
                 r#type: Some(Type::Text(text)),
@@ -193,7 +191,7 @@ mod tests {
 
         request.is_binary_file = Some(true);
 
-        let result = read_file(request, &env, &fs).await.unwrap();
+        let result = read_file(request, &env).await.unwrap();
         let data = match *result {
             ServerOriginatedSubMessage::ReadFileResponse(ReadFileResponse {
                 r#type: Some(Type::Data(data)),
@@ -207,10 +205,10 @@ mod tests {
     async fn test_write_file() {
         use fig_proto::fig::write_file_request::Data;
 
-        let fs = Fs::new_fake();
+        let dir = tempfile::tempdir().unwrap();
         let env = Env::new();
 
-        let path = Utf8PathBuf::from("/test.txt");
+        let path = temp_file(&dir, "test.txt");
         let content = "Hello, World!";
 
         let mut request = WriteFileRequest {
@@ -222,15 +220,15 @@ mod tests {
             data: Some(Data::Text(content.to_string())),
         };
 
-        write_file(request.clone(), &env, &fs).await.unwrap();
+        write_file(request.clone(), &env).await.unwrap();
 
-        let read_content = fs.read_to_string(&path).await.unwrap();
+        let read_content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content, read_content);
 
         request.data = Some(Data::Binary(content.as_bytes().to_vec()));
-        write_file(request, &env, &fs).await.unwrap();
+        write_file(request, &env).await.unwrap();
 
-        let read_content = fs.read(&path).await.unwrap();
+        let read_content = std::fs::read(&path).unwrap();
         assert_eq!(content.as_bytes(), &read_content[..]);
     }
 }

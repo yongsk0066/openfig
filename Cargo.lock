@@ -1391,6 +1391,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -1451,9 +1452,6 @@ version = "1.19.7"
 dependencies = [
  "dirs 7.0.0",
  "nix 0.31.3",
- "serde",
- "tempfile",
- "tokio",
 ]
 
 [[package]]

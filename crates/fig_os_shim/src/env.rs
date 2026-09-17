@@ -184,10 +184,6 @@ impl Env {
     pub fn fig_init_snapshot_test(&self) -> bool {
         self.get_os("FIG_INIT_SNAPSHOT_TEST").is_some()
     }
-
-    pub fn fig_prompt_offset_workaround(&self) -> Result<String, VarError> {
-        self.get("FIG_PROMPT_OFFSET_WORKAROUND")
-    }
 }
 
 impl Shim for Env {

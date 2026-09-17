@@ -31,3 +31,4 @@ which.workspace = true
 whoami.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true

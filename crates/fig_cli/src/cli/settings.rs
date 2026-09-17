@@ -21,13 +21,10 @@ use globset::Glob;
 use serde_json::json;
 
 use super::OutputFormat;
+use crate::util::app_not_running_message;
 use crate::util::desktop::{
     LaunchArgs,
     launch_fig_desktop,
-};
-use crate::util::{
-    CliContext,
-    app_not_running_message,
 };
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
@@ -56,7 +53,7 @@ pub struct SettingsArgs {
 }
 
 impl SettingsArgs {
-    pub async fn execute(&self, _cli_context: &CliContext) -> Result<ExitCode> {
+    pub async fn execute(&self) -> Result<ExitCode> {
         macro_rules! print_connection_error {
             () => {
                 println!("{}", app_not_running_message());

@@ -56,7 +56,6 @@ use tracing::{
 };
 
 use self::integrations::IntegrationsSubcommands;
-use crate::util::CliContext;
 use crate::util::desktop::{
     LaunchArgs,
     launch_fig_desktop,
@@ -235,8 +234,6 @@ impl Cli {
             return self.print_help_all();
         }
 
-        let cli_context = CliContext::new();
-
         match self.subcommand {
             Some(subcommand) => match subcommand {
                 CliRootCommands::Setup(args) => {
@@ -251,7 +248,7 @@ impl Cli {
                 CliRootCommands::Doctor(args) => args.execute().await,
                 CliRootCommands::Hook(hook_subcommand) => hook_subcommand.execute().await,
                 CliRootCommands::Theme(theme_args) => theme_args.execute().await,
-                CliRootCommands::Settings(settings_args) => settings_args.execute(&cli_context).await,
+                CliRootCommands::Settings(settings_args) => settings_args.execute().await,
                 CliRootCommands::Debug(debug_subcommand) => debug_subcommand.execute().await,
                 CliRootCommands::Completion(args) => args.execute(),
                 CliRootCommands::Internal(internal_subcommand) => internal_subcommand.execute().await,

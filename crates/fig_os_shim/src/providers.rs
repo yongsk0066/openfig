@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::{
     Context,
     Env,
-    Fs,
 };
 
 pub trait ContextProvider {
@@ -54,25 +53,6 @@ where
     }
 }
 
-pub trait FsProvider {
-    fn fs(&self) -> &Fs;
-}
-
-impl FsProvider for Fs {
-    fn fs(&self) -> &Fs {
-        self
-    }
-}
-
-impl<T> FsProvider for T
-where
-    T: ContextProvider,
-{
-    fn fs(&self) -> &Fs {
-        self.context().fs()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,12 +62,5 @@ mod tests {
         let env = Env::default();
         let env_provider = &env as &dyn EnvProvider;
         env_provider.env();
-    }
-
-    #[test]
-    fn test_fs_provider() {
-        let fs = Fs::default();
-        let fs_provider = &fs as &dyn FsProvider;
-        fs_provider.fs();
     }
 }

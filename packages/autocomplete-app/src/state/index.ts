@@ -20,6 +20,7 @@ import {
   initialState,
   parserResultTransition,
   type Transition,
+  userFuzzySearchTransition,
 } from "./transitions";
 
 /*
@@ -205,12 +206,9 @@ export const useAutocompleteStore = create<AutocompleteState>()(
           })),
 
         setUserFuzzySearchEnabled: (userFuzzySearchEnabled: React.SetStateAction<boolean>) =>
-          setNamed("setUserFuzzySearchEnabled", (state) => ({
-            userFuzzySearchEnabled:
-              typeof userFuzzySearchEnabled === "function"
-                ? userFuzzySearchEnabled(state.userFuzzySearchEnabled)
-                : userFuzzySearchEnabled,
-          })),
+          dispatch("setUserFuzzySearchEnabled", (state) =>
+            userFuzzySearchTransition(state, userFuzzySearchEnabled),
+          ),
 
         setFigState: (newFigState: React.SetStateAction<FigState>) =>
           dispatch("setFigState", (state) => figStateTransition(state, newFigState)),

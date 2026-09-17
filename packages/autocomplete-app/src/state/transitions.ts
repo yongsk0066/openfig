@@ -150,6 +150,48 @@ export const figStateTransition = (
   }
 };
 
+/** Whether matching is fuzzy: the argument's spec decides, else the user's preference. */
+const isFuzzySearchEnabled = (
+  parserResult: ArgumentParserResult,
+  userFuzzySearchEnabled: boolean,
+): boolean => {
+  switch (
+    parserResult.currentArg
+      ? parserResult.currentArg.filterStrategy
+      : parserResult.completionObj.filterStrategy
+  ) {
+    case "prefix":
+      return false;
+    case "fuzzy":
+      return true;
+    case "default":
+    default:
+      return userFuzzySearchEnabled;
+  }
+};
+
+/**
+ * The user's fuzzy-search preference changed (the `toggleFuzzySearch` keybinding, or
+ * `autocomplete.fuzzySearch` through `App`). Re-derives `fuzzySearchEnabled` for the current
+ * argument right away, so the list on screen is refiltered by this write.
+ */
+export const userFuzzySearchTransition = (
+  state: AutocompleteState,
+  userFuzzySearchEnabled: React.SetStateAction<boolean>,
+): Transition => {
+  const enabled =
+    typeof userFuzzySearchEnabled === "function"
+      ? userFuzzySearchEnabled(state.userFuzzySearchEnabled)
+      : userFuzzySearchEnabled;
+  return {
+    state: {
+      userFuzzySearchEnabled: enabled,
+      fuzzySearchEnabled: isFuzzySearchEnabled(state.parserResult, enabled),
+    },
+    effects: [],
+  };
+};
+
 /**
  * A finished parse. Decides visibility and fuzzy matching for the new argument and which
  * generators to (re)run; the runs are returned as effects.
@@ -223,28 +265,11 @@ export const parserResultTransition = (
     ? ((settings[SETTINGS.FUZZY_SEARCH] ?? false) as boolean)
     : state.userFuzzySearchEnabled;
 
-  const isFuzzySearchEnabled = () => {
-    // here we decide whether to use user's fuzzy search setting or not
-    switch (
-      parserResult.currentArg
-        ? parserResult.currentArg.filterStrategy
-        : parserResult.completionObj.filterStrategy
-    ) {
-      case "prefix":
-        return false;
-      case "fuzzy":
-        return true;
-      case "default":
-      default:
-        return userFuzzySearchEnabled;
-    }
-  };
-
   return {
     state: {
       parserResult,
       visibleState,
-      fuzzySearchEnabled: isFuzzySearchEnabled(),
+      fuzzySearchEnabled: isFuzzySearchEnabled(parserResult, userFuzzySearchEnabled),
       userFuzzySearchEnabled,
       generatorStates,
       justInserted: false,

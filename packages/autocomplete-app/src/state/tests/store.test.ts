@@ -25,20 +25,25 @@ const parserResultFor = (searchTerm: string): ArgumentParserResult => ({
 
 const names = () => useAutocompleteStore.getState().suggestions.map((s) => s.name);
 
-describe("store: settings", () => {
-  const initial = useAutocompleteStore.getState();
+const initial = useAutocompleteStore.getState();
 
+/** A fresh store that has shown the list for `tool <searchTerm>`. */
+const typed = (searchTerm: string, parserResult = parserResultFor(searchTerm)) => {
+  useAutocompleteStore.setState(initial, true);
+  const buffer = `tool ${searchTerm}`;
+  useAutocompleteStore.getState().setFigState((figState) => ({
+    ...figState,
+    buffer,
+    cursorLocation: buffer.length,
+    cwd: "/tmp",
+  }));
+  useAutocompleteStore.getState().setParserResult(parserResult, false, false);
+};
+
+describe("store: settings", () => {
   beforeEach(() => {
     updateSettings({});
-    useAutocompleteStore.setState(initial, true);
-    const buffer = "tool build";
-    useAutocompleteStore.getState().setFigState((figState) => ({
-      ...figState,
-      buffer,
-      cursorLocation: buffer.length,
-      cwd: "/tmp",
-    }));
-    useAutocompleteStore.getState().setParserResult(parserResultFor("build"), false, false);
+    typed("build");
   });
 
   afterEach(() => updateSettings({}));
@@ -69,6 +74,42 @@ describe("store: settings", () => {
 
     useAutocompleteStore.getState().setSettings({ [SETTINGS.HISTORY_MODE]: "off" });
     expect(names()).toEqual([["build"], ["build"]]);
+  });
+});
+
+describe("store: fuzzy search", () => {
+  beforeEach(() => {
+    updateSettings({});
+    typed("bld");
+  });
+
+  it("toggling fuzzy search refilters the list on screen at once", () => {
+    const { setUserFuzzySearchEnabled } = useAutocompleteStore.getState();
+    expect(useAutocompleteStore.getState().visibleState).toBe(Visibility.VISIBLE);
+    expect(names()).toEqual([]);
+
+    // The `toggleFuzzySearch` keybinding; `autocomplete.fuzzySearch` changes go through the
+    // same action (`App`).
+    setUserFuzzySearchEnabled((enabled) => !enabled);
+    expect(useAutocompleteStore.getState().fuzzySearchEnabled).toBe(true);
+    expect(names()).toEqual([["build"]]);
+
+    setUserFuzzySearchEnabled(false);
+    expect(useAutocompleteStore.getState().fuzzySearchEnabled).toBe(false);
+    expect(names()).toEqual([]);
+  });
+
+  it("a spec's filterStrategy still overrides the preference", () => {
+    typed("bld", {
+      ...parserResultFor("bld"),
+      completionObj: { ...spec, filterStrategy: "prefix" },
+    });
+    useAutocompleteStore.getState().setUserFuzzySearchEnabled(true);
+    expect(useAutocompleteStore.getState()).toMatchObject({
+      userFuzzySearchEnabled: true,
+      fuzzySearchEnabled: false,
+    });
+    expect(names()).toEqual([]);
   });
 });
 

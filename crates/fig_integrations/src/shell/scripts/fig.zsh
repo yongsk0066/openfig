@@ -3,7 +3,7 @@
 # returns 0, and a socket failure disarms the hook, leaving a plain shell. Wire format and the reasons
 # behind it: crates/fig_remote_ipc/src/hook/wire.rs.
 if [[ -o interactive && -z ${_fig_sock-} ]] && autoload -Uz is-at-least add-zle-hook-widget add-zsh-hook \
-  && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system 2>/dev/null; then
+  && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system zsh/datetime 2>/dev/null; then
 
 typeset -g _fig_sock='{{HOOK_SOCKET}}' _fig_fd= _fig_off= _fig_armed= _fig_isearch= _fig_last= _fig_ctx=
 typeset -gA _fig_fwd _fig_orig _fig_names
@@ -60,25 +60,37 @@ _fig_report() {
 _fig_isearch_on() { [[ -n $_fig_isearch ]] || { _fig_isearch=1 _fig_last=; _fig_send 'E 0 0 ' }; return 0 }
 _fig_isearch_off() { _fig_isearch=; return 0 }
 
-# A forwarded key waits for the desktop's verdict (KEY 1: taken, KEY 0: zsh's after all), because a
-# widget cannot be run later from `zle -F`. No `emulate`: the original widget runs under user options.
+# A forwarded key waits for the desktop's verdict: KEY 0 zsh's after all, KEY 2 taken, KEY 1 taken and an
+# insertion may follow. zsh runs no widget from a `zle -F` handler until the next key arrives, so a line
+# an insertion ends with can only be run from here: wait up to 80 ms for it. No `emulate`: the original
+# widget runs under the user's options.
 _fig_key() {
   zle -f nolast 2>/dev/null
-  local name=${_fig_names[$KEYS]} line
+  local name=${_fig_names[$KEYS]} line end left
   if [[ -n ${_fig_fwd[$name]-} && $LASTWIDGET != *menu-select* ]] && _fig_send "K $name"; then
     while [[ -n $_fig_fd ]] && read -t 1 -r -u $_fig_fd line; do
-      case $line in ("KEY 1 $name") return 0;; ("KEY 0 $name") break;; (*) _fig_line "$line";; esac
+      case $line in ("KEY 2 $name") return 0;; ("KEY 0 $name") break;; ("KEY 1 $name") ;; (*) _fig_line "$line"; continue;; esac
+      end=$(( EPOCHREALTIME + 0.08 ))
+      while [[ -n $_fig_fd ]] && (( (left = end - EPOCHREALTIME) > 0 )) && read -t $left -r -u $_fig_fd line; do
+        _fig_line "$line" accept || return 0
+        [[ $line == INSERT* ]] || continue
+        while [[ -n $_fig_fd ]] && read -t 0 -r -u $_fig_fd line; do _fig_line "$line" accept || return 0; done
+        return 0
+      done
+      return 0
     done
   fi
   zle ${_fig_orig[${WIDGET#_fig_key_}$KEYS]:-undefined-key} -- "$@"
 }
 
-# One line from the desktop, inside zle.
+# One line from the desktop, inside zle. With $2, inside a key widget: an insertion may run the line
+# (status 1 once it has).
 _fig_line() {
   emulate -L zsh; local -a f=("${(@s: :)1}"); local REPLY n
   case $f[1] in
     (INSERT) n=$f[2]; (( n > $#LBUFFER )) && n=$#LBUFFER; (( n )) && LBUFFER[-n,-1]=
-      _fig_unesc "$f[3]"; LBUFFER+=$REPLY; (( CURSOR -= ${f[4]:-0} )); _fig_report; zle -R ;;
+      _fig_unesc "$f[3]"; LBUFFER+=$REPLY; (( CURSOR -= ${f[4]:-0} )); _fig_report; zle -R
+      [[ ${f[5]-} == 1 && -n ${2-} ]] && { zle accept-line; return 1 } ;;
     (INTERCEPT) _fig_fwd=(); (( f[2] )) && for n in $f[3,-1]; do _fig_fwd[$n]=1; done ;;
     (BYE) _fig_off=1; _fig_close ;;
   esac

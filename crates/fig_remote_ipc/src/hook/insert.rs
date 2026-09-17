@@ -9,7 +9,6 @@
 //! is what `fig.zsh` can apply atomically.
 
 use fig_proto::figterm::InsertTextRequest;
-use tracing::debug;
 
 use super::wire::Insert;
 
@@ -64,9 +63,9 @@ fn ops(typed: &str) -> Vec<Op> {
     ops
 }
 
-/// The edits that leave zsh's buffer as the pty binary's keystrokes would have — except that the
-/// line is not run: an Enter ends the edits, and what follows it would in a pty have gone to the
-/// command it started (see [`super::wire`] for why a hook cannot run it).
+/// The edits that leave zsh's buffer as the pty binary's keystrokes would have. An Enter ends them
+/// with `accept` (see [`super::wire`] for when the shell can honour it); what follows it would in a
+/// pty have gone to the command it started, so it is dropped.
 pub fn edits(request: &InsertTextRequest, buffer: &str) -> Vec<Insert> {
     let mut edits = Vec::new();
     let mut current = Insert::default();
@@ -89,8 +88,9 @@ pub fn edits(request: &InsertTextRequest, buffer: &str) -> Vec<Insert> {
             Op::Left => current.cursor_left += 1,
             Op::Right => current.cursor_left -= 1,
             Op::Accept => {
-                debug!("an insertion asked to run the line; the hook leaves that to the user");
-                break;
+                current.accept = true;
+                edits.push(current);
+                return edits;
             },
         }
     }
@@ -109,6 +109,14 @@ mod tests {
             delete_before,
             text: text.into(),
             cursor_left,
+            accept: false,
+        }
+    }
+
+    fn run(delete_before: usize, text: &str, cursor_left: isize) -> Insert {
+        Insert {
+            accept: true,
+            ..insert(delete_before, text, cursor_left)
         }
     }
 
@@ -131,12 +139,12 @@ mod tests {
             edits(&request("--message=\"\"\x1b[D", Some("git commit ")), "git commit "),
             vec![insert(0, "--message=\"\"", 1)]
         );
-        // Run it: typed, not run.
-        assert_eq!(edits(&request("status\n", Some("git ")), "git "), vec![insert(
+        // Insert and run (`insertSelectedAndExecute`, auto-execute suggestions).
+        assert_eq!(edits(&request("status\n", Some("git ")), "git "), vec![run(
             0, "status", 0
         )]);
-        // Execute from the keybinding: a bare newline, so nothing to do.
-        assert!(edits(&request("\n", None), "ls").is_empty());
+        // The `execute` keybinding: a bare newline.
+        assert_eq!(edits(&request("\n", None), "ls"), vec![run(0, "", 0)]);
     }
 
     /// The buffer moved on after the app computed the insertion.
@@ -163,11 +171,8 @@ mod tests {
             immediate: Some(true),
             ..Default::default()
         };
-        // Right twice, then three backspaces there, then the text; the Enter is not run.
-        assert_eq!(edits(&request, "abcdef"), vec![
-            insert(0, "", -2),
-            insert(3, "hello", 0),
-        ]);
+        // Right twice, then three backspaces there, then the text, then Enter.
+        assert_eq!(edits(&request, "abcdef"), vec![insert(0, "", -2), run(3, "hello", 0)]);
         let left = InsertTextRequest {
             insertion: Some("x".into()),
             offset: Some(-1),
@@ -178,7 +183,7 @@ mod tests {
 
     #[test]
     fn multi_line_and_emoji_text_and_what_follows_an_accept() {
-        assert_eq!(edits(&request("echo \u{1F600}\ntail", None), ""), vec![insert(
+        assert_eq!(edits(&request("echo \u{1F600}\ntail", None), ""), vec![run(
             0,
             "echo \u{1F600}",
             0

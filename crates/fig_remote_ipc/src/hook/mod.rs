@@ -64,6 +64,7 @@ use uuid::Uuid;
 pub use wire::HOOK_PROTOCOL_VERSION;
 use wire::{
     DaemonLine,
+    KeyVerdict,
     MAX_LINE_LEN,
     ShellLine,
 };
@@ -430,9 +431,14 @@ async fn handle_connection(
                 }
                 // The shell waits for this before doing anything else with the key; when
                 // interception ended after its last `INTERCEPT`, zsh keeps the key after all.
+                let verdict = match action.as_deref() {
+                    None => KeyVerdict::Pass,
+                    Some(action) if keys::may_insert(action) => KeyVerdict::MayInsert,
+                    Some(_) => KeyVerdict::Taken,
+                };
                 let _ = out.send(DaemonLine::Key {
                     name: name.clone(),
-                    taken: action.is_some(),
+                    verdict,
                 });
                 let Some(action) = action else {
                     continue;

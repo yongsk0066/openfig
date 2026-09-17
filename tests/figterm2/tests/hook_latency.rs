@@ -7,10 +7,15 @@
 //! Ignored because it is a measurement: `just latency`, or
 //! `cargo nextest run -p figterm2 --run-ignored only --no-capture -- latency_`.
 
-use std::time::Duration;
+use std::time::{
+    Duration,
+    Instant,
+};
 
+use fig_remote_ipc::figterm::FigtermCommand;
 use figterm2::hook::{
     Daemon,
+    HookEvent,
     HookShell,
     Rc,
 };
@@ -90,4 +95,79 @@ async fn latency_zsh_hook() {
 #[ignore = "benchmark: `just latency`"]
 async fn latency_zsh_hook_path_zsh() {
     measure("zsh").await;
+}
+
+/// How long after Tab an insertion reaches zsh when the app answers at once: Tab → the intercepted
+/// key at the desktop's handler, and Tab → the edit buffer with the insertion applied (the report
+/// zsh sends right after `INSERT`). The app's own time — webview, suggestion, `InsertText` request
+/// — is not in it: the handler answers the moment the key arrives. This is the floor under the key
+/// widget's 80 ms wait.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: `just latency`"]
+async fn latency_zsh_hook_insert() {
+    let rc = "bindkey -e\nunsetopt beep\nPS1='%# '\n";
+    let mut shell = HookShell::spawn(Rc::Text(rc), Daemon::Real).await.unwrap();
+    let mut to_key = Vec::new();
+    let mut to_insert = Vec::new();
+    for _ in 0..30 {
+        shell.type_text("git ch").await.unwrap();
+        shell
+            .wait_for_event(
+                Instant::now() + TIMEOUT,
+                |e| matches!(e, HookEvent::EditBuffer { text, .. } if text == "git ch"),
+            )
+            .await
+            .unwrap();
+        for command in [
+            FigtermCommand::InterceptFigJs {
+                intercept_keystrokes: true,
+                intercept_global_keystrokes: false,
+                actions: vec![],
+                override_actions: false,
+            },
+            FigtermCommand::InterceptFigJSVisible { visible: true },
+        ] {
+            shell.command(command).unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        shell.events();
+
+        let start = Instant::now();
+        shell.press("\t").unwrap();
+        let key = shell
+            .arrival(
+                TIMEOUT,
+                |e| matches!(e, HookEvent::InterceptedKey { key, .. } if key == "tab"),
+            )
+            .await
+            .unwrap();
+        shell
+            .command(FigtermCommand::InsertText {
+                insertion: Some("\x08\x08checkout ".into()),
+                deletion: None,
+                offset: None,
+                immediate: None,
+                insertion_buffer: Some("git ch".into()),
+                insert_during_command: None,
+            })
+            .unwrap();
+        let applied = shell
+            .arrival(
+                TIMEOUT,
+                |e| matches!(e, HookEvent::EditBuffer { text, .. } if text == "git checkout "),
+            )
+            .await
+            .unwrap();
+        to_key.push(key.saturating_duration_since(start));
+        to_insert.push(applied.saturating_duration_since(start));
+
+        shell
+            .command(FigtermCommand::InterceptFigJSVisible { visible: false })
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        shell.press("\x15").unwrap();
+        tokio::time::sleep(PACE).await;
+    }
+    println!("latency zsh-hook tab→key    {}", Summary::of(&to_key).unwrap());
+    println!("latency zsh-hook tab→insert {}", Summary::of(&to_insert).unwrap());
 }

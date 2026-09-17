@@ -494,7 +494,8 @@ async fn hook_applies_insertions() {
         "cursor before the closing quote"
     );
 
-    // Asked to run the line: typed, left for the user to run (see `fig_remote_ipc::hook::wire`).
+    // Asked to run the line, but not in answer to a key: typed, left for the user to run (a `zle -F`
+    // handler cannot run it, see `fig_remote_ipc::hook::wire`).
     shell.press("\x15").unwrap();
     shell.type_text("echo in").await.unwrap();
     expect_buffer(&mut shell, "echo in").await;
@@ -510,6 +511,122 @@ async fn hook_applies_insertions() {
     assert!(
         events.contains(&HookEvent::PostExec {
             command: Some("echo inserted$((1+1))".into()),
+            exit_code: Some(0)
+        }),
+        "{events:?}"
+    );
+}
+
+/// Sets up a raw daemon that intercepts Tab, presses Tab, and returns once the shell asked.
+async fn tab_asked(daemon_rc: &str) -> HookShell {
+    let rc = format!("{PLAIN}{daemon_rc}");
+    let mut shell = HookShell::spawn(Rc::Text(&rc), Daemon::Raw).await.unwrap();
+    shell.send_line("INTERCEPT 1 tab").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    shell.events();
+    shell.press("\t").unwrap();
+    shell
+        .wait_for_event(std::time::Instant::now() + STEP_TIMEOUT, |e| {
+            e == &HookEvent::Line("K tab".into())
+        })
+        .await
+        .unwrap();
+    shell.events();
+    shell
+}
+
+fn ran(events: &[HookEvent]) -> bool {
+    events.contains(&HookEvent::Line("X echo\\sran".into()))
+}
+
+/// `KEY 1` then an `INSERT` with accept: the key widget is still waiting, so the line runs and the
+/// prompt comes back. Without accept the text is typed and not run.
+#[tokio::test]
+async fn hook_runs_an_insertion_that_answers_a_key() {
+    let mut shell = tab_asked("").await;
+    shell.send_line("KEY 1 tab").await.unwrap();
+    shell.send_line("INSERT 0 echo\\sran 0 1").await.unwrap();
+    shell.wait_for_output("\r\nran\r\n", STEP_TIMEOUT).await.unwrap();
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    let events = shell.events();
+    assert!(
+        events.contains(&HookEvent::Line("E 8 8 echo\\sran".into())),
+        "{events:?}"
+    );
+    assert!(ran(&events), "{events:?}");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, HookEvent::Line(l) if l.starts_with("P 0 "))),
+        "{events:?}"
+    );
+
+    let mut shell = tab_asked("").await;
+    shell.send_line("KEY 1 tab").await.unwrap();
+    shell.send_line("INSERT 0 echo\\sran 0 0").await.unwrap();
+    shell.settle(Duration::from_millis(400), STEP_TIMEOUT).await.unwrap();
+    let events = shell.events();
+    assert_eq!(events, vec![HookEvent::Line("E 8 8 echo\\sran".into())]);
+    assert!(!shell.output().contains("\r\nran"));
+}
+
+/// The wait is bounded: an insertion after the window, or after `KEY 2` (a key that inserts
+/// nothing), is typed by the `zle -F` handler and not run.
+#[tokio::test]
+async fn hook_does_not_run_an_insertion_outside_the_window() {
+    let mut shell = tab_asked("").await;
+    shell.send_line("KEY 1 tab").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    shell.send_line("INSERT 0 echo\\sran 0 1").await.unwrap();
+    shell.settle(Duration::from_millis(400), STEP_TIMEOUT).await.unwrap();
+    let events = shell.events();
+    assert_eq!(events, vec![HookEvent::Line("E 8 8 echo\\sran".into())]);
+
+    let mut shell = tab_asked("").await;
+    shell.send_line("KEY 2 tab").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    shell.send_line("INSERT 0 echo\\sran 0 1").await.unwrap();
+    shell.settle(Duration::from_millis(400), STEP_TIMEOUT).await.unwrap();
+    let events = shell.events();
+    assert_eq!(events, vec![HookEvent::Line("E 8 8 echo\\sran".into())]);
+    assert!(!shell.output().contains("\r\nran"));
+}
+
+/// End to end through the desktop's server: Tab is `insertCommonPrefix` (so `KEY 1`), and an app
+/// that answers with an insertion ending in a newline gets the line run.
+#[tokio::test]
+async fn hook_runs_an_app_insertion_that_ends_in_enter() {
+    let rc = format!("{PLAIN}{WORKDIR}");
+    let mut shell = HookShell::spawn(Rc::Text(&rc), Daemon::Real).await.unwrap();
+    shell.type_text("echo r").await.unwrap();
+    expect_buffer(&mut shell, "echo r").await;
+    show_dropdown(&shell);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    shell.events();
+    shell.press("\t").unwrap();
+    shell
+        .arrival(
+            STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::InterceptedKey { key, .. } if key == "tab"),
+        )
+        .await
+        .unwrap();
+    shell
+        .command(FigtermCommand::InsertText {
+            insertion: Some("\x08ran$((40+2))\n".into()),
+            deletion: None,
+            offset: None,
+            immediate: None,
+            insertion_buffer: Some("echo r".into()),
+            insert_during_command: None,
+        })
+        .unwrap();
+    shell.wait_for_output("\r\nran42", STEP_TIMEOUT).await.unwrap();
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    let events = shell.events();
+    assert!(
+        events.contains(&HookEvent::PostExec {
+            command: Some("echo ran$((40+2))".into()),
             exit_code: Some(0)
         }),
         "{events:?}"

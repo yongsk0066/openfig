@@ -372,6 +372,21 @@ impl HookShell {
         }
     }
 
+    /// Waits for the next event `found` accepts and returns when it arrived. Events passed over
+    /// stay owed to [`HookShell::events`].
+    pub async fn arrival(&mut self, timeout: Duration, found: impl Fn(&HookEvent) -> bool) -> Result<Instant> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match tokio::time::timeout(remaining, self.events.recv()).await {
+                Ok(Some((at, event))) if found(&event) => return Ok(at),
+                Ok(Some((_, event))) => self.seen.push(event),
+                Ok(None) => bail!("the daemon stopped"),
+                Err(_) => bail!("timed out after {timeout:?}; events so far: {:?}", self.seen),
+            }
+        }
+    }
+
     /// Writes `key` to the pty and returns.
     pub fn press(&mut self, key: &str) -> Result<()> {
         self.writer.write_all(key.as_bytes())?;

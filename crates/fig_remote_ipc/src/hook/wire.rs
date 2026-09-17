@@ -24,17 +24,19 @@
 //! PONG <version>               the answer to PING, then the desktop closes
 //! WELCOME 1 <version>          HELLO accepted
 //! WELCOME 0 <reason>           refused; the desktop closes and the shell stops asking
-//! INSERT <delete before> <text> <cursor left>
+//! INSERT <delete before> <text> <cursor left> <accept>
 //! INTERCEPT 0 | INTERCEPT 1 <key>...
-//! KEY 1 <key> | KEY 0 <key>    the answer to `K`: the desktop took the key, or zsh keeps it
+//! KEY 0|1|2 <key>              the answer to `K`: zsh keeps the key (0), the desktop took it and may
+//!                              answer with an insertion (1), or took it and nothing follows (2)
 //! BYE                          stop for the rest of this shell's life
 //! ```
 //!
-//! Counts in `INSERT` are characters, as `LBUFFER` and `CURSOR` count them. There is no way to run
-//! the line from an insertion: the shell applies desktop lines in a `zle -F` handler, and zsh (5.9,
-//! `raw_getbyte`) goes back to waiting for a key after the handler without looking at what the
-//! handler asked for, so `accept-line` there would take effect only after the next key — with that
-//! key typed into the command.
+//! Counts in `INSERT` are characters, as `LBUFFER` and `CURSOR` count them. `accept` 1 runs the
+//! line after the edit — but only where zsh can: inside the key widget that is waiting after `KEY
+//! 1` (for at most 80 ms). An `INSERT` that arrives later is applied by the `zle -F` handler, and
+//! zsh (5.9, `raw_getbyte`) goes back to waiting for a key after a handler without looking at what
+//! it asked for, so `accept-line` there would take effect only after the next key — with that key
+//! typed into the command. Such a line is typed and left for the user to run.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -214,19 +216,32 @@ fn cursor_offset(text: &str, chars: usize, bytes: usize) -> usize {
     }
 }
 
-/// An edit `fig.zsh` applies to `LBUFFER`, in characters: delete before the cursor, insert, then
-/// move the cursor left (negative: right).
+/// An edit `fig.zsh` applies to `LBUFFER`, in characters: delete before the cursor, insert, move
+/// the cursor left (negative: right), then run the line if `accept`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Insert {
     pub delete_before: usize,
     pub text: String,
     pub cursor_left: isize,
+    pub accept: bool,
 }
 
 impl Insert {
     pub fn is_noop(&self) -> bool {
-        self.delete_before == 0 && self.text.is_empty() && self.cursor_left == 0
+        self.delete_before == 0 && self.text.is_empty() && self.cursor_left == 0 && !self.accept
     }
+}
+
+/// The answer to a `K`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyVerdict {
+    /// Interception ended after the shell last heard: zsh acts on the key after all.
+    Pass      = 0,
+    /// Taken, and the action may insert: the shell waits briefly so a line the insertion ends with
+    /// can be run.
+    MayInsert = 1,
+    /// Taken, nothing will follow.
+    Taken     = 2,
 }
 
 pub use fig_util::HOOK_PING as PING;
@@ -242,10 +257,9 @@ pub enum DaemonLine {
     Insert(Insert),
     /// The keys `K` should be sent for; empty stops interception.
     Intercept(BTreeSet<String>),
-    /// Whether the desktop took the key a `K` named.
     Key {
         name: String,
-        taken: bool,
+        verdict: KeyVerdict,
     },
     Bye,
 }
@@ -260,13 +274,19 @@ impl fmt::Display for DaemonLine {
                 delete_before,
                 text,
                 cursor_left,
-            }) => write!(f, "INSERT {delete_before} {} {cursor_left}", escape(text)),
+                accept,
+            }) => write!(
+                f,
+                "INSERT {delete_before} {} {cursor_left} {}",
+                escape(text),
+                u8::from(*accept)
+            ),
             DaemonLine::Intercept(keys) if keys.is_empty() => write!(f, "INTERCEPT 0"),
             DaemonLine::Intercept(keys) => {
                 write!(f, "INTERCEPT 1")?;
                 keys.iter().try_for_each(|key| write!(f, " {}", escape(key)))
             },
-            DaemonLine::Key { name, taken } => write!(f, "KEY {} {}", u8::from(*taken), escape(name)),
+            DaemonLine::Key { name, verdict } => write!(f, "KEY {} {}", *verdict as u8, escape(name)),
             DaemonLine::Bye => write!(f, "BYE"),
         }
     }
@@ -426,18 +446,19 @@ mod tests {
                 delete_before: 2,
                 text: "one\ntwo \u{1F600}".into(),
                 cursor_left: -1,
+                accept: true,
             })
             .to_string(),
-            "INSERT 2 one\\ntwo\\s\u{1F600} -1"
+            "INSERT 2 one\\ntwo\\s\u{1F600} -1 1"
         );
-        // An empty text is an empty field: the line keeps its four fields.
+        // An empty text is an empty field: the line keeps its five fields.
         assert_eq!(
             DaemonLine::Insert(Insert {
                 cursor_left: 3,
                 ..Default::default()
             })
             .to_string(),
-            "INSERT 0  3"
+            "INSERT 0  3 0"
         );
         assert_eq!(DaemonLine::Intercept(BTreeSet::new()).to_string(), "INTERCEPT 0");
         assert_eq!(
@@ -447,7 +468,7 @@ mod tests {
         assert_eq!(
             DaemonLine::Key {
                 name: "enter".into(),
-                taken: true
+                verdict: KeyVerdict::MayInsert
             }
             .to_string(),
             "KEY 1 enter"
@@ -455,10 +476,18 @@ mod tests {
         assert_eq!(
             DaemonLine::Key {
                 name: "shift+tab".into(),
-                taken: false
+                verdict: KeyVerdict::Pass
             }
             .to_string(),
             "KEY 0 shift+tab"
+        );
+        assert_eq!(
+            DaemonLine::Key {
+                name: "down".into(),
+                verdict: KeyVerdict::Taken
+            }
+            .to_string(),
+            "KEY 2 down"
         );
         assert_eq!(DaemonLine::Bye.to_string(), "BYE");
     }

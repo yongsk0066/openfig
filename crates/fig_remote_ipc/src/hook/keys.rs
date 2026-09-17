@@ -36,6 +36,24 @@ pub const SHELL_KEYS: &[&str] = &[
 const GLOBAL_ACTIONS: &[&str] = &["toggleAutocomplete", "showAutocomplete"];
 const IGNORE_ACTION: &str = "ignore";
 
+/// Actions the autocomplete app can answer with an insertion (`hooks/keypress.ts`):
+/// `showAutocomplete` inserts the only suggestion when `autocomplete.onlyShowOnTab` is on.
+const INSERTING_ACTIONS: &[&str] = &[
+    "insertSelected",
+    "insertCommonPrefix",
+    "insertCommonPrefixOrNavigateDown",
+    "insertCommonPrefixOrInsertSelected",
+    "insertSelectedAndExecute",
+    "execute",
+    "showAutocomplete",
+];
+
+/// Whether the shell should wait for an insertion after `action` (`KEY 1` rather than `KEY 2`).
+/// Waiting after a navigation key would hold every ↑/↓ for the whole window.
+pub fn may_insert(action: &str) -> bool {
+    INSERTING_ACTIONS.contains(&action)
+}
+
 static ONLY_SHOW_ON_TAB: LazyLock<bool> =
     LazyLock::new(|| fig_settings::settings::get_bool_or("autocomplete.onlyShowOnTab", false));
 
@@ -266,6 +284,14 @@ mod tests {
 
         interceptor.reset();
         assert_eq!(interceptor.action("tab"), None);
+    }
+
+    #[test]
+    fn only_inserting_actions_make_the_shell_wait() {
+        let interceptor = Interceptor::default();
+        let waits = |key| interceptor.mappings.get(key).is_some_and(|action| may_insert(action));
+        assert!(waits("tab") && waits("enter"));
+        assert!(!waits("up") && !waits("down") && !waits("esc") && !waits("control+r"));
     }
 
     #[test]

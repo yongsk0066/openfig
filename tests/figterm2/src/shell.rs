@@ -314,6 +314,22 @@ impl Shell {
     }
 
     pub async fn spawn_with(shell: &str, echo: Echo, desktop: Desktop) -> Result<Shell> {
+        Self::spawn_inner(shell, echo, desktop, None).await
+    }
+
+    /// `/bin/zsh` set up exactly like a golden recording ([`crate::golden`]): the case's size and
+    /// `ZDOTDIR`, an environment built from nothing, the integration's `pre` half so the pty binary
+    /// wraps it, and the stub desktop on the other end.
+    pub async fn spawn_golden(case: &crate::golden::Case, echo: Echo) -> Result<Shell> {
+        Self::spawn_inner(crate::golden::ZSH, echo, Desktop::Stub, Some(case)).await
+    }
+
+    async fn spawn_inner(
+        shell: &str,
+        echo: Echo,
+        desktop: Desktop,
+        golden: Option<&crate::golden::Case>,
+    ) -> Result<Shell> {
         let tempdir = TempDir::new()?;
         println!("{tempdir:?}");
 
@@ -375,8 +391,8 @@ impl Shell {
 
         // Create a new pty
         let pty_pair = pty_system.openpty(PtySize {
-            cols: 80,
-            rows: 24,
+            cols: golden.map_or(80, |case| case.columns),
+            rows: golden.map_or(24, |case| case.screen_lines),
             pixel_width: 0,
             pixel_height: 0,
         })?;
@@ -396,19 +412,29 @@ impl Shell {
         let home = tempdir.path().join("home");
         tokio::fs::create_dir_all(&home).await?;
         let cli = cli_binary()?;
-        let (rc_name, rc_file) = match shell {
-            "zsh" => ("zshrc", ".zshrc"),
-            _ => ("bashrc", ".bashrc"),
-        };
-        tokio::fs::write(
-            home.join(rc_file),
-            format!(
-                "eval \"$({cli} init {shell} pre --rcfile {rc_name})\"\n\
-                 eval \"$({cli} init {shell} post --rcfile {rc_name})\"\n",
-                cli = cli.display(),
-            ),
-        )
-        .await?;
+        match golden {
+            Some(case) => {
+                let zdotdir = tempdir.path().join("zdotdir");
+                case.write_zdotdir(&zdotdir, &cli, true, false)?;
+                crate::golden::apply_env(&mut cmd, &home, &zdotdir, &runtime_parent);
+                cmd.cwd("/");
+            },
+            None => {
+                let (rc_name, rc_file) = match shell {
+                    "zsh" => ("zshrc", ".zshrc"),
+                    _ => ("bashrc", ".bashrc"),
+                };
+                tokio::fs::write(
+                    home.join(rc_file),
+                    format!(
+                        "eval \"$({cli} init {shell} pre --rcfile {rc_name})\"\n\
+                         eval \"$({cli} init {shell} post --rcfile {rc_name})\"\n",
+                        cli = cli.display(),
+                    ),
+                )
+                .await?;
+            },
+        }
 
         // The integration calls the CLI and tests for the pty binary by bare name.
         let bin = tempdir.path().join("bin");
@@ -420,14 +446,11 @@ impl Shell {
             cmd.env_remove(key);
         }
         cmd.env("HOME", &home);
-        cmd.env(
-            "PATH",
-            format!(
-                "{}:{}",
-                bin.display(),
-                std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into())
-            ),
-        );
+        let path = match golden {
+            Some(_) => "/usr/bin:/bin:/usr/sbin:/sbin".into(),
+            None => std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into()),
+        };
+        cmd.env("PATH", format!("{}:{path}", bin.display()));
         // `pre.sh` honours a pre-set `FIG_TERM_PATH`; without it the shell integration would exec
         // whatever pty binary is first on `PATH`.
         cmd.env("FIG_TERM_PATH", pty_binary()?);
@@ -610,6 +633,25 @@ impl Shell {
         };
 
         Ok(KeystrokeTiming { echo, hook })
+    }
+
+    /// Every edit buffer hook that reached the stub desktop since the last call (or the last
+    /// [`Shell::keystroke`]), oldest first.
+    pub fn edit_buffers(&mut self) -> Vec<EditBufferEvent> {
+        std::iter::from_fn(|| self.events.try_recv().ok()).collect()
+    }
+
+    /// Waits until the pty binary has written nothing for `quiet`, or `timeout` has passed.
+    pub async fn settle(&mut self, quiet: Duration, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match tokio::time::timeout(quiet, self.output_at.recv()).await {
+                Err(_) => return Ok(()),
+                Ok(Some(_)) if Instant::now() < deadline => continue,
+                Ok(Some(_)) => anyhow::bail!("output did not settle within {timeout:?}"),
+                Ok(None) => anyhow::bail!("the pty closed"),
+            }
+        }
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {

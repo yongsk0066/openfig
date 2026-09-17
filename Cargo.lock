@@ -1574,6 +1574,7 @@ dependencies = [
  "fig_util",
  "libc",
  "portable-pty",
+ "serde_json",
  "tempfile",
  "tokio",
  "uuid",

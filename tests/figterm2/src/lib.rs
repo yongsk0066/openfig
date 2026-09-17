@@ -1,3 +1,4 @@
+pub mod golden;
 pub mod latency;
 mod shell;
 pub use shell::{

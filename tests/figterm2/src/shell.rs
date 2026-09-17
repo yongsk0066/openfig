@@ -127,7 +127,7 @@ impl RemoteHookHandler for RemoteHook {
 /// The test binary lives in `target/<profile>/deps/`, so the sibling of its grandparent directory
 /// is the profile directory. `cargo nextest run` builds the workspace's bin targets, so this is
 /// always present when the tests are run through the normal gate.
-fn pty_binary() -> Result<std::path::PathBuf> {
+pub fn pty_binary() -> Result<std::path::PathBuf> {
     let test_exe = std::env::current_exe().context("no current_exe")?;
     let profile_dir = test_exe
         .parent()
@@ -148,7 +148,7 @@ fn pty_binary() -> Result<std::path::PathBuf> {
 ///
 /// The generated shell integration calls the CLI by bare name (`q _ should-figterm-launch`,
 /// `q _ get-shell`), so this goes on the spawned shell's `PATH` under that name.
-fn cli_binary() -> Result<std::path::PathBuf> {
+pub fn cli_binary() -> Result<std::path::PathBuf> {
     let test_exe = std::env::current_exe().context("no current_exe")?;
     let profile_dir = test_exe
         .parent()

@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{
+    BTreeSet,
+    HashMap,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -17,6 +20,7 @@ use fig_proto::figterm::{
     intercept_request,
 };
 use fig_proto::local::ShellContext;
+use fig_proto::remote::clientbound::handshake_response::RejectReason;
 use fig_proto::remote::clientbound::request::Request;
 use fig_proto::remote::clientbound::{
     self,
@@ -25,10 +29,12 @@ use fig_proto::remote::clientbound::{
 use fig_proto::remote::{
     Clientbound,
     Hostbound,
+    PROTOCOL_VERSION,
     RunProcessRequest,
     hostbound,
 };
 use fig_util::PTY_BINARY_NAME;
+use parking_lot::Mutex;
 use tokio::net::{
     UnixListener,
     UnixStream,
@@ -55,6 +61,22 @@ use crate::figterm::{
     FigtermState,
     InterceptMode,
 };
+
+/// Peer protocol versions a refusal has already been logged for.
+///
+/// Refusing is expected after a rebuild: every terminal tab opened before it still runs the old
+/// `<shell> (figterm)` copy. A pty binary that predates the version check retries a refused
+/// handshake every 5 s for as long as its tab stays open, so the warning is written once per
+/// version and the repeats go to `debug`.
+static REFUSED_VERSIONS: Mutex<BTreeSet<u32>> = Mutex::new(BTreeSet::new());
+
+fn handshake_response(success: bool, reject_reason: RejectReason) -> clientbound::Packet {
+    clientbound::Packet::HandshakeResponse(HandshakeResponse {
+        success,
+        reject_reason: reject_reason.into(),
+        protocol_version: PROTOCOL_VERSION,
+    })
+}
 
 pub async fn start_remote_ipc(
     socket_path: PathBuf,
@@ -118,11 +140,28 @@ async fn handle_remote_ipc(
                     trace!(?message, "Received remote message");
                     if let Some(response) = match message.packet {
                         Some(hostbound::Packet::Handshake(handshake)) => {
-                            if initialized {
+                            if handshake.protocol_version != PROTOCOL_VERSION {
+                                // A pty binary from another build. Nothing it sends after this can
+                                // be trusted to mean what this build reads, so the session is
+                                // never created; the pty binary keeps the shell running without
+                                // hooks.
+                                if REFUSED_VERSIONS.lock().insert(handshake.protocol_version) {
+                                    warn!(
+                                        peer = handshake.protocol_version,
+                                        ours = PROTOCOL_VERSION,
+                                        "Refusing a {PTY_BINARY_NAME} built for another protocol version; its shell runs without autocomplete until it is restarted"
+                                    );
+                                } else {
+                                    debug!(
+                                        peer = handshake.protocol_version,
+                                        ours = PROTOCOL_VERSION,
+                                        "Refusing a {PTY_BINARY_NAME} built for another protocol version"
+                                    );
+                                }
+                                Some(handshake_response(false, RejectReason::ProtocolVersionMismatch))
+                            } else if initialized {
                                 // maybe they missed our response, but they should've been listening harder
-                                Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
-                                    success: false,
-                                }))
+                                Some(handshake_response(false, RejectReason::Unspecified))
                             } else {
                                 // The session id is minted here, per connection
                                 // (`Uuid::new_v4()` above), so `with_update` could never find an
@@ -148,9 +187,7 @@ async fn handle_remote_ipc(
                                     intercept: InterceptMode::Unlocked,
                                     intercept_global: InterceptMode::Unlocked
                                 });
-                                Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
-                                    success: true,
-                                }))
+                                Some(handshake_response(true, RejectReason::Unspecified))
                             }
                         },
                         Some(hostbound::Packet::Request(hostbound::Request { request: Some(request), .. })) => {
@@ -162,9 +199,7 @@ async fn handle_remote_ipc(
                                 | hostbound::request::Request::InterceptedKey(_)
                             ) && !initialized {
                                 debug!("Client tried to send remote hook without auth");
-                                Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
-                                    success: false,
-                                }))
+                                Some(handshake_response(false, RejectReason::Unspecified))
                             } else {
                                 /*
                                     WARNING, when adding new remote requests you must sanitize the context,
@@ -426,5 +461,99 @@ async fn send_pings(outgoing: flume::Sender<Clientbound>, mut on_close_rx: tokio
 fn sanitize_fn(context: &mut Option<ShellContext>, session_id: Uuid) {
     if let Some(context) = context {
         context.session_id = Some(session_id.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fig_proto::local::{
+        EditBufferHook,
+        InterceptedKeyHook,
+        PostExecHook,
+        PreExecHook,
+        PromptHook,
+    };
+
+    use super::*;
+
+    #[derive(Clone)]
+    struct NoHooks;
+
+    #[async_trait::async_trait]
+    impl RemoteHookHandler for NoHooks {
+        type Error = std::convert::Infallible;
+
+        async fn edit_buffer(&mut self, _: &EditBufferHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn prompt(&mut self, _: &PromptHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn pre_exec(&mut self, _: &PreExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn post_exec(&mut self, _: &PostExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn intercepted_key(&mut self, _: InterceptedKeyHook, _: Uuid) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    /// Sends one handshake claiming `protocol_version` to a fresh connection and returns the answer
+    /// and whether the desktop side created a session for it.
+    async fn handshake(protocol_version: u32) -> (HandshakeResponse, bool) {
+        let (desktop, pty) = UnixStream::pair().unwrap();
+        let state = Arc::new(FigtermState::new());
+        tokio::spawn(handle_remote_ipc(desktop, state.clone(), NoHooks));
+
+        let (reader, mut writer) = tokio::io::split(pty);
+        writer
+            .send_message(Hostbound {
+                packet: Some(hostbound::Packet::Handshake(hostbound::Handshake {
+                    id: "test".into(),
+                    protocol_version,
+                })),
+            })
+            .await
+            .unwrap();
+
+        let mut reader = BufferedReader::new(reader);
+        let response = loop {
+            let message = tokio::time::timeout(Duration::from_secs(5), reader.recv_message::<Clientbound>())
+                .await
+                .expect("no handshake response within 5 s")
+                .unwrap()
+                .expect("connection closed before the handshake response");
+            if let Some(clientbound::Packet::HandshakeResponse(response)) = message.packet {
+                break response;
+            }
+        };
+        (response, state.most_recent().is_some())
+    }
+
+    #[tokio::test]
+    async fn handshake_with_the_same_protocol_version_is_accepted() {
+        let (response, session) = handshake(PROTOCOL_VERSION).await;
+        assert!(response.success);
+        assert_eq!(response.reject_reason(), RejectReason::Unspecified);
+        assert_eq!(response.protocol_version, PROTOCOL_VERSION);
+        assert!(session);
+    }
+
+    #[tokio::test]
+    async fn handshake_with_another_protocol_version_is_refused_without_a_session() {
+        // 0 is what a pty binary that predates the field sends.
+        for peer in [0, PROTOCOL_VERSION + 1] {
+            let (response, session) = handshake(peer).await;
+            assert!(!response.success, "peer version {peer} was accepted");
+            assert_eq!(response.reject_reason(), RejectReason::ProtocolVersionMismatch);
+            assert_eq!(response.protocol_version, PROTOCOL_VERSION);
+            assert!(!session, "peer version {peer} got a session");
+        }
     }
 }

@@ -2,7 +2,7 @@
 // @generated from file remote.proto (package remote, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 import type { Duration, Empty, EnvironmentVariable } from "./fig_common_pb.js";
 import type { InsertTextRequest, InterceptRequest } from "./figterm_pb.js";
@@ -92,6 +92,22 @@ export declare type Clientbound_HandshakeResponse = Message<"remote.Clientbound.
    * @generated from field: bool success = 1;
    */
   success: boolean;
+
+  /**
+   * Why `success` is false. Unspecified on success and from desktops that
+   * predate the field.
+   *
+   * @generated from field: remote.Clientbound.HandshakeResponse.RejectReason reject_reason = 2;
+   */
+  rejectReason: Clientbound_HandshakeResponse_RejectReason;
+
+  /**
+   * `PROTOCOL_VERSION` of the desktop that answered; 0 from desktops that
+   * predate the field.
+   *
+   * @generated from field: uint32 protocol_version = 3;
+   */
+  protocolVersion: number;
 };
 
 /**
@@ -99,6 +115,29 @@ export declare type Clientbound_HandshakeResponse = Message<"remote.Clientbound.
  * Use `create(Clientbound_HandshakeResponseSchema)` to create a new message.
  */
 export declare const Clientbound_HandshakeResponseSchema: GenMessage<Clientbound_HandshakeResponse>;
+
+/**
+ * @generated from enum remote.Clientbound.HandshakeResponse.RejectReason
+ */
+export enum Clientbound_HandshakeResponse_RejectReason {
+  /**
+   * @generated from enum value: REJECT_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * `Handshake.protocol_version` is not the desktop's. The pty binary
+   * stops connecting and runs the shell without hooks.
+   *
+   * @generated from enum value: REJECT_REASON_PROTOCOL_VERSION_MISMATCH = 1;
+   */
+  PROTOCOL_VERSION_MISMATCH = 1,
+}
+
+/**
+ * Describes the enum remote.Clientbound.HandshakeResponse.RejectReason.
+ */
+export declare const Clientbound_HandshakeResponse_RejectReasonSchema: GenEnum<Clientbound_HandshakeResponse_RejectReason>;
 
 /**
  * @generated from message remote.Clientbound.Request
@@ -187,6 +226,14 @@ export declare type Hostbound_Handshake = Message<"remote.Hostbound.Handshake"> 
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * `fig_proto::remote::PROTOCOL_VERSION` of the pty binary; 0 from builds
+   * that predate the field.
+   *
+   * @generated from field: uint32 protocol_version = 4;
+   */
+  protocolVersion: number;
 };
 
 /**

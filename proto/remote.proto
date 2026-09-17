@@ -8,6 +8,13 @@ import "local.proto";
 
 // all endpoints defined in this file are available to remote servers
 // be careful and keep security in mind
+//
+// The pty binary and the desktop app are built together but not always run
+// together: a `<shell> (figterm)` copy in a terminal tab that was opened before
+// a rebuild keeps talking to the new desktop. The handshake carries
+// `fig_proto::remote::PROTOCOL_VERSION`, and the desktop refuses a peer whose
+// version differs. Bump that constant with any change to this file, or to a
+// message it carries, that an older peer would misread.
 
 message RunProcessRequest {
   string executable = 1;
@@ -28,6 +35,19 @@ message Clientbound {
 
   message HandshakeResponse {
     bool success = 1;
+    // Why `success` is false. Unspecified on success and from desktops that
+    // predate the field.
+    RejectReason reject_reason = 2;
+    // `PROTOCOL_VERSION` of the desktop that answered; 0 from desktops that
+    // predate the field.
+    uint32 protocol_version = 3;
+
+    enum RejectReason {
+      REJECT_REASON_UNSPECIFIED = 0;
+      // `Handshake.protocol_version` is not the desktop's. The pty binary
+      // stops connecting and runs the shell without hooks.
+      REJECT_REASON_PROTOCOL_VERSION_MISMATCH = 1;
+    }
   }
 
   message Request {
@@ -53,9 +73,13 @@ message Hostbound {
   }
 
   message Handshake {
-    reserved 2;
+    // 2 was `secret`, 3 was `optional string parent_id`.
+    reserved 2, 3;
 
     string id = 1;
+    // `fig_proto::remote::PROTOCOL_VERSION` of the pty binary; 0 from builds
+    // that predate the field.
+    uint32 protocol_version = 4;
   }
 
   message Request {

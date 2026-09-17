@@ -5,6 +5,7 @@ pub use shell::{
     Echo,
     EditBufferEvent,
     KeystrokeTiming,
+    Refusals,
     Shell,
     cli_binary,
     pty_binary,

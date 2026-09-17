@@ -1570,6 +1570,7 @@ version = "1.19.7"
 dependencies = [
  "anyhow",
  "async-trait",
+ "fig_ipc",
  "fig_proto",
  "fig_remote_ipc",
  "fig_util",

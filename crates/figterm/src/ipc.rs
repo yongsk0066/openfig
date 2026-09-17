@@ -17,10 +17,13 @@ use fig_proto::figterm::{
     FigtermRequestMessage,
     FigtermResponseMessage,
 };
+use fig_proto::remote::clientbound::HandshakeResponse;
+use fig_proto::remote::clientbound::handshake_response::RejectReason;
 use fig_proto::remote::hostbound::Handshake;
 use fig_proto::remote::{
     Clientbound,
     Hostbound,
+    PROTOCOL_VERSION,
     clientbound,
     hostbound,
 };
@@ -92,6 +95,72 @@ async fn get_forwarded_stream() -> Result<(ReadHalf<tokio::net::UnixStream>, Wri
     let socket = directories::local_remote_socket_path()?;
     let stream = fig_ipc::socket_connect_timeout(&socket, Duration::from_secs(5)).await?;
     Ok(tokio::io::split(stream))
+}
+
+/// How long to wait for the desktop's `HandshakeResponse`. It answers on receipt, so running out
+/// means something is wrong with the other end; the attempt is dropped and retried at the next
+/// tick instead of waiting forever.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How a handshake with the desktop app ended.
+#[derive(Debug)]
+enum HandshakeOutcome {
+    Accepted,
+    /// The desktop was built for another `PROTOCOL_VERSION`. Retrying cannot help — this binary
+    /// stays what it is until the shell is restarted — so the connection loop stops for good.
+    VersionMismatch {
+        desktop: u32,
+    },
+    /// Anything else: the socket broke, the desktop refused for another reason or did not answer
+    /// in time. Retried at the next tick, as a desktop that is not running yet is.
+    Failed(anyhow::Error),
+}
+
+async fn handshake<R, W>(reader: &mut BufferedReader<R>, writer: &mut W, session_id: &str) -> HandshakeOutcome
+where
+    R: tokio::io::AsyncRead + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    info!("Attempting handshake...");
+    let handshake = Hostbound {
+        packet: Some(hostbound::Packet::Handshake(Handshake {
+            id: session_id.to_owned(),
+            protocol_version: PROTOCOL_VERSION,
+        })),
+    };
+    if let Err(err) = writer.send_message(handshake).await {
+        return HandshakeOutcome::Failed(anyhow::Error::new(err).context("error sending handshake"));
+    }
+
+    info!("Awaiting handshake response...");
+    let response = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+        loop {
+            match reader.recv_message::<Clientbound>().await? {
+                Some(Clientbound {
+                    packet: Some(clientbound::Packet::HandshakeResponse(response)),
+                }) => return Ok(response),
+                // A ping can arrive before the answer.
+                Some(_) => {},
+                None => anyhow::bail!("the desktop closed the connection before answering"),
+            }
+        }
+    })
+    .await;
+
+    match response {
+        Ok(Ok(HandshakeResponse { success: true, .. })) => HandshakeOutcome::Accepted,
+        Ok(Ok(response)) if response.reject_reason() == RejectReason::ProtocolVersionMismatch => {
+            HandshakeOutcome::VersionMismatch {
+                desktop: response.protocol_version,
+            }
+        },
+        Ok(Ok(response)) => HandshakeOutcome::Failed(anyhow::anyhow!(
+            "the desktop refused the handshake ({:?})",
+            response.reject_reason()
+        )),
+        Ok(Err(err)) => HandshakeOutcome::Failed(err.context("failed receiving handshake response")),
+        Err(_) => HandshakeOutcome::Failed(anyhow::anyhow!("no handshake response within {HANDSHAKE_TIMEOUT:?}")),
+    }
 }
 
 /// Spawns a local unix socket for communicating with figterm on a local machine.
@@ -196,6 +265,11 @@ pub async fn spawn_figterm_ipc(
 }
 
 /// Connects to the desktop app and allows for a remote connection from remote hosts
+///
+/// Reconnects every 5 s while the desktop is unreachable. If the desktop refuses this binary's
+/// `PROTOCOL_VERSION`, it stops trying and parks until `stop_ipc` fires: the returned channels
+/// stay open (a closed `Clientbound` receiver would spin figterm's main loop), `desktop_connected`
+/// stays false so no hook is queued, and the shell keeps working as a plain pty.
 pub async fn spawn_remote_ipc(
     session_id: String,
     main_loop_sender: Sender<MainLoopEvent>,
@@ -212,7 +286,7 @@ pub async fn spawn_remote_ipc(
             interval.tick().await;
             tokio::select! {
                 _ = &mut stop_ipc_rx => {
-                    break;
+                    return;
                 }
                 res = get_forwarded_stream() => {
                     let (reader, mut writer) = match res {
@@ -224,33 +298,21 @@ pub async fn spawn_remote_ipc(
                     };
 
                     let mut reader = BufferedReader::new(reader);
-                    info!("Attempting handshake...");
-                    if let Err(err) = writer.send_message(Hostbound {
-                        packet: Some(hostbound::Packet::Handshake(Handshake {
-                            id: session_id.clone(),
-                        })),
-                    })
-                    .await
-                    {
-                        error!(%err, "error sending handshake");
-                        continue;
-                    }
-                    let mut handshake_success = false;
-                    info!("Awaiting handshake response...");
-                    while let Some(message) = reader.recv_message::<Clientbound>().await.unwrap_or_else(|err| {
-                        error!(%err, "failed receiving handshake response");
-                        None
-                    }) {
-                        if let Some(clientbound::Packet::HandshakeResponse(response)) = message.packet {
-                            handshake_success = response.success;
+                    match handshake(&mut reader, &mut writer, &session_id).await {
+                        HandshakeOutcome::Accepted => info!("Handshake succeeded"),
+                        HandshakeOutcome::VersionMismatch { desktop } => {
+                            warn!(
+                                ours = PROTOCOL_VERSION,
+                                desktop,
+                                "The desktop app speaks another protocol version; running without autocomplete until this shell is restarted"
+                            );
                             break;
-                        }
+                        },
+                        HandshakeOutcome::Failed(err) => {
+                            error!("failed performing handshake: {err:#}");
+                            continue;
+                        },
                     }
-                    if !handshake_success {
-                        error!("failed performing handshake");
-                        continue;
-                    }
-                    info!("Handshake succeeded");
 
                     // send outgoing messages
                     outgoing_rx.drain();
@@ -301,7 +363,83 @@ pub async fn spawn_remote_ipc(
                 }
             }
         }
+
+        // Only reached through a version mismatch; a stop returns above. The task owns the far
+        // ends of the returned channels, so parking here until figterm shuts down keeps them open.
+        let _ = stop_ipc_rx.await;
     });
 
     Ok((outgoing_tx, incoming_rx, stop_ipc_tx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Runs [`handshake`] against a peer that answers with `answers`, in order, and returns the
+    /// outcome together with the protocol version the handshake carried.
+    async fn handshake_against(answers: Vec<clientbound::Packet>) -> (HandshakeOutcome, u32) {
+        let (pty, desktop) = tokio::net::UnixStream::pair().unwrap();
+
+        let desktop = tokio::spawn(async move {
+            let (reader, mut writer) = tokio::io::split(desktop);
+            let mut reader = BufferedReader::new(reader);
+            let Some(Hostbound {
+                packet: Some(hostbound::Packet::Handshake(handshake)),
+            }) = reader.recv_message::<Hostbound>().await.unwrap()
+            else {
+                panic!("the first packet was not a handshake");
+            };
+            for packet in answers {
+                writer.send_message(Clientbound { packet: Some(packet) }).await.unwrap();
+            }
+            handshake.protocol_version
+        });
+
+        let (reader, mut writer) = tokio::io::split(pty);
+        let outcome = handshake(&mut BufferedReader::new(reader), &mut writer, "1234").await;
+        (outcome, desktop.await.unwrap())
+    }
+
+    fn response(success: bool, reject_reason: RejectReason, protocol_version: u32) -> clientbound::Packet {
+        clientbound::Packet::HandshakeResponse(HandshakeResponse {
+            success,
+            reject_reason: reject_reason.into(),
+            protocol_version,
+        })
+    }
+
+    #[tokio::test]
+    async fn handshake_sends_the_protocol_version_and_skips_pings() {
+        let (outcome, sent) = handshake_against(vec![
+            clientbound::Packet::Ping(()),
+            response(true, RejectReason::Unspecified, PROTOCOL_VERSION),
+        ])
+        .await;
+        assert_eq!(sent, PROTOCOL_VERSION);
+        assert!(matches!(outcome, HandshakeOutcome::Accepted), "{outcome:?}");
+    }
+
+    #[tokio::test]
+    async fn version_refusal_is_told_apart_from_other_failures() {
+        let (outcome, _) = handshake_against(vec![response(
+            false,
+            RejectReason::ProtocolVersionMismatch,
+            PROTOCOL_VERSION + 1,
+        )])
+        .await;
+        assert!(
+            matches!(outcome, HandshakeOutcome::VersionMismatch { desktop } if desktop == PROTOCOL_VERSION + 1),
+            "{outcome:?}"
+        );
+
+        // A refusal without the reason (a desktop that predates it, or a second handshake on the
+        // same connection) stays retryable.
+        let (outcome, _) = handshake_against(vec![response(false, RejectReason::Unspecified, 0)]).await;
+        assert!(matches!(outcome, HandshakeOutcome::Failed(_)), "{outcome:?}");
+
+        // So does a desktop that hangs up without answering.
+        let (outcome, _) = handshake_against(vec![]).await;
+        assert!(matches!(outcome, HandshakeOutcome::Failed(_)), "{outcome:?}");
+    }
 }

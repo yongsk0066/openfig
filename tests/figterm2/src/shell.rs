@@ -13,6 +13,11 @@ use anyhow::{
     Context,
     Result,
 };
+use fig_ipc::{
+    BufferedReader,
+    RecvMessage as _,
+    SendMessage as _,
+};
 use fig_proto::local::{
     EditBufferHook,
     InterceptedKeyHook,
@@ -20,6 +25,15 @@ use fig_proto::local::{
     PreExecHook,
     PromptHook,
     ShellContext,
+};
+use fig_proto::remote::clientbound::HandshakeResponse;
+use fig_proto::remote::clientbound::handshake_response::RejectReason;
+use fig_proto::remote::{
+    Clientbound,
+    Hostbound,
+    PROTOCOL_VERSION,
+    clientbound,
+    hostbound,
 };
 use fig_remote_ipc::RemoteHookHandler;
 use fig_remote_ipc::figterm::FigtermState;
@@ -43,6 +57,9 @@ use uuid::Uuid;
 
 /// Session id handed to the pty binary; it names the socket under `<runtime dir>/t/`.
 const SESSION_ID: &str = "1234";
+
+/// How much of the terminal output [`Shell::wait_for_output`] can search: the most recent bytes.
+const OUTPUT_TAIL: usize = 64 * 1024;
 
 /// Environment variables that make `q _ should-figterm-launch` refuse to wrap the shell
 /// (`crates/fig_cli/src/cli/internal/should_figterm_launch.rs`), or that `pre.sh` reads as "already
@@ -191,6 +208,44 @@ pub fn cli_binary() -> Result<std::path::PathBuf> {
     Ok(path)
 }
 
+/// What a [`Desktop::Refusing`] stub saw.
+#[derive(Debug, Default)]
+pub struct Refusals {
+    /// `protocol_version` of every handshake, in arrival order.
+    pub handshakes: Vec<u32>,
+    /// Packets other than handshakes. A refused pty binary has no business sending any.
+    pub other_packets: usize,
+}
+
+/// Answers every handshake on `listener` the way a desktop built for another protocol version
+/// does (`fig_remote_ipc::remote`), and records what arrived.
+async fn refuse_handshakes(listener: UnixListener, refusals: Arc<Mutex<Refusals>>) {
+    while let Ok((stream, _)) = listener.accept().await {
+        let refusals = refusals.clone();
+        tokio::spawn(async move {
+            let (reader, mut writer) = tokio::io::split(stream);
+            let mut reader = BufferedReader::new(reader);
+            while let Ok(Some(message)) = reader.recv_message::<Hostbound>().await {
+                let Some(hostbound::Packet::Handshake(handshake)) = message.packet else {
+                    refusals.lock().await.other_packets += 1;
+                    continue;
+                };
+                refusals.lock().await.handshakes.push(handshake.protocol_version);
+                let response = Clientbound {
+                    packet: Some(clientbound::Packet::HandshakeResponse(HandshakeResponse {
+                        success: false,
+                        reject_reason: RejectReason::ProtocolVersionMismatch.into(),
+                        protocol_version: PROTOCOL_VERSION + 1,
+                    })),
+                };
+                if writer.send_message(response).await.is_err() {
+                    break;
+                }
+            }
+        });
+    }
+}
+
 pub struct Shell {
     // pub remote_socket: UnixListener,
     /// Bound for [`Desktop::Stub`] only.
@@ -208,6 +263,10 @@ pub struct Shell {
     events: UnboundedReceiver<EditBufferEvent>,
     /// Arrival time of every chunk of terminal output, as the terminal emulator would see it.
     output_at: UnboundedReceiver<Instant>,
+    /// The last [`OUTPUT_TAIL`] bytes of terminal output.
+    output: Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Filled by [`Desktop::Refusing`] only.
+    pub refusals: Arc<Mutex<Refusals>>,
 }
 
 /// What one keystroke cost, both measured from the `write` to the pty master.
@@ -226,6 +285,10 @@ pub enum Desktop {
     /// code) in the test's private runtime dir. Hooks show up in [`Shell::buffer`] and
     /// [`Shell::keystroke`].
     Stub,
+    /// An in-process stub that refuses every handshake with
+    /// `REJECT_REASON_PROTOCOL_VERSION_MISMATCH`, as the desktop does for a pty binary from
+    /// another build. What reached it is in [`Shell::refusals`]; no hooks are observed.
+    Refusing,
     /// A desktop that is already running with `TMPDIR` set to this directory — an isolated
     /// `fig_desktop --allow-multiple`, never the installed app. The pty binary connects to it
     /// instead; nothing is observed on this side, so only [`Shell::press`] is useful.
@@ -256,7 +319,7 @@ impl Shell {
 
         // `TMPDIR` of the pty binary, which puts its runtime dir (and so `remote.sock`) under it.
         let runtime_parent = match &desktop {
-            Desktop::Stub => tempdir.path().to_path_buf(),
+            Desktop::Stub | Desktop::Refusing => tempdir.path().to_path_buf(),
             Desktop::External(tmpdir) => tmpdir.clone(),
         };
         let runtime_dir = runtime_parent.join(RUNTIME_DIR_NAME);
@@ -265,6 +328,7 @@ impl Shell {
         let buffer = Arc::new(Mutex::new(None));
         let shell_context = Arc::new(Mutex::new(None));
         let (events_tx, events) = unbounded_channel();
+        let refusals = Arc::new(Mutex::new(Refusals::default()));
 
         let desktop_socket = match &desktop {
             Desktop::Stub => {
@@ -286,6 +350,16 @@ impl Shell {
                         .unwrap();
                     }
                 });
+
+                Some(UnixListener::bind(runtime_dir.join("desktop.sock")).context("Failed to make desktop.socket")?)
+            },
+            Desktop::Refusing => {
+                tokio::fs::create_dir_all(&runtime_dir).await?;
+                tokio::fs::set_permissions(&runtime_dir, std::fs::Permissions::from_mode(0o700)).await?;
+
+                let listener =
+                    UnixListener::bind(runtime_dir.join("remote.sock")).context("Failed to bind remote.sock")?;
+                tokio::spawn(refuse_handshakes(listener, refusals.clone()));
 
                 Some(UnixListener::bind(runtime_dir.join("desktop.sock")).context("Failed to make desktop.socket")?)
             },
@@ -367,17 +441,27 @@ impl Shell {
 
         let mut res = pty_pair.master.try_clone_reader().unwrap();
         let (output_at_tx, output_at) = unbounded_channel();
-        std::thread::spawn(move || {
-            let mut buf = [0; 1024];
-            while let Ok(a) = res.read(&mut buf) {
-                let at = Instant::now();
-                if a == 0 {
-                    break;
-                }
-                let _ = output_at_tx.send(at);
-                if echo == Echo::Stdout {
-                    stdout().write_all(&buf[..a]).unwrap();
-                    stdout().flush().unwrap();
+        let output = Arc::new(std::sync::Mutex::new(Vec::new()));
+        std::thread::spawn({
+            let output = output.clone();
+            move || {
+                let mut buf = [0; 1024];
+                while let Ok(a) = res.read(&mut buf) {
+                    let at = Instant::now();
+                    if a == 0 {
+                        break;
+                    }
+                    let _ = output_at_tx.send(at);
+                    {
+                        let mut output = output.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                        output.extend_from_slice(&buf[..a]);
+                        let excess = output.len().saturating_sub(OUTPUT_TAIL);
+                        output.drain(..excess);
+                    }
+                    if echo == Echo::Stdout {
+                        stdout().write_all(&buf[..a]).unwrap();
+                        stdout().flush().unwrap();
+                    }
                 }
             }
         });
@@ -391,6 +475,17 @@ impl Shell {
                 while shell_context.lock().await.is_none() {
                     if std::time::Instant::now() > deadline {
                         anyhow::bail!("{} never connected within 15 s", fig_util::consts::PTY_BINARY_NAME);
+                    }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            },
+            Desktop::Refusing => {
+                while refusals.lock().await.handshakes.is_empty() {
+                    if std::time::Instant::now() > deadline {
+                        anyhow::bail!(
+                            "{} never attempted a handshake within 15 s",
+                            fig_util::consts::PTY_BINARY_NAME
+                        );
                     }
                     tokio::time::sleep(Duration::from_millis(25)).await;
                 }
@@ -425,7 +520,27 @@ impl Shell {
             shell_context,
             events,
             output_at,
+            output,
+            refusals,
         })
+    }
+
+    /// Waits until `needle` shows up in the terminal output, as the user would see it scroll by.
+    pub async fn wait_for_output(&self, needle: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let output = {
+                let output = self.output.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                String::from_utf8_lossy(&output).into_owned()
+            };
+            if output.contains(needle) {
+                return Ok(());
+            }
+            if Instant::now() > deadline {
+                anyhow::bail!("{needle:?} not in the terminal output within {timeout:?}; output so far:\n{output}");
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
     }
 
     /// Writes `key` to the pty and returns without waiting for anything.

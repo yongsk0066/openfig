@@ -338,6 +338,7 @@ impl Terminal for UnixTerminal {
                         let mut events = vec![];
                         parser.parse(&buf, |raw, evt| events.push(Ok((raw, evt))), false);
                         buf.clear();
+                        trace!(target: crate::latency::TARGET, t_us = crate::latency::now_us(), "input_parsed");
                         if let Err(err) = input_tx.send_async(events).await {
                             error!(%err, "Error sending event");
                         }
@@ -351,6 +352,7 @@ impl Terminal for UnixTerminal {
                     res = stdin.read_buf(&mut buf) => {
                         match res {
                             Ok(n) => {
+                                trace!(target: crate::latency::TARGET, t_us = crate::latency::now_us(), n, "stdin_read");
                                 trace!(buf =? &buf[0..n], "Read input");
                                 let full = buf.capacity() == buf.len();
                                 if full {

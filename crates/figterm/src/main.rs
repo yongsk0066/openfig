@@ -6,6 +6,7 @@ pub mod history;
 pub mod input;
 pub mod interceptor;
 pub mod ipc;
+mod latency;
 pub mod logger;
 mod message;
 pub mod pty;
@@ -495,6 +496,7 @@ async fn send_edit_buffer(
         forget_last_sent_edit_buffer();
         return Err(err.into());
     }
+    trace!(target: latency::TARGET, t_us = latency::now_us(), "hook_queued");
     Ok(())
 }
 
@@ -825,6 +827,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                     let mut input_res = Ok(());
                     match res {
                         Ok(events) => {
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), "input_recv");
                             let mut write_buffer = BytesMut::new();
                             for event in events {
                                 match event {
@@ -921,6 +924,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                 };
                             }
                             master.write_all(&write_buffer).await?;
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), n = write_buffer.len(), "pty_write");
                         }
                         Err(err) => {
                             warn!("Failed recv: {err}");
@@ -937,14 +941,19 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                             break 'select_loop Ok(());
                         },
                         Ok(size) => {
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), n = size, "pty_read");
                             trace!("Read {size} bytes from master");
 
                             advance_pty_output(&mut processor, &mut term, &write_buffer[..size]);
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), "parsed");
 
                             stdout.write_all(&write_buffer[..size]).await?;
                             stdout.flush().await?;
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), "echoed");
 
-                            if let Some(edit_buffer) = can_send_edit_buffer(&term)
+                            let edit_buffer = can_send_edit_buffer(&term);
+                            trace!(target: latency::TARGET, t_us = latency::now_us(), some = edit_buffer.is_some(), "edit_buffer");
+                            if let Some(edit_buffer) = edit_buffer
                                 && let Err(err) = send_edit_buffer(term.shell_state(), edit_buffer, &remote_sender, None).await {
                                     warn!("Failed to send edit buffer: {err}");
                                 }

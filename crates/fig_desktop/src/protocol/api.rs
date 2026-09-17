@@ -76,7 +76,7 @@ mod tests {
         ClientOriginatedMessage,
         PingRequest,
     };
-    use fig_remote_ipc::figterm::FigtermState;
+    use fig_shell_ipc::session::ShellSessions;
 
     use super::*;
     use crate::AUTOCOMPLETE_ID;
@@ -98,7 +98,7 @@ mod tests {
 
     fn api_state() -> Arc<ApiState> {
         Arc::new(ApiState {
-            figterm_state: Arc::new(FigtermState::default()),
+            shell_sessions: Arc::new(ShellSessions::default()),
             intercept_state: Default::default(),
             notifications_state: Arc::new(WebviewNotificationsState::default()),
             proxy: Box::new(NoEventLoop),
@@ -198,7 +198,7 @@ mod tests {
     // was flattened (docs/15-architecture-study.md §2.3 B); each must stay byte identical.
     // `tests/fig-api/fig-api-mock/tests/dispatch.rs` records every variant through the shared
     // handlers with a sandboxed `HOME`. Only requests that cannot change the machine are sent
-    // here: no session exists, so nothing reaches a figterm, and `NoEventLoop` refuses every
+    // here: no session exists, so nothing reaches a shell, and `NoEventLoop` refuses every
     // window event. `UpdateApplicationPropertiesRequest` is left out because the desktop's
     // handler loads keybindings from the user's real settings file and creates it if missing.
 

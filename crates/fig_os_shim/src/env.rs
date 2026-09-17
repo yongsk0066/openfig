@@ -177,10 +177,6 @@ impl Env {
         self.get_os("FIG_LOG_STDOUT").is_some()
     }
 
-    pub fn fig_term(&self) -> Result<String, VarError> {
-        self.get("FIG_TERM")
-    }
-
     pub fn fig_init_snapshot_test(&self) -> bool {
         self.get_os("FIG_INIT_SNAPSHOT_TEST").is_some()
     }

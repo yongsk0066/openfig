@@ -4,7 +4,6 @@
 // not defined.
 export const PRODUCT_NAME = window.fig?.constants?.productName ?? "Fig";
 export const CLI_BINARY_NAME = window.fig?.constants?.cliBinaryName ?? "q";
-export const PTY_BINARY_NAME = window.fig?.constants?.ptyBinaryName ?? "figterm";
 export const BUNDLE_ID = window.fig?.constants?.bundleId ?? "local.openfig";
 export const URL_SCHEMA = window.fig?.constants?.urlSchema ?? "fig";
 export const DATA_DIR_NAME = window.fig?.constants?.dataDirName ?? "fig";

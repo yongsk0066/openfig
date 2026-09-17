@@ -13,7 +13,6 @@ use fig_os_shim::{
 };
 use fig_util::{
     CLI_BINARY_NAME,
-    PTY_BINARY_NAME,
     Shell,
     directories,
 };
@@ -31,12 +30,16 @@ bitflags::bitflags! {
     pub struct InstallComponents: u64 {
         /// Removal of the integrations from user's dotfiles
         const SHELL_INTEGRATIONS    = 0b00000001;
-        /// This handles the removal of the CLI and pty binaries as well as the per shell
-        /// pty copies
+        /// This handles the removal of the CLI binary, and of the pty binary and its per-shell
+        /// copies that older installs left behind
         const BINARY                = 0b00000010;
         const DESKTOP_APP           = 0b00001000;
     }
 }
+
+/// What installs from before the shell hook put in `~/.local/bin` for the pty binary (`figterm`): a
+/// link to it and a copy per shell. Nothing creates them any more; uninstalling still removes them.
+const LEGACY_PTY_BINARIES: [&str; 3] = ["figterm", "zsh (figterm)", "bash (figterm)"];
 
 /// Removes the integration blocks from the user's rc files.
 ///
@@ -74,17 +77,10 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
 
         let folders = [directories::home_local_bin()?];
 
-        let all_binary_names = [CLI_BINARY_NAME, PTY_BINARY_NAME];
-
         for folder in folders {
-            for binary_name in all_binary_names {
-                let binary_path = folder.join(binary_name);
-                remove_binary(binary_path).await;
-            }
-
-            for shell in Shell::all() {
-                let pty_path = folder.join(format!("{shell} ({PTY_BINARY_NAME})"));
-                remove_binary(pty_path).await;
+            remove_binary(folder.join(CLI_BINARY_NAME)).await;
+            for name in LEGACY_PTY_BINARIES {
+                remove_binary(folder.join(name)).await;
             }
         }
     }

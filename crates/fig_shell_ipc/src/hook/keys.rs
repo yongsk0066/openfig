@@ -10,7 +10,7 @@ use std::collections::{
 };
 use std::sync::LazyLock;
 
-use fig_proto::figterm::Action;
+use fig_proto::shell::Action;
 use fig_settings::keybindings::{
     KeyBinding,
     KeyBindings,

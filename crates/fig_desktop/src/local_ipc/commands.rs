@@ -16,7 +16,7 @@ use fig_proto::local::{
     QuitCommand,
     UiElement,
 };
-use fig_remote_ipc::figterm::FigtermState;
+use fig_shell_ipc::session::ShellSessions;
 use tao::event_loop::ControlFlow;
 use tracing::error;
 
@@ -73,9 +73,9 @@ pub async fn quit(_: QuitCommand, proxy: &EventLoopProxy) -> LocalResult {
         })
 }
 
-pub async fn diagnostic(_: DiagnosticsCommand, figterm_state: &FigtermState) -> LocalResult {
+pub async fn diagnostic(_: DiagnosticsCommand, shell_sessions: &ShellSessions) -> LocalResult {
     let (edit_buffer_string, edit_buffer_cursor, shell_context, intercept_enabled, intercept_global_enabled) = {
-        match figterm_state.most_recent() {
+        match shell_sessions.most_recent() {
             Some(session) => (
                 Some(session.edit_buffer.text.clone()),
                 Some(session.edit_buffer.cursor),
@@ -185,13 +185,13 @@ pub fn log_level(LogLevelCommand { level }: LogLevelCommand) -> LocalResult {
 
 pub fn dump_state(
     command: DumpStateCommand,
-    figterm_state: &FigtermState,
+    shell_sessions: &ShellSessions,
     webview_notifications_state: &WebviewNotificationsState,
     platform_state: &PlatformState,
 ) -> LocalResult {
     let json = match command.r#type() {
-        DumpStateType::DumpStateFigterm => {
-            serde_json::to_string_pretty(&figterm_state).unwrap_or_else(|err| format!("unable to dump: {err}"))
+        DumpStateType::DumpStateSessions => {
+            serde_json::to_string_pretty(&shell_sessions).unwrap_or_else(|err| format!("unable to dump: {err}"))
         },
         DumpStateType::DumpStateWebNotifications => serde_json::to_string_pretty(&webview_notifications_state)
             .unwrap_or_else(|err| format!("unable to dump: {err}")),

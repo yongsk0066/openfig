@@ -10,34 +10,14 @@ use super::macos::{
 };
 use crate::Context;
 
-#[derive(Default, Debug, Clone)]
-pub struct FakePid {
-    pub pid: u32,
-    pub parent: Option<Box<Pid>>,
-    pub exe: Option<PathBuf>,
-    pub cmdline: Option<String>,
-}
-
-impl std::fmt::Display for FakePid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 /// Represents a currently running process. [Pid] should be used as the interface to accessing
 /// process-related information, e.g. the current process executable or parent processes.
 #[derive(Debug, Clone)]
-pub enum Pid {
-    Real(Weak<Context>, RawPid),
-    Fake(FakePid),
-}
+pub struct Pid(pub(crate) Weak<Context>, pub(crate) RawPid);
 
 impl std::fmt::Display for Pid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Pid::Real(_, raw) => write!(f, "{}", raw),
-            Pid::Fake(fake) => write!(f, "{}", fake),
-        }
+        write!(f, "{}", self.1)
     }
 }
 
@@ -63,33 +43,20 @@ impl Pid {
         current(ctx.clone())
     }
 
-    pub fn new_fake(fake: FakePid) -> Self {
-        Self::Fake(fake)
-    }
-
     /// Returns the parent process of this process, if it exists.
     pub fn parent(&self) -> Option<Box<Pid>> {
-        match self {
-            Pid::Real(ctx, raw) => parent(ctx.clone(), raw),
-            Pid::Fake(fake) => fake.parent.clone(),
-        }
+        parent(self.0.clone(), &self.1)
     }
 
     /// Returns the path to the executable file that launched this process if it exists.
     pub fn exe(&self) -> Option<PathBuf> {
-        match self {
-            Pid::Real(ctx, raw) => exe(ctx.clone(), raw),
-            Pid::Fake(fake) => fake.exe.clone(),
-        }
+        exe(self.0.clone(), &self.1)
     }
 
     /// Returns the command that originally started this process. Optional since not all platforms
     /// (e.g. Mac) support this.
     pub fn cmdline(&self) -> Option<String> {
-        match self {
-            Pid::Real(ctx, raw) => cmdline(ctx.clone(), raw),
-            Pid::Fake(fake) => fake.cmdline.clone(),
-        }
+        cmdline(self.0.clone(), &self.1)
     }
 }
 

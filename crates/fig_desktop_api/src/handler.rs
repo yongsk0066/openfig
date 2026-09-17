@@ -25,7 +25,7 @@ use crate::requests::{
     RequestResultImpl,
 };
 
-/// A request this crate cannot answer by itself, because it needs a window, a figterm session or
+/// A request this crate cannot answer by itself, because it needs a window, a shell session or
 /// the event loop. [`api_request`] hands these to the caller.
 #[derive(Debug)]
 pub enum DesktopRequest {
@@ -116,7 +116,7 @@ async fn handle_request(
             use requests::*;
 
             match submessage {
-                // figterm
+                // shell sessions
                 InsertTextRequest(request) => desktop(message_id, DesktopRequest::InsertText(request)).await,
                 // fs
                 ReadFileRequest(request) => fs::read_file(request, env).await,

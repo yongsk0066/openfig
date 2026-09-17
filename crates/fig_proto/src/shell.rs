@@ -1,4 +1,4 @@
-pub use crate::proto::figterm::*;
+pub use crate::proto::shell::*;
 
 impl InsertTextRequest {
     pub fn to_term_string(&self) -> String {

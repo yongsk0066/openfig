@@ -13,7 +13,7 @@ use std::sync::{
 
 use ::url::Url;
 use fig_desktop_api::init_script::javascript_init;
-use fig_remote_ipc::figterm::FigtermState;
+use fig_shell_ipc::session::ShellSessions;
 use fig_util::consts::PRODUCT_NAME;
 use fig_util::{
     URL_SCHEMA,
@@ -77,7 +77,7 @@ use crate::protocol::{
     resource,
     spec,
 };
-use crate::remote_ipc::RemoteHook;
+use crate::shell_ipc::ShellHook;
 use crate::tray::{
     self,
     build_tray,
@@ -135,7 +135,7 @@ pub struct WebviewManager {
     fig_id_map: FigIdMap,
     window_id_map: WryIdMap,
     event_loop: EventLoop,
-    figterm_state: Arc<FigtermState>,
+    shell_sessions: Arc<ShellSessions>,
     platform_state: Arc<PlatformState>,
     notifications_state: Arc<WebviewNotificationsState>,
     api_state: Arc<ApiState>,
@@ -148,7 +148,7 @@ pub struct WebviewManager {
 /// signature only carried an `Arc<fig_os_shim::Context>` and a `WindowId`. They made
 /// `protocol/api.rs` untestable — its own TODO said so.
 pub struct ApiState {
-    pub figterm_state: Arc<FigtermState>,
+    pub shell_sessions: Arc<ShellSessions>,
     pub intercept_state: Arc<InterceptState>,
     pub notifications_state: Arc<WebviewNotificationsState>,
     pub proxy: Box<dyn EventSender>,
@@ -183,12 +183,12 @@ impl WebviewManager {
 
         let proxy = event_loop.create_proxy();
 
-        let figterm_state = Arc::new(FigtermState::default());
+        let shell_sessions = Arc::new(ShellSessions::default());
         let platform_state = Arc::new(PlatformState::new(proxy.clone()));
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApiState {
-            figterm_state: figterm_state.clone(),
+            shell_sessions: shell_sessions.clone(),
             intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
             proxy: Box::new(proxy),
@@ -199,7 +199,7 @@ impl WebviewManager {
             fig_id_map: Default::default(),
             window_id_map: Default::default(),
             event_loop,
-            figterm_state,
+            shell_sessions,
             platform_state,
             notifications_state,
             api_state,
@@ -255,41 +255,33 @@ impl WebviewManager {
             )
             .expect("Failed to initialize platform state");
 
-        // TODO: implement
-        // tokio::spawn(figterm::clean_figterm_cache(self.figterm_state.clone()));
-
         // Start the local ipc task, listens for requests to the desktop socket.
         {
             let platform_state = self.platform_state.clone();
-            let figterm_state = self.figterm_state.clone();
+            let shell_sessions = self.shell_sessions.clone();
             let notifications_state = self.notifications_state.clone();
             let event_loop = self.event_loop.create_proxy();
             tokio::spawn(async move {
-                match local_ipc::start_local_ipc(platform_state, figterm_state, notifications_state, event_loop).await {
+                match local_ipc::start_local_ipc(platform_state, shell_sessions, notifications_state, event_loop).await
+                {
                     Ok(_) => (),
                     Err(err) => error!("Unable to start local ipc: {:?}", err),
                 }
             });
         }
 
-        let remote_hook = RemoteHook {
+        let shell_hook = ShellHook {
             notifications_state: self.notifications_state.clone(),
             proxy: self.event_loop.create_proxy(),
             last_sent: Default::default(),
         };
 
-        tokio::spawn(fig_remote_ipc::remote::start_remote_ipc(
-            fig_util::directories::local_remote_socket_path().unwrap(),
-            self.figterm_state.clone(),
-            remote_hook.clone(),
-        ));
-
         // zsh shells that report through `fig.zsh`; `doctor` asks it whether it answers.
         {
-            let figterm_state = self.figterm_state.clone();
+            let shell_sessions = self.shell_sessions.clone();
             tokio::spawn(async move {
                 let result = match fig_util::directories::hook_socket_path() {
-                    Ok(path) => fig_remote_ipc::hook::start_hook_ipc(path, figterm_state, remote_hook).await,
+                    Ok(path) => fig_shell_ipc::hook::start_hook_ipc(path, shell_sessions, shell_hook).await,
                     Err(err) => Err(err.into()),
                 };
                 if let Err(err) = result {
@@ -403,7 +395,7 @@ impl WebviewManager {
                                 if window_state.enabled() || window_event.is_allowed_while_disabled() {
                                     window_state.handle(
                                         window_event,
-                                        &self.figterm_state,
+                                        &self.shell_sessions,
                                         &self.platform_state,
                                         &self.notifications_state,
                                         window_target,
@@ -427,7 +419,7 @@ impl WebviewManager {
                                 if window_state.enabled() || window_event.is_allowed_while_disabled() {
                                     window_state.handle(
                                         window_event.clone(),
-                                        &self.figterm_state,
+                                        &self.shell_sessions,
                                         &self.platform_state,
                                         &self.notifications_state,
                                         window_target,

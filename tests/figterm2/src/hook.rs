@@ -32,11 +32,10 @@ use fig_proto::local::{
     PreExecHook,
     PromptHook,
 };
-use fig_remote_ipc::RemoteHookHandler;
-use fig_remote_ipc::figterm::{
-    FigtermCommand,
-    FigtermState,
-    SessionKind,
+use fig_shell_ipc::ShellHookHandler;
+use fig_shell_ipc::session::{
+    ShellCommand,
+    ShellSessions,
 };
 use fig_util::RUNTIME_DIR_NAME;
 use portable_pty::{
@@ -69,7 +68,7 @@ const OUTPUT_TAIL: usize = 256 * 1024;
 /// What reached the other end of `hook.sock`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HookEvent {
-    /// Decoded by the desktop's server and handed to `RemoteHookHandler::edit_buffer`.
+    /// Decoded by the desktop's server and handed to `ShellHookHandler::edit_buffer`.
     EditBuffer {
         text: String,
         cursor: i64,
@@ -101,10 +100,10 @@ impl Recorder {
 }
 
 #[async_trait::async_trait]
-impl RemoteHookHandler for Recorder {
+impl ShellHookHandler for Recorder {
     type Error = anyhow::Error;
 
-    async fn edit_buffer(&mut self, hook: &EditBufferHook, _: Uuid, _: &Arc<FigtermState>) -> Result<()> {
+    async fn edit_buffer(&mut self, hook: &EditBufferHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<()> {
         self.record(HookEvent::EditBuffer {
             text: hook.text.clone(),
             cursor: hook.cursor,
@@ -112,19 +111,19 @@ impl RemoteHookHandler for Recorder {
         Ok(())
     }
 
-    async fn prompt(&mut self, hook: &PromptHook, _: Uuid, _: &Arc<FigtermState>) -> Result<()> {
+    async fn prompt(&mut self, hook: &PromptHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<()> {
         self.record(HookEvent::Prompt {
             cwd: hook.context.as_ref().and_then(|c| c.current_working_directory.clone()),
         });
         Ok(())
     }
 
-    async fn pre_exec(&mut self, _: &PreExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<()> {
+    async fn pre_exec(&mut self, _: &PreExecHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<()> {
         self.record(HookEvent::PreExec);
         Ok(())
     }
 
-    async fn post_exec(&mut self, hook: &PostExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<()> {
+    async fn post_exec(&mut self, hook: &PostExecHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<()> {
         self.record(HookEvent::PostExec {
             command: hook.command.clone(),
             exit_code: hook.exit_code,
@@ -144,7 +143,7 @@ impl RemoteHookHandler for Recorder {
 /// Who is on the other end of `hook.sock`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Daemon {
-    /// `fig_remote_ipc::hook::start_hook_ipc`, the desktop's server, with a recording handler.
+    /// `fig_shell_ipc::hook::start_hook_ipc`, the desktop's server, with a recording handler.
     Real,
     /// Nobody: the socket does not exist.
     Absent,
@@ -176,7 +175,7 @@ pub struct HookShell {
     output: Arc<std::sync::Mutex<Vec<u8>>>,
     output_at: UnboundedReceiver<Instant>,
     /// [`Daemon::Real`] only.
-    pub figterm_state: Option<Arc<FigtermState>>,
+    pub shell_sessions: Option<Arc<ShellSessions>>,
     daemon: Vec<JoinHandle<()>>,
     /// [`Daemon::Raw`]: writers of the accepted connections.
     raw_writers: Arc<tokio::sync::Mutex<Vec<tokio::net::unix::OwnedWriteHalf>>>,
@@ -216,7 +215,7 @@ impl HookShell {
         let (events_tx, events) = unbounded_channel();
         let recorder = Recorder(events_tx);
         let raw_writers = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-        let mut figterm_state = None;
+        let mut shell_sessions = None;
         let mut tasks = Vec::new();
         if daemon != Daemon::Absent {
             std::fs::create_dir_all(&runtime_dir)?;
@@ -224,12 +223,12 @@ impl HookShell {
         match daemon {
             Daemon::Absent => {},
             Daemon::Real => {
-                let state = Arc::new(FigtermState::new());
-                figterm_state = Some(state.clone());
+                let state = Arc::new(ShellSessions::new());
+                shell_sessions = Some(state.clone());
                 let path = socket.clone();
                 let recorder = recorder.clone();
                 tasks.push(tokio::spawn(async move {
-                    fig_remote_ipc::hook::start_hook_ipc(path, state, recorder)
+                    fig_shell_ipc::hook::start_hook_ipc(path, state, recorder)
                         .await
                         .unwrap();
                 }));
@@ -292,7 +291,7 @@ impl HookShell {
             recorder,
             output,
             output_at,
-            figterm_state,
+            shell_sessions,
             daemon: tasks,
             raw_writers,
         };
@@ -485,14 +484,14 @@ impl HookShell {
     }
 
     /// Sends `command` to the only hook session, the way the desktop's request handlers do.
-    pub fn command(&self, command: FigtermCommand) -> Result<()> {
-        let state = self.figterm_state.as_ref().context("not a Daemon::Real shell")?;
+    pub fn command(&self, command: ShellCommand) -> Result<()> {
+        let state = self.shell_sessions.as_ref().context("not a Daemon::Real shell")?;
         let sender = state
             .inner
             .lock()
             .linked_sessions
             .values()
-            .find(|session| session.kind == SessionKind::ZshHook)
+            .next()
             .map(|session| session.sender.clone())
             .context("no hook session")?;
         sender.send(command)?;
@@ -501,15 +500,9 @@ impl HookShell {
 
     /// Hook sessions the desktop currently has.
     pub fn sessions(&self) -> usize {
-        self.figterm_state.as_ref().map_or(0, |state| {
-            state
-                .inner
-                .lock()
-                .linked_sessions
-                .values()
-                .filter(|session| session.kind == SessionKind::ZshHook)
-                .count()
-        })
+        self.shell_sessions
+            .as_ref()
+            .map_or(0, |state| state.inner.lock().linked_sessions.len())
     }
 
     /// [`Daemon::Raw`]: writes `line` to every connection.

@@ -28,20 +28,6 @@ async fn launchctl<'a>(args: impl IntoIterator<Item = &'a str>) {
     }
 }
 
-/// True when both paths exist, have the same length and identical bytes.
-async fn same_file_contents(a: &std::path::Path, b: &std::path::Path) -> bool {
-    let (Ok(ma), Ok(mb)) = (tokio::fs::metadata(a).await, tokio::fs::metadata(b).await) else {
-        return false;
-    };
-    if ma.len() != mb.len() {
-        return false;
-    }
-    match (tokio::fs::read(a).await, tokio::fs::read(b).await) {
-        (Ok(da), Ok(db)) => da == db,
-        _ => false,
-    }
-}
-
 /// Hidden sibling `.<name>.new` of `dst`, where a replacement is staged before it is renamed into
 /// place. Same directory, so the `rename` never crosses a file system.
 fn staging_path(dst: &std::path::Path) -> Result<std::path::PathBuf, std::io::Error> {
@@ -65,24 +51,6 @@ async fn rename_into_place(tmp: &std::path::Path, dst: &std::path::Path) -> Resu
         tokio::fs::remove_file(tmp).await.ok();
     }
     result
-}
-
-/// Replace `dst` with a copy of `src` via a staged file and a `rename`, the same way the
-/// Justfile's `install` recipe does it.
-///
-/// Neither half of the obvious alternatives is safe for the `<shell> (figterm)` copies. Removing
-/// `dst` and then copying leaves a window in which a new shell's rc hook finds no binary. Copying
-/// over an existing `dst` rewrites the pages of a signed executable that open terminal tabs are
-/// running, and the kernel then kills every new `exec` of it with "Code Signature Invalid".
-async fn replace_file(src: &std::path::Path, dst: &std::path::Path) -> Result<(), std::io::Error> {
-    let tmp = staging_path(dst)?;
-    // A leftover from an interrupted run is removed rather than written into.
-    tokio::fs::remove_file(&tmp).await.ok();
-    if let Err(err) = tokio::fs::copy(src, &tmp).await {
-        tokio::fs::remove_file(&tmp).await.ok();
-        return Err(err);
-    }
-    rename_into_place(&tmp, dst).await
 }
 
 /// Symlink, and overwrite if it already exists and is invalid or not a symlink
@@ -121,13 +89,11 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
     use std::fs;
 
     use fig_integrations::shell::ShellExt;
-    use fig_util::Shell;
     use fig_util::consts::{
         APP_BUNDLE_ID,
         APP_PROCESS_NAME,
         CLI_BINARY_NAME,
         LAUNCH_AGENT_LABEL,
-        PTY_BINARY_NAME,
     };
     use macos_utils::bundle::get_bundle_path;
 
@@ -139,37 +105,6 @@ pub async fn initialize_fig_dir(env: &fig_os_shim::Env) -> anyhow::Result<()> {
     let local_bin = fig_util::directories::home_local_bin()?;
     if let Err(err) = fs::create_dir_all(&local_bin) {
         error!(%err, "Failed to create {local_bin:?}");
-    }
-
-    // Install figterm to ~/.local/bin
-    match get_bundle_path_for_executable(PTY_BINARY_NAME) {
-        Some(pty_path) => {
-            let link = local_bin.join(PTY_BINARY_NAME);
-            if let Err(err) = symlink(&pty_path, link).await {
-                error!(%err, "Failed to symlink for {PTY_BINARY_NAME}: {pty_path:?}");
-            }
-
-            // Awaited, not spawned: the refresh used to run in a detached task, so it raced the rest
-            // of startup and its errors went nowhere anyone waited for. Comparing the bytes costs
-            // two reads of an ~11 MB binary per shell, from the page cache after the first launch.
-            for shell in Shell::all() {
-                let pty_shell_cpy = local_bin.join(format!("{shell} ({PTY_BINARY_NAME})"));
-
-                // Refresh the copy whenever its bytes differ from the bundled binary. The upstream
-                // check compared `--version` strings, which never change between local rebuilds of
-                // the same version — so every rebuild kept spawning the copy from the first install,
-                // and once the env-var names moved that stale figterm made `should-figterm-launch`
-                // start another figterm inside it.
-                if same_file_contents(&pty_shell_cpy, &pty_path).await {
-                    continue;
-                }
-
-                if let Err(err) = replace_file(&pty_path, &pty_shell_cpy).await {
-                    error!(%err, "Failed to copy {PTY_BINARY_NAME} to {}", pty_shell_cpy.display());
-                }
-            }
-        },
-        None => error!("Failed to find {PTY_BINARY_NAME} in bundle"),
     }
 
     // install the cli to ~/.local/bin
@@ -242,41 +177,6 @@ mod test {
     #[test]
     fn test_current_version() {
         current_version();
-    }
-
-    #[tokio::test]
-    async fn replace_file_swaps_the_inode_and_leaves_no_staging_file() {
-        use std::os::unix::fs::MetadataExt;
-
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let src = tmp_dir.path().join("figterm");
-        let dst = tmp_dir.path().join("zsh (figterm)");
-        let staged = tmp_dir.path().join(".zsh (figterm).new");
-
-        // First install: nothing to replace.
-        std::fs::write(&src, "old").unwrap();
-        replace_file(&src, &dst).await.unwrap();
-        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "old");
-
-        // A running figterm holds the old file open; a refresh must not write into it.
-        let mut running = std::fs::File::open(&dst).unwrap();
-        let old_ino = std::fs::metadata(&dst).unwrap().ino();
-
-        std::fs::write(&src, "new").unwrap();
-        replace_file(&src, &dst).await.unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "new");
-        assert_ne!(std::fs::metadata(&dst).unwrap().ino(), old_ino);
-        // Through the handle opened before the refresh, not by path.
-        assert_eq!(std::io::read_to_string(&mut running).unwrap(), "old");
-        assert!(!staged.exists());
-
-        // A leftover from an interrupted refresh does not get in the way.
-        std::fs::write(&staged, "partial").unwrap();
-        std::fs::write(&src, "newer").unwrap();
-        replace_file(&src, &dst).await.unwrap();
-        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "newer");
-        assert!(!staged.exists());
     }
 
     #[tokio::test]

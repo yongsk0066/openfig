@@ -5,7 +5,7 @@
 
 mod cli;
 mod event;
-// mod figterm;
+// mod insert_text;
 mod file_watcher;
 mod install;
 mod launchd_plist;
@@ -13,8 +13,8 @@ mod local_ipc;
 pub mod notification_bus;
 mod platform;
 pub mod protocol;
-mod remote_ipc;
 mod request;
+mod shell_ipc;
 mod tray;
 mod utils;
 mod webview;

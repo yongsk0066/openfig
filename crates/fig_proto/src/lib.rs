@@ -2,10 +2,10 @@
 
 pub mod fig;
 pub mod fig_common;
-pub mod figterm;
 pub mod hooks;
 pub mod local;
 pub(crate) mod proto;
+pub mod shell;
 pub mod util;
 use std::fmt::Debug;
 use std::mem::size_of;
@@ -29,22 +29,6 @@ pub use prost_reflect::{
 };
 use serde::Serialize;
 use thiserror::Error;
-
-pub mod remote {
-    pub use crate::proto::remote::*;
-
-    /// Version of the pty binary <-> desktop protocol in `proto/remote.proto`, sent in
-    /// `Hostbound.Handshake.protocol_version`.
-    ///
-    /// The desktop refuses a handshake whose version is not this one, and the pty binary then runs
-    /// the shell without hooks instead of talking a protocol the other side may misread — the
-    /// case of a `<shell> (figterm)` copy that was already running when the app was rebuilt.
-    /// Builds that predate the field send 0 and are refused as well.
-    ///
-    /// Bump it with any change to `remote.proto`, or to a message it carries, that an older peer
-    /// would misread. Adding an optional field both sides may ignore does not need a bump.
-    pub const PROTOCOL_VERSION: u32 = 1;
-}
 
 // This is not used explicitly, but it must be here for the derive
 // impls on the protos for dynamic message

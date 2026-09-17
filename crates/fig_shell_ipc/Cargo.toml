@@ -1,5 +1,5 @@
 [package]
-name = "fig_remote_ipc"
+name = "fig_shell_ipc"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
@@ -13,7 +13,6 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-fig_ipc.workspace = true
 fig_proto.workspace = true
 fig_settings.workspace = true
 fig_util.workspace = true

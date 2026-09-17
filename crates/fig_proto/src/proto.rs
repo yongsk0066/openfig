@@ -20,12 +20,7 @@ pub(crate) mod local {
     include!(concat!(env!("OUT_DIR"), "/local.rs"));
 }
 
-/// Figterm Protocol Buffers
-pub(crate) mod figterm {
-    include!(concat!(env!("OUT_DIR"), "/figterm.rs"));
-}
-
-/// remote Socket Protocol Buffers
-pub(crate) mod remote {
-    include!(concat!(env!("OUT_DIR"), "/remote.rs"));
+/// What the desktop asks of a shell session
+pub(crate) mod shell {
+    include!(concat!(env!("OUT_DIR"), "/shell.rs"));
 }

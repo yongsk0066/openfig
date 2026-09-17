@@ -6,59 +6,27 @@ use std::sync::{
     Weak,
 };
 
-pub use pid::{
-    FakePid,
-    Pid,
-};
+pub use pid::Pid;
 
-use crate::{
-    Context,
-    Shim,
-};
+use crate::Context;
 
 mod macos;
 
 /// Represents the interface to accessing info about the currently running process tree.
 #[derive(Debug, Clone)]
-pub struct ProcessInfo(inner::Inner);
-
-mod inner {
-    use super::*;
-
-    #[derive(Debug, Clone)]
-    pub(super) enum Inner {
-        Real(Weak<Context>),
-        Fake(Pid),
-    }
-}
+pub struct ProcessInfo(Weak<Context>);
 
 impl ProcessInfo {
     /// Creates a new [ProcessInfo]. This takes a [Weak] pointer since accessing process info on
     /// platforms like Linux requires file system access, and allows this instance to be embedded
     /// within a single [Context] instance.
     pub(crate) fn new(ctx: Weak<Context>) -> Self {
-        Self(inner::Inner::Real(ctx.clone()))
-    }
-
-    /// Creates a new fake implementation by using the supplied [FakePid] as the process id of the
-    /// currently running process.
-    pub fn new_fake(pid: FakePid) -> Self {
-        Self(inner::Inner::Fake(Pid::Fake(pid)))
+        Self(ctx)
     }
 
     /// Returns a [Pid] representing the currently running process.
     pub fn current_pid(&self) -> Pid {
-        use inner::Inner;
-        match &self.0 {
-            Inner::Real(ctx) => Pid::current(ctx.clone()),
-            Inner::Fake(fake) => fake.clone(),
-        }
-    }
-}
-
-impl Shim for ProcessInfo {
-    fn is_real(&self) -> bool {
-        matches!(self.0, inner::Inner::Real(_))
+        Pid::current(self.0.clone())
     }
 }
 

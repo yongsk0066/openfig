@@ -11,11 +11,10 @@ pub trait Shim {
     fn is_real(&self) -> bool;
 }
 
-/// The process environment and the process tree, each either real or faked.
+/// The process environment, real or faked, and the process tree.
 ///
-/// These are the two things tests cannot otherwise control without `unsafe` environment writes
-/// or a real parent process chain: `should_figterm_launch` decides from the parent and
-/// grandparent executables, and several code paths read `HOME` and friends.
+/// Tests cannot otherwise control the environment without `unsafe` writes, and several code paths
+/// read `HOME` and friends.
 #[derive(Debug, Clone)]
 pub struct Context {
     env: Env,
@@ -43,7 +42,6 @@ impl Context {
 #[derive(Default, Debug)]
 pub struct ContextBuilder {
     env: Option<Env>,
-    process_info: Option<ProcessInfo>,
 }
 
 impl ContextBuilder {
@@ -56,21 +54,12 @@ impl ContextBuilder {
         let env = self.env.unwrap_or_default();
         Arc::new_cyclic(|ctx| Context {
             env,
-            process_info: if let Some(process_info) = self.process_info {
-                process_info
-            } else {
-                ProcessInfo::new(ctx.clone())
-            },
+            process_info: ProcessInfo::new(ctx.clone()),
         })
     }
 
     pub fn with_env(mut self, env: Env) -> Self {
         self.env = Some(env);
-        self
-    }
-
-    pub fn with_process_info(mut self, process_info: ProcessInfo) -> Self {
-        self.process_info = Some(process_info);
         self
     }
 
@@ -106,7 +95,6 @@ mod tests {
     fn context_builder_returns_real_impls_by_default() {
         let ctx = ContextBuilder::new().build();
         assert!(ctx.env().is_real());
-        assert!(ctx.process_info().is_real());
     }
 
     /// `with_env_var` on a builder that already holds a fake environment adds to it: the

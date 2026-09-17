@@ -474,9 +474,9 @@ export declare const DumpStateCommandSchema: GenMessage<DumpStateCommand>;
  */
 export enum DumpStateCommand_Type {
   /**
-   * @generated from enum value: TYPE_DUMP_STATE_FIGTERM = 0;
+   * @generated from enum value: TYPE_DUMP_STATE_SESSIONS = 0;
    */
-  DUMP_STATE_FIGTERM = 0,
+  DUMP_STATE_SESSIONS = 0,
 
   /**
    * @generated from enum value: TYPE_DUMP_STATE_WEB_NOTIFICATIONS = 1;

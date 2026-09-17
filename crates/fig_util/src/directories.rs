@@ -1,5 +1,4 @@
 use std::convert::TryInto;
-use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -191,26 +190,12 @@ pub fn desktop_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("desktop.sock"))
 }
 
-/// The path to local remote socket
-///
-/// - MacOS: `$TMPDIR/{runtime_dir}/remote.sock`
-pub fn local_remote_socket_path() -> Result<PathBuf> {
-    Ok(host_sockets_dir()?.join("remote.sock"))
-}
-
 /// The socket the zsh hook (`fig.zsh`) connects to, speaking the line protocol of
-/// `fig_remote_ipc::hook` rather than `remote.sock`'s protobuf, which zsh cannot produce.
+/// `fig_shell_ipc::hook`.
 ///
 /// - MacOS: `$TMPDIR/{runtime_dir}/hook.sock`
 pub fn hook_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("hook.sock"))
-}
-
-/// Get path to a figterm socket
-///
-/// - MacOS: `$TMPDIR/{runtime_dir}/t/$SESSION_ID.sock`
-pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
-    Ok(sockets_dir()?.join("t").join(format!("{session_id}.sock")))
 }
 
 /// The path to the resources directory
@@ -230,7 +215,6 @@ pub fn settings_path() -> Result<PathBuf> {
 utf8_dir!(home_dir);
 utf8_dir!(fig_data_dir);
 utf8_dir!(sockets_dir);
-utf8_dir!(figterm_socket_path, session_id: impl Display);
 utf8_dir!(backups_dir);
 utf8_dir!(logs_dir);
 
@@ -246,9 +230,7 @@ mod tests {
         assert!(home_local_bin().is_ok());
         assert!(fig_data_dir().is_ok());
         assert!(sockets_dir().is_ok());
-        assert!(local_remote_socket_path().is_ok());
         assert!(hook_socket_path().is_ok());
-        assert!(figterm_socket_path("test").is_ok());
         assert!(resources_path().is_ok());
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
@@ -265,11 +247,6 @@ mod tests {
         assert_eq!(
             host_sockets_dir().unwrap().file_name().unwrap().to_str().unwrap(),
             RUNTIME_DIR_NAME
-        );
-
-        assert_eq!(
-            figterm_socket_path("").unwrap().parent().unwrap().file_name().unwrap(),
-            "t"
         );
     }
 
@@ -338,18 +315,8 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_local_remote_socket_path() {
-        assert_directory!(local_remote_socket_path(), @"$TMPDIR/figrun/remote.sock");
-    }
-
-    #[test]
     fn snapshot_hook_socket_path() {
         assert_directory!(hook_socket_path(), @"$TMPDIR/figrun/hook.sock");
-    }
-
-    #[test]
-    fn snapshot_figterm_socket_path() {
-        assert_directory!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/figrun/t/$SESSION_ID.sock");
     }
 
     #[test]
@@ -363,18 +330,9 @@ mod tests {
         /// Sockets are bounded at 100 bytes, why, because legacy compat
         const MAX_SOCKET_LEN: usize = 100;
 
-        let uuid = uuid::Uuid::new_v4().simple().to_string();
-        let figterm_socket = figterm_socket_path(uuid.clone()).unwrap();
-        let figterm_socket_bytes = figterm_socket.as_os_str().as_bytes().len();
-        assert!(figterm_socket_bytes <= MAX_SOCKET_LEN);
-
         let fig_socket = desktop_socket_path().unwrap();
         let fig_socket_bytes = fig_socket.as_os_str().as_bytes().len();
         assert!(fig_socket_bytes <= MAX_SOCKET_LEN);
-
-        let secure_socket = local_remote_socket_path().unwrap();
-        let secure_socket_bytes = secure_socket.as_os_str().as_bytes().len();
-        assert!(secure_socket_bytes <= MAX_SOCKET_LEN);
 
         let hook_socket = hook_socket_path().unwrap();
         assert!(hook_socket.as_os_str().as_bytes().len() <= MAX_SOCKET_LEN);

@@ -10,7 +10,6 @@ use fig_util::{
     CLI_BINARY_NAME,
     DATA_DIR_NAME,
     PRODUCT_NAME,
-    PTY_BINARY_NAME,
     URL_SCHEMA,
     directories,
 };
@@ -24,10 +23,9 @@ const DEFAULT_THEMES: &[&str] = &["light", "dark", "system"];
 #[serde(rename_all = "camelCase")]
 pub struct Constants {
     // Brand names, injected so the web packages never hardcode one. Serialized (camelCase)
-    // as productName / cliBinaryName / ptyBinaryName / bundleId / urlSchema / dataDirName.
+    // as productName / cliBinaryName / bundleId / urlSchema / dataDirName.
     product_name: &'static str,
     cli_binary_name: &'static str,
-    pty_binary_name: &'static str,
     bundle_id: &'static str,
     url_schema: &'static str,
     data_dir_name: &'static str,
@@ -80,7 +78,6 @@ impl Constants {
         Self {
             product_name: PRODUCT_NAME,
             cli_binary_name: CLI_BINARY_NAME,
-            pty_binary_name: PTY_BINARY_NAME,
             bundle_id: APP_BUNDLE_ID,
             url_schema: URL_SCHEMA,
             data_dir_name: DATA_DIR_NAME,
@@ -135,14 +132,7 @@ mod tests {
     #[test]
     fn brand_constants_json_keys() {
         let value = serde_json::to_value(Constants::new(true)).unwrap();
-        for key in [
-            "productName",
-            "cliBinaryName",
-            "ptyBinaryName",
-            "bundleId",
-            "urlSchema",
-            "dataDirName",
-        ] {
+        for key in ["productName", "cliBinaryName", "bundleId", "urlSchema", "dataDirName"] {
             assert!(value.get(key).is_some_and(|v| v.is_string()), "missing key {key}");
         }
     }

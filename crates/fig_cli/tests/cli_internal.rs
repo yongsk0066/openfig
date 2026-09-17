@@ -35,40 +35,11 @@ fn hostname() -> Result<()> {
 }
 
 #[test]
-fn should_figterm_launch_code_success() -> Result<()> {
-    cli()
-        .args(["_", "should-figterm-launch"])
-        .env("FIG_FORCE_FIGTERM_LAUNCH", "1")
-        .assert()
-        .success();
-    Ok(())
-}
-
-#[test]
-fn should_figterm_launch_code_failure() -> Result<()> {
-    cli().args(["_", "should-figterm-launch"]).assert().failure();
-    Ok(())
-}
-
-#[test]
 fn socket_dir() -> Result<()> {
     cli()
         .args(["_", "sockets-dir"])
         .assert()
         .stdout(format!("{}\n", fig_util::directories::sockets_dir_utf8().unwrap()))
-        .success();
-    Ok(())
-}
-
-#[test]
-fn figterm_socket_path() -> Result<()> {
-    cli()
-        .args(["_", "figterm-socket-path", "abcd"])
-        .assert()
-        .stdout(format!(
-            "{}\n",
-            fig_util::directories::figterm_socket_path_utf8("abcd").unwrap()
-        ))
         .success();
     Ok(())
 }

@@ -8,7 +8,6 @@ declare global {
           version: string;
           productName?: string;
           cliBinaryName?: string;
-          ptyBinaryName?: string;
           bundleId?: string;
           urlSchema?: string;
           dataDirName?: string;

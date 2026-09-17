@@ -3,15 +3,15 @@
 We use [protocol buffers](https://developers.google.com/protocol-buffers/) as a
 message format for inter process communication.
 
-This folder defines four protocols:
+This folder defines:
 
-1. `local.proto` - Protocol for communication from local processes like
-   `figterm` and the `fig` CLI to the desktop app
+1. `local.proto` - Protocol for communication from local processes like the
+   `fig` CLI to the desktop app, and the hooks shell sessions report
 2. `fig.proto` - Protocol for communication between client Fig.js apps like
    autocomplete and the desktop app
-3. `figterm.proto` - Protocol for sending commands from the CLI to `figterm`
-4. `remote.proto` - Protocol for sending between `figterm` and the desktop app,
-   intended to be secure for remote machines
+3. `shell.proto` - What the desktop asks of a shell session; `fig.zsh` receives
+   it as lines of text from `fig_shell_ipc::hook`, not as protobuf
+4. `fig_common.proto` - Definitions shared by the others
 
 ## Setup
 

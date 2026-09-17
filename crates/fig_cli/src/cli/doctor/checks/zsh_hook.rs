@@ -98,12 +98,6 @@ async fn zsh_version(zsh: &Path) -> Option<String> {
     (!version.is_empty()).then_some(version)
 }
 
-/// Whether the shell `doctor` runs in reports through the hook, so the pty binary's checks do not
-/// apply to it.
-pub fn current_shell_uses_hook() -> bool {
-    Shell::current_shell() == Some(Shell::Zsh)
-}
-
 /// Which path a new zsh takes, which zsh that is, and whether `hook.sock` answers.
 pub struct ZshHookCheck {
     zsh: PathBuf,

@@ -4,7 +4,6 @@ pub const APP_BUNDLE_NAME: &str = concat!(env!("FIG_BRAND_APP_NAME"), ".app");
 pub const APP_PROCESS_NAME: &str = env!("FIG_BRAND_DESKTOP_BIN");
 
 pub const CLI_BINARY_NAME: &str = env!("FIG_BRAND_CLI_BIN");
-pub const PTY_BINARY_NAME: &str = env!("FIG_BRAND_PTY_BIN");
 
 pub const CLI_CRATE_NAME: &str = "fig_cli";
 
@@ -29,7 +28,7 @@ pub const LAUNCH_AGENT_LABEL: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".laun
 /// Prefix the uninstaller uses to find every LaunchAgent this app wrote.
 pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
 
-/// Version of the zsh hook's line protocol (`fig.zsh` <-> `fig_remote_ipc::hook`).
+/// Version of the zsh hook's line protocol (`fig.zsh` <-> `fig_shell_ipc::hook`).
 ///
 /// A shell sources `fig.zsh` once and keeps it for its whole life, so a tab opened before a
 /// rebuild talks to the new desktop with the old script. `HELLO` carries this number and the
@@ -70,12 +69,6 @@ pub mod env_var {
     }
 
     define_env_vars! {
-        /// The UUID of the current parent pty session
-        FIGTERM_SESSION_ID = "FIGTERM_SESSION_ID",
-
-        /// Set if the pty wrapper is running, contains the version
-        FIG_TERM = "FIG_TERM",
-
         /// Sets the current log level
         FIG_LOG_LEVEL = "FIG_LOG_LEVEL",
 
@@ -87,9 +80,6 @@ pub mod env_var {
 
         /// The shell to use in the pty wrapper
         FIG_SHELL = "FIG_SHELL",
-
-        /// Indicates the user is debugging the shell
-        FIG_DEBUG_SHELL = "FIG_DEBUG_SHELL",
 
         /// Indicates the user is using zsh autosuggestions which disables Inline
         FIG_USING_ZSH_AUTOSUGGESTIONS = "FIG_USING_ZSH_AUTOSUGGESTIONS"

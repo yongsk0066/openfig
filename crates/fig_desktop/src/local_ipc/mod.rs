@@ -22,7 +22,7 @@ use fig_proto::local::{
     LocalMessage,
     SuccessResponse,
 };
-use fig_remote_ipc::figterm::FigtermState;
+use fig_shell_ipc::session::ShellSessions;
 use fig_util::directories;
 use tokio::net::UnixListener;
 use tracing::{
@@ -51,7 +51,7 @@ pub type LocalResult = Result<LocalResponse, LocalResponse>;
 
 pub async fn start_local_ipc(
     platform_state: Arc<PlatformState>,
-    figterm_state: Arc<FigtermState>,
+    shell_sessions: Arc<ShellSessions>,
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
 ) -> Result<()> {
@@ -88,7 +88,7 @@ pub async fn start_local_ipc(
         tokio::spawn(handle_local_ipc(
             BufferedUnixStream::new(stream),
             platform_state.clone(),
-            figterm_state.clone(),
+            shell_sessions.clone(),
             webview_notifications_state.clone(),
             proxy.clone(),
         ));
@@ -98,7 +98,7 @@ pub async fn start_local_ipc(
 async fn handle_local_ipc(
     mut stream: BufferedUnixStream,
     platform_state: Arc<PlatformState>,
-    figterm_state: Arc<FigtermState>,
+    shell_sessions: Arc<ShellSessions>,
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
 ) {
@@ -142,13 +142,13 @@ async fn handle_local_ipc(
                             DebugMode(command) => commands::debug(command, &proxy).await,
                             OpenUiElement(command) => commands::open_ui_element(command, &proxy).await,
                             Quit(command) => commands::quit(command, &proxy).await,
-                            Diagnostics(command) => commands::diagnostic(command, &figterm_state).await,
+                            Diagnostics(command) => commands::diagnostic(command, &shell_sessions).await,
                             OpenBrowser(command) => commands::open_browser(command).await,
                             PromptAccessibility(_) => commands::prompt_for_accessibility_permission(&Env::new()).await,
                             LogLevel(command) => commands::log_level(command),
                             DumpState(command) => commands::dump_state(
                                 command,
-                                &figterm_state,
+                                &shell_sessions,
                                 &webview_notifications_state,
                                 &platform_state,
                             ),

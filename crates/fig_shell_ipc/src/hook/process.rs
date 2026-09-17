@@ -11,12 +11,11 @@ use fig_proto::fig::{
     EnvironmentVariable,
     RunProcessResponse,
 };
-use fig_proto::remote::hostbound::response::Response;
 use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 use tokio::process::Command;
 use tracing::warn;
 
-/// The pty binary's default when the request carries none.
+/// The timeout when the request carries none.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct Request {
@@ -38,7 +37,8 @@ fn directory(path: Option<&str>) -> Option<PathBuf> {
     path.is_dir().then_some(path)
 }
 
-pub async fn run(request: Request, shell: Shell) -> Response {
+/// The command's output, or why there is none.
+pub async fn run(request: Request, shell: Shell) -> Result<RunProcessResponse, String> {
     let cwd = directory(request.working_directory.as_deref())
         .or_else(|| directory(shell.cwd.as_deref()))
         .or_else(|| std::env::current_dir().ok())
@@ -75,14 +75,14 @@ pub async fn run(request: Request, shell: Shell) -> Response {
 
     let timeout = request.timeout.unwrap_or(DEFAULT_TIMEOUT);
     match tokio::time::timeout(timeout, cmd.output()).await {
-        Ok(Ok(output)) => Response::RunProcess(RunProcessResponse {
+        Ok(Ok(output)) => Ok(RunProcessResponse {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             exit_code: output.status.code().unwrap_or(0),
         }),
         Ok(Err(err)) => {
             warn!(%err, executable = request.executable, "failed running executable");
-            Response::Error(format!("failed running executable ({}): {err}", request.executable))
+            Err(format!("failed running executable ({}): {err}", request.executable))
         },
         Err(_elapsed) => {
             warn!(
@@ -90,7 +90,7 @@ pub async fn run(request: Request, shell: Shell) -> Response {
                 ?timeout,
                 "timed out running executable"
             );
-            Response::Error(format!(
+            Err(format!(
                 "timed out after {}ms running executable ({})",
                 timeout.as_millis(),
                 request.executable
@@ -110,11 +110,8 @@ mod tests {
         }
     }
 
-    fn stdout(response: Response) -> String {
-        match response {
-            Response::RunProcess(response) => response.stdout,
-            Response::Error(error) => panic!("{error}"),
-        }
+    fn stdout(response: Result<RunProcessResponse, String>) -> String {
+        response.unwrap_or_else(|error| panic!("{error}")).stdout
     }
 
     #[tokio::test]
@@ -184,7 +181,7 @@ mod tests {
             Shell { env: vec![], cwd: None },
         )
         .await;
-        assert!(matches!(missing, Response::Error(_)), "{missing:?}");
+        assert!(missing.is_err(), "{missing:?}");
 
         let slow = run(
             Request {
@@ -198,7 +195,7 @@ mod tests {
         )
         .await;
         assert!(
-            matches!(&slow, Response::Error(message) if message.contains("timed out")),
+            matches!(&slow, Err(message) if message.contains("timed out")),
             "{slow:?}"
         );
     }

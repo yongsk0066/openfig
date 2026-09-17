@@ -23,15 +23,12 @@ use async_trait::async_trait;
 use checks::{
     BashVersionCheck,
     ZshHookCheck,
-    current_shell_uses_hook,
 };
 use clap::Args;
 use crossterm::style::Stylize;
 use crossterm::terminal::{
     Clear,
     ClearType,
-    disable_raw_mode,
-    enable_raw_mode,
 };
 use crossterm::{
     cursor,
@@ -47,11 +44,6 @@ use fig_integrations::shell::{
     ShellExt,
     ShellIntegration,
 };
-use fig_ipc::{
-    BufferedUnixStream,
-    SendMessage,
-    SendRecvMessage,
-};
 use fig_os_shim::{
     Context,
     Env,
@@ -59,17 +51,12 @@ use fig_os_shim::{
 use fig_proto::local::DiagnosticsResponse;
 use fig_settings::JsonStore;
 use fig_util::directories::settings_path;
-use fig_util::env_var::{
-    FIG_TERM,
-    FIGTERM_SESSION_ID,
-    PROCESS_LAUNCHED_BY_FIG,
-};
+use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 use fig_util::{
     APP_BUNDLE_NAME,
     CLI_BINARY_NAME,
     CLI_CRATE_NAME,
     PRODUCT_NAME,
-    PTY_BINARY_NAME,
     Shell,
     Terminal,
     directories,
@@ -84,7 +71,6 @@ use spinners::{
     Spinner,
     Spinners,
 };
-use tokio::io::AsyncBufReadExt;
 
 use super::app::restart_fig;
 use crate::util::desktop::desktop_app_running;
@@ -518,210 +504,6 @@ impl DoctorCheck for FigIntegrationsCheck {
                 fix: None,
                 error: None,
             });
-        }
-
-        // TODO(grant): check that the figterm exe exists in ~/.local/bin
-        // let figterm_path = fig_directories::fig_dir()
-        //    .context("Could not find ~/.fig")?
-        //    .join("bin")
-        //    .join("figterm");
-
-        // if !figterm_path.exists() {
-        //    return Err(DoctorError::Error {
-        //        reason: "figterm does not exist".into(),
-        //        info: vec![],
-        //        fix: None,
-        //    });
-        //}
-
-        // A zsh reports through the hook; only a bash runs inside the pty binary.
-        if current_shell_uses_hook() {
-            return Ok(());
-        }
-
-        match fig_os_shim::Env::new().fig_term().as_deref() {
-            Ok(env!("CARGO_PKG_VERSION")) => Ok(()),
-            Ok(ver) if env!("CARGO_PKG_VERSION").ends_with("-dev") || ver.ends_with("-dev") => Err(doctor_warning!(
-                "{PTY_BINARY_NAME} is running with a different version than {PRODUCT_NAME} CLI, it looks like you are running a development version of {PRODUCT_NAME} however"
-            )),
-            Ok(_) => Err(DoctorError::Error {
-                reason: "This terminal is not running with the latest integration, please restart your terminal".into(),
-                info: vec![format!("{FIG_TERM}={}", fig_os_shim::Env::new().fig_term().unwrap_or_default()).into()],
-                fix: None,
-                error: None,
-            }),
-            Err(_) => Err(DoctorError::Error {
-                reason: format!(
-                    "{PTY_BINARY_NAME} is not running in this terminal, please try restarting your terminal"
-                )
-                .into(),
-                info: vec![format!("{FIG_TERM}={}", fig_os_shim::Env::new().fig_term().unwrap_or_default()).into()],
-                fix: None,
-                error: None,
-            }),
-        }
-    }
-}
-
-struct PtySocketCheck;
-
-#[async_trait]
-impl DoctorCheck for PtySocketCheck {
-    fn name(&self) -> Cow<'static, str> {
-        format!("{PTY_BINARY_NAME} socket check").into()
-    }
-
-    /// A zsh on the hook path has no pty binary to check (`ZshHookCheck` covers it).
-    async fn get_type(&self, _: &(), _platform: Platform) -> DoctorCheckType {
-        if current_shell_uses_hook() {
-            DoctorCheckType::NoCheck
-        } else {
-            DoctorCheckType::NormalCheck
-        }
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        // Check that the socket exists
-        let term_session = match std::env::var(FIGTERM_SESSION_ID) {
-            Ok(session) => session,
-            Err(_) => {
-                return Err(doctor_error!(
-                    "{PTY_BINARY_NAME} is not running, please restart your terminal. {FIGTERM_SESSION_ID} is unset."
-                ));
-            },
-        };
-        let socket_path = fig_util::directories::figterm_socket_path(term_session).context("No figterm socket path")?;
-
-        check_socket_perms(&socket_path).await?;
-
-        if let Err(err) = check_file_exists(&socket_path) {
-            return Err(DoctorError::Error {
-                reason: "Tried to find the socket file, but it wasn't there.".into(),
-                info: vec![
-                    format!("{PRODUCT_NAME} uses the /tmp directory for sockets.").into(),
-                    "Did you delete files in /tmp? The OS will clear it automatically.".into(),
-                    format!(
-                        "Try making a new tab or window in your terminal, then run {} again.",
-                        format!("{CLI_BINARY_NAME} doctor").magenta()
-                    )
-                    .into(),
-                    format!("No file at path: {socket_path:?}").into(),
-                ],
-                fix: None,
-                error: Some(err),
-            });
-        }
-
-        // Connect to the socket
-        let mut conn = match BufferedUnixStream::connect_timeout(&socket_path, Duration::from_secs(2)).await {
-            Ok(connection) => connection,
-            Err(err) => return Err(doctor_error!("Socket exists but could not connect: {err}")),
-        };
-
-        // Try sending an insert event and ensure it inserts what is expected
-        enable_raw_mode().with_context(|| {
-            format!("Your terminal doesn't support raw mode, which is required to verify that the {PTY_BINARY_NAME} socket works")
-        })?;
-
-        let test_message = format!("Testing {PTY_BINARY_NAME}...\n");
-        let test_message_ = test_message.clone();
-
-        let write_handle: tokio::task::JoinHandle<Result<BufferedUnixStream, DoctorError>> = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs_f32(0.2)).await;
-
-            let message = fig_proto::figterm::FigtermRequestMessage {
-                request: Some(fig_proto::figterm::figterm_request_message::Request::InsertText(
-                    fig_proto::figterm::InsertTextRequest {
-                        insertion: Some(test_message_),
-                        deletion: None,
-                        offset: None,
-                        immediate: Some(true),
-                        insertion_buffer: None,
-                        insert_during_command: Some(true),
-                    },
-                )),
-            };
-
-            conn.send_message(message).await.map_err(|err| doctor_error!("{err}"))?;
-
-            Ok(conn)
-        });
-
-        let mut buffer = String::new();
-        let mut stdin = tokio::io::BufReader::new(tokio::io::stdin());
-
-        let timeout = tokio::time::timeout(Duration::from_secs_f32(1.2), stdin.read_line(&mut buffer));
-
-        let timeout_result: Result<(), DoctorError> = match timeout.await {
-            Ok(Ok(_)) => {
-                if buffer.trim() == test_message.trim() {
-                    Ok(())
-                } else {
-                    Err(DoctorError::Warning(
-                        format!(
-                            "{PTY_BINARY_NAME} socket did not read buffer correctly, don't press any keys while the checks are running: {buffer:?}"
-                        )
-                        .into(),
-                    ))
-                }
-            },
-            Ok(Err(err)) => Err(doctor_error!("{PTY_BINARY_NAME} socket err: {}", err)),
-            Err(_) => Err(doctor_error!("{PTY_BINARY_NAME} socket write timed out after 1s")),
-        };
-
-        disable_raw_mode().context("Failed to disable raw mode")?;
-
-        let mut conn = match write_handle.await {
-            Ok(Ok(conn)) => conn,
-            Ok(Err(err)) => return Err(doctor_error!("Failed to write to {PTY_BINARY_NAME} socket: {err}")),
-            Err(err) => return Err(doctor_error!("Failed to write to {PTY_BINARY_NAME} socket: {err}")),
-        };
-
-        timeout_result?;
-
-        // Figterm diagnostics
-
-        let message = fig_proto::figterm::FigtermRequestMessage {
-            request: Some(fig_proto::figterm::figterm_request_message::Request::Diagnostics(
-                fig_proto::figterm::DiagnosticsRequest {},
-            )),
-        };
-
-        let response: Result<Option<fig_proto::figterm::FigtermResponseMessage>> = conn
-            .send_recv_message_timeout(message, Duration::from_secs(1))
-            .await
-            .context("Failed to send/recv message");
-
-        match response {
-            Ok(Some(figterm_response)) => match figterm_response.response {
-                Some(fig_proto::figterm::figterm_response_message::Response::Diagnostics(
-                    fig_proto::figterm::DiagnosticsResponse {
-                        zsh_autosuggestion_style,
-                        ..
-                    },
-                )) => {
-                    if let Some(style) = zsh_autosuggestion_style
-                        && let Some(fg) = style.fg
-                        && let Some(fig_proto::figterm::term_color::Color::Indexed(i)) = fg.color
-                        && i == 15
-                    {
-                        return Err(doctor_warning!(
-                            "ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE is set to the same style as your text, this must be different to detect what you've typed"
-                        ));
-                    }
-                },
-                _ => {
-                    return Err(doctor_error!(
-                        "Failed to receive expected message from {PTY_BINARY_NAME}"
-                    ));
-                },
-            },
-            Ok(None) => {
-                return Err(doctor_error!(
-                    "Received EOF when trying to receive {PTY_BINARY_NAME} diagnostics"
-                ));
-            },
-            Err(err) => return Err(doctor_error!("Failed to receive {PTY_BINARY_NAME} diagnostics: {err}")),
         }
 
         Ok(())
@@ -1465,7 +1247,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         run_checks(
             "Let's see if the app is in a working state...".into(),
             vec![
-                &PtySocketCheck,
                 &AutocompleteDevModeCheck,
                 &PluginDevModeCheck,
                 &DashboardHostCheck,

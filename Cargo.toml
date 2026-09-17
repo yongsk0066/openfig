@@ -45,7 +45,7 @@ fig_ipc = { path = "crates/fig_ipc" }
 fig_log = { path = "crates/fig_log" }
 fig_os_shim = { path = "crates/fig_os_shim" }
 fig_proto = { path = "crates/fig_proto" }
-fig_remote_ipc = { path = "crates/fig_remote_ipc" }
+fig_shell_ipc = { path = "crates/fig_shell_ipc" }
 fig_settings = { path = "crates/fig_settings" }
 fig_util = { path = "crates/fig_util" }
 flate2 = "1.1.1"

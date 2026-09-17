@@ -26,7 +26,7 @@ use fig_proto::local::{
     ShellContext,
 };
 use fig_proto::prost::Message;
-use fig_remote_ipc::figterm::FigtermState;
+use fig_shell_ipc::session::ShellSessions;
 use parking_lot::Mutex;
 use tracing::{
     debug,
@@ -48,23 +48,23 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct RemoteHook {
+pub struct ShellHook {
     pub notifications_state: Arc<WebviewNotificationsState>,
     pub proxy: EventLoopProxy,
-    /// The figterm session whose environment each window was last told about.
+    /// The shell session whose environment each window was last told about.
     ///
-    /// figterm only ships the environment and aliases when its shell context is dirty, so the
-    /// desktop has to notice when a *window* starts looking at a different session — switching
-    /// terminal tabs — and re-send them even though that hook carried none. Shared across
-    /// connections on purpose: `start_remote_ipc` clones this handler per connection, and a
-    /// per-connection map would never see the switch back to an already-open session.
+    /// A session only ships the environment and aliases after they changed, so the desktop has to
+    /// notice when a *window* starts looking at a different session — switching terminal tabs —
+    /// and re-send them even though that hook carried none. Shared across connections on purpose:
+    /// `start_hook_ipc` clones this handler per connection, and a per-connection map would never
+    /// see the switch back to an already-open session.
     pub last_sent: Arc<Mutex<HashMap<WindowId, Uuid>>>,
 }
 
 /// Fold an incoming hook context into the session's, keeping the fields the hook omitted.
 ///
-/// An empty `environment_variables` means "unchanged" rather than "no environment": figterm
-/// sends `vec![]` / `alias: None` for every hook whose context is not dirty.
+/// An empty `environment_variables` means "unchanged" rather than "no environment": a session
+/// sends `vec![]` / `alias: None` for every edit-buffer hook whose context did not change.
 fn merge_shell_context(session: &mut Option<ShellContext>, mut incoming: Option<ShellContext>) {
     if let Some(incoming) = incoming.as_mut()
         && let Some(existing) = session.as_mut()
@@ -81,17 +81,17 @@ fn merge_shell_context(session: &mut Option<ShellContext>, mut incoming: Option<
 }
 
 #[async_trait::async_trait]
-impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
+impl fig_shell_ipc::ShellHookHandler for ShellHook {
     type Error = anyhow::Error;
 
     async fn edit_buffer(
         &mut self,
         hook: &EditBufferHook,
         session_id: Uuid,
-        figterm_state: &Arc<FigtermState>,
+        shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
-        // Did figterm consider its context dirty? If so every window has to be re-told, and the
-        // hook already carries the full environment.
+        // Did the session's context change? If so every window has to be re-told, and the hook
+        // already carries the full environment.
         let hook_carried_env = hook
             .context
             .as_ref()
@@ -110,7 +110,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
             .collect();
 
         // A window needs the whole environment when this hook brought one, or when it is now
-        // looking at a different figterm session than the one it was last told about.
+        // looking at a different session than the one it was last told about.
         let subscribers: Vec<(WindowId, i64, bool)> = {
             let mut last_sent = self.last_sent.lock();
             subscribers
@@ -131,7 +131,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         let terminal_cursor_coordinates = hook.terminal_cursor_coordinates;
         let context = hook.context.clone();
 
-        let full_context = figterm_state
+        let full_context = shell_sessions
             .with_update(session_id, |session| {
                 session.edit_buffer.text = text;
                 session.edit_buffer.cursor = cursor;
@@ -227,10 +227,10 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         Ok(())
     }
 
-    async fn prompt(&mut self, hook: &PromptHook, session_id: Uuid, figterm_state: &Arc<FigtermState>) -> Result<()> {
+    async fn prompt(&mut self, hook: &PromptHook, session_id: Uuid, shell_sessions: &Arc<ShellSessions>) -> Result<()> {
         let mut cwd_changed = false;
         let mut new_cwd = None;
-        figterm_state.with(&session_id, |session| {
+        shell_sessions.with(&session_id, |session| {
             if let (Some(old_context), Some(new_context)) = (&session.context, &hook.context) {
                 cwd_changed = old_context.current_working_directory != new_context.current_working_directory;
                 new_cwd.clone_from(&new_context.current_working_directory);
@@ -292,9 +292,9 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         &mut self,
         hook: &PreExecHook,
         session_id: Uuid,
-        figterm_state: &Arc<FigtermState>,
+        shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
-        figterm_state.with_update(session_id, |session| {
+        shell_sessions.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
 
@@ -331,9 +331,9 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         &mut self,
         hook: &PostExecHook,
         session_id: Uuid,
-        figterm_state: &Arc<FigtermState>,
+        shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
-        figterm_state.with_update(session_id, |session| {
+        shell_sessions.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
 
@@ -364,7 +364,7 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
 
     async fn command_finished(&mut self, command: fig_settings::history::CommandInfo) {
         // sqlite blocks, and the hook session's next line (the prompt's first edit buffer) should
-        // not wait for it; the pty binary writes its history from a thread of its own too.
+        // not wait for it.
         tokio::task::spawn_blocking(move || {
             if let Err(err) = fig_settings::history::History::new().insert_command_history(&command) {
                 error!(%err, "Failed to insert command into history");

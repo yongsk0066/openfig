@@ -28,9 +28,6 @@ pub const MACOS_TERMINALS: &[Terminal] = &[
     Terminal::Trae,
 ];
 
-/// Other terminals that figterm should launch within that are not full terminal emulators
-pub const SPECIAL_TERMINALS: &[Terminal] = &[Terminal::Tmux, Terminal::Nvim, Terminal::Vim, Terminal::Zellij];
-
 /// Bundle ids of every [`Terminal`] that renders its UI in a webview ([`Terminal::is_xterm`])
 /// and therefore needs `AXManualAccessibility` switched on before the caret can be read.
 ///
@@ -51,12 +48,6 @@ pub fn xterm_bundle_ids() -> &'static [&'static str] {
             })
             .collect()
     })
-}
-
-/// Checks if the current process is inside of one of the pseudoterminals listed under
-/// [`SPECIAL_TERMINALS`], returning the terminal if true.
-pub fn in_special_terminal(ctx: &Context) -> Option<Terminal> {
-    Terminal::from_process_info(ctx, SPECIAL_TERMINALS)
 }
 
 /// All supported terminals
@@ -321,11 +312,6 @@ impl Terminal {
             },
             _ => return None,
         })
-    }
-
-    /// Other pseudoterminal that we want to launch within
-    pub fn is_special(&self) -> bool {
-        SPECIAL_TERMINALS.contains(self)
     }
 }
 

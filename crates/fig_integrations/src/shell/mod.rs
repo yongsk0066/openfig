@@ -9,7 +9,6 @@ use fig_util::{
     CLI_BINARY_NAME,
     HOOK_PROTOCOL_VERSION,
     PRODUCT_NAME,
-    PTY_BINARY_NAME,
     Shell,
     directories,
 };
@@ -187,9 +186,7 @@ impl ShellExt for Shell {
             },
         };
 
-        Ok(script
-            .replace("{{CLI_BINARY_NAME}}", CLI_BINARY_NAME)
-            .replace("{{PTY_BINARY_NAME}}", PTY_BINARY_NAME))
+        Ok(script.replace("{{CLI_BINARY_NAME}}", CLI_BINARY_NAME))
     }
 }
 

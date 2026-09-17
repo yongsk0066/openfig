@@ -7,13 +7,13 @@
 # The log has no id that follows one keystroke through the desktop, so the lines are joined by
 # order: every `edit_buffer` hook opens a window, and each later hop is the first matching line
 # after the previous hop and before the next hook. That is exact while the keys are further apart
-# than the whole desktop round trip (the figterm2 driver paces them 250 ms apart), and silently
+# than the whole desktop round trip (type them at least 250 ms apart), and silently
 # wrong when typing outruns the webview — a PositionWindow for key N then lands in key N+1's window.
 # docs/16-latency.md lists the log lines that would make the join exact.
 #
-# Hops, in the order the desktop goes through them (lines as of 42067ab3):
-#   recv      fig_remote_ipc/src/remote.rs:118     "Received remote message" with EditBuffer(...)
-#   emit      fig_desktop/src/remote_ipc/mod.rs:199 "Sending edit buffer change notification to webview"
+# Hops, in the order the desktop goes through them:
+#   recv      fig_shell_ipc/src/lib.rs             "Received shell hook" with EditBuffer(...)
+#   emit      fig_desktop/src/shell_ipc/mod.rs     "Sending edit buffer change notification to webview"
 #   loop      fig_desktop/src/webview/mod.rs:321    "Main loop event" UserEvent ... autocomplete ... Emit { event_name: Notification
 #   changed   fig_desktop/src/webview/mod.rs:321    "Main loop event" UserEvent(PlatformBoundEvent(EditBufferChanged))
 #   show      fig_desktop/src/webview/mod.rs:321    "Main loop event" UserEvent ... autocomplete ... window_event: Show }
@@ -97,7 +97,7 @@ function stamp(line,    day, sod) {
   return (day - day0) * 86400 + sod
 }
 
-# The figterm session id inside the hook context (`session_id: Some("...")`), or "".
+# The shell session id inside the hook context (`session_id: Some("...")`), or "".
 function session_of(line,    s) {
   if (!match(line, /session_id: Some\("[^"]*"\)/)) return ""
   s = substr(line, RSTART + 18, RLENGTH - 20)
@@ -148,7 +148,7 @@ BEGIN {
   ts = stamp($0)
 }
 
-/Received remote message/ && /request: Some\(EditBuffer\(EditBufferHook/ {
+/Received shell hook/ && /request=EditBuffer\(EditBufferHook/ {
   s = session_of($0)
   sessions[s] = 1
   if (session != "" && s != session) next
@@ -222,7 +222,7 @@ if [ "$rows" -eq 1 ]; then
 fi
 
 {
-  echo "keystrokes (edit_buffer hooks): $keys; figterm sessions in log: $sessions${session:+ (filtered to $session)}"
+  echo "keystrokes (edit_buffer hooks): $keys; shell sessions in log: $sessions${session:+ (filtered to $session)}"
   if [ "$sessions" -gt 1 ] && [ -z "$session" ]; then
     echo "warning: more than one session; the order-based join mixes them. Use --session." >&2
   fi

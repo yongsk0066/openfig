@@ -52,8 +52,8 @@ pub async fn validate_socket(socket: impl AsRef<Path>) -> Result<(), ConnectErro
     }
 
     // `debug!`, like the failed connect below: the caller gets the error and decides how loud it
-    // is. figterm retries every 5 s while the app is not running, and at `error!` each retry put
-    // a line in every shell's log.
+    // is. A caller that retries while the app is not running would otherwise put a line in its log
+    // on every attempt.
     debug!(?socket, "Incorrect socket permissions, not connecting to socket");
     Err(ConnectError::IncorrectSocketPermissions)
 }

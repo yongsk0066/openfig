@@ -1,21 +1,17 @@
-//! `hook.sock`: sessions of zsh shells that report through `fig.zsh` instead of the pty binary
+//! `hook.sock`: sessions of zsh shells that report through `fig.zsh`
 //! (docs/15-architecture-study.md §3.3).
 //!
-//! Each connection becomes a [`SessionKind::ZshHook`] session in the same [`FigtermState`] the
-//! pty binary's sessions live in, and its lines become the same hook requests
-//! [`crate::remote`] decodes from protobuf, handed to the same [`dispatch_hook`]. What the desktop
-//! sends a session ([`FigtermCommand`]) is carried out here instead of in a pty binary: key
-//! interception and insertion become lines for the shell, and processes run in this process.
+//! Each connection becomes a [`ShellSession`] in [`ShellSessions`], and its lines become
+//! [`HookRequest`]s handed to [`dispatch_hook`]. What the desktop sends a session
+//! ([`ShellCommand`]) is carried out here: key interception and insertion become lines for the
+//! shell, and processes run in this process.
 
 mod insert;
 mod keys;
 mod process;
 pub mod wire;
 
-use std::collections::{
-    BTreeSet,
-    HashMap,
-};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{
@@ -28,7 +24,6 @@ use anyhow::{
     Result,
 };
 use fig_proto::fig::EnvironmentVariable;
-use fig_proto::figterm::InsertTextRequest;
 use fig_proto::local::{
     EditBufferHook,
     InterceptedKeyHook,
@@ -37,7 +32,7 @@ use fig_proto::local::{
     PromptHook,
     ShellContext,
 };
-use fig_proto::remote::hostbound::request::Request;
+use fig_proto::shell::InsertTextRequest;
 use fig_settings::history::CommandInfo;
 use parking_lot::Mutex;
 use tokio::io::{
@@ -69,16 +64,18 @@ use wire::{
     ShellLine,
 };
 
-use crate::RemoteHookHandler;
-use crate::figterm::{
+use crate::session::{
     EditBuffer,
-    FigtermCommand,
-    FigtermSession,
-    FigtermState,
     InterceptMode,
-    SessionKind,
+    ShellCommand,
+    ShellSession,
+    ShellSessions,
 };
-use crate::remote::dispatch_hook;
+use crate::{
+    HookRequest,
+    ShellHookHandler,
+    dispatch_hook,
+};
 
 /// How long a new connection has to say `HELLO`. `fig.zsh` sends it before reading anything.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
@@ -89,8 +86,8 @@ static REFUSED_VERSIONS: Mutex<BTreeSet<u32>> = Mutex::new(BTreeSet::new());
 
 pub async fn start_hook_ipc(
     socket_path: PathBuf,
-    figterm_state: Arc<FigtermState>,
-    hook: impl RemoteHookHandler + Send + Clone + 'static,
+    shell_sessions: Arc<ShellSessions>,
+    hook: impl ShellHookHandler + Send + Clone + 'static,
 ) -> Result<()> {
     if let Some(parent) = socket_path.parent() {
         if !parent.exists() {
@@ -107,7 +104,7 @@ pub async fn start_hook_ipc(
     let listener = UnixListener::bind(&socket_path).with_context(|| format!("binding {}", socket_path.display()))?;
 
     while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(handle_connection(stream, figterm_state.clone(), hook.clone()));
+        tokio::spawn(handle_connection(stream, shell_sessions.clone(), hook.clone()));
     }
     Ok(())
 }
@@ -214,8 +211,8 @@ impl Session {
 
 async fn handle_connection(
     stream: UnixStream,
-    figterm_state: Arc<FigtermState>,
-    mut hook: impl RemoteHookHandler + Send,
+    shell_sessions: Arc<ShellSessions>,
+    mut hook: impl ShellHookHandler + Send,
 ) {
     let (reader, writer) = stream.into_split();
     let mut lines = Lines {
@@ -294,16 +291,12 @@ async fn handle_connection(
     }));
 
     let (command_tx, command_rx) = flume::unbounded();
-    figterm_state.insert(FigtermSession {
+    shell_sessions.insert(ShellSession {
         id: session_id,
-        kind: SessionKind::ZshHook,
         sender: command_tx,
-        writer: None,
         edit_buffer: EditBuffer::default(),
         context: None,
         terminal_cursor_coordinates: None,
-        response_map: HashMap::new(),
-        nonce_counter: 0,
         intercept: InterceptMode::Unlocked,
         intercept_global: InterceptMode::Unlocked,
     });
@@ -352,7 +345,7 @@ async fn handle_connection(
                     let full = std::mem::take(&mut session.context_dirty);
                     session.context(full)
                 };
-                Request::EditBuffer(EditBufferHook {
+                HookRequest::EditBuffer(EditBufferHook {
                     context: Some(context),
                     text,
                     cursor: cursor as i64,
@@ -381,18 +374,18 @@ async fn handle_connection(
                     (context, finished)
                 };
                 dispatch_hook(
-                    Request::Prompt(PromptHook {
+                    HookRequest::Prompt(PromptHook {
                         context: Some(context.clone()),
                     }),
                     session_id,
-                    &figterm_state,
+                    &shell_sessions,
                     &mut hook,
                 )
                 .await;
                 let Some(finished) = finished else {
                     continue;
                 };
-                let post_exec = Request::PostExec(PostExecHook {
+                let post_exec = HookRequest::PostExec(PostExecHook {
                     context: Some(context),
                     command: finished.command.clone(),
                     exit_code: finished.exit_code,
@@ -412,7 +405,7 @@ async fn handle_connection(
                 if let Some(update) = update {
                     let _ = out.send(update);
                 }
-                Request::PreExec(PreExecHook {
+                HookRequest::PreExec(PreExecHook {
                     context: Some(context),
                     command: None,
                 })
@@ -443,17 +436,17 @@ async fn handle_connection(
                 let Some(action) = action else {
                     continue;
                 };
-                Request::InterceptedKey(InterceptedKeyHook {
+                HookRequest::InterceptedKey(InterceptedKeyHook {
                     context: Some(context),
                     key: name,
                     action,
                 })
             },
         };
-        dispatch_hook(request, session_id, &figterm_state, &mut hook).await;
+        dispatch_hook(request, session_id, &shell_sessions, &mut hook).await;
     }
 
-    figterm_state.remove_id(&session_id);
+    shell_sessions.remove_id(&session_id);
     command_task.abort();
     drop(out);
     let _ = writer_task.await;
@@ -461,13 +454,13 @@ async fn handle_connection(
 }
 
 async fn handle_commands(
-    commands: flume::Receiver<FigtermCommand>,
+    commands: flume::Receiver<ShellCommand>,
     session: Arc<Mutex<Session>>,
     out: mpsc::UnboundedSender<DaemonLine>,
 ) {
     while let Ok(command) = commands.recv_async().await {
         match command {
-            FigtermCommand::InterceptFigJs {
+            ShellCommand::InterceptFigJs {
                 intercept_keystrokes,
                 intercept_global_keystrokes,
                 actions,
@@ -484,7 +477,7 @@ async fn handle_commands(
                     let _ = out.send(update);
                 }
             },
-            FigtermCommand::InterceptFigJSVisible { visible } => {
+            ShellCommand::InterceptFigJSVisible { visible } => {
                 let update = {
                     let mut session = session.lock();
                     session.interceptor.set_window_visible(visible);
@@ -494,7 +487,7 @@ async fn handle_commands(
                     let _ = out.send(update);
                 }
             },
-            FigtermCommand::InsertText {
+            ShellCommand::InsertText {
                 insertion,
                 deletion,
                 offset,
@@ -524,7 +517,7 @@ async fn handle_commands(
                     let _ = out.send(DaemonLine::Insert(edit));
                 }
             },
-            FigtermCommand::RunProcess {
+            ShellCommand::RunProcess {
                 channel,
                 executable,
                 arguments,
@@ -566,22 +559,27 @@ mod tests {
     struct NoHooks;
 
     #[async_trait::async_trait]
-    impl RemoteHookHandler for NoHooks {
+    impl ShellHookHandler for NoHooks {
         type Error = std::convert::Infallible;
 
-        async fn edit_buffer(&mut self, _: &EditBufferHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+        async fn edit_buffer(
+            &mut self,
+            _: &EditBufferHook,
+            _: Uuid,
+            _: &Arc<ShellSessions>,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
-        async fn prompt(&mut self, _: &PromptHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+        async fn prompt(&mut self, _: &PromptHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<(), Self::Error> {
             Ok(())
         }
 
-        async fn pre_exec(&mut self, _: &PreExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+        async fn pre_exec(&mut self, _: &PreExecHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<(), Self::Error> {
             Ok(())
         }
 
-        async fn post_exec(&mut self, _: &PostExecHook, _: Uuid, _: &Arc<FigtermState>) -> Result<(), Self::Error> {
+        async fn post_exec(&mut self, _: &PostExecHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<(), Self::Error> {
             Ok(())
         }
 
@@ -594,7 +592,7 @@ mod tests {
     /// up or a second passes, and whether it created a session.
     async fn exchange(first: &str) -> (Vec<String>, bool) {
         let (desktop, shell) = UnixStream::pair().unwrap();
-        let state = Arc::new(FigtermState::new());
+        let state = Arc::new(ShellSessions::new());
         tokio::spawn(handle_connection(desktop, state.clone(), NoHooks));
         let (reader, mut writer) = shell.into_split();
         writer.write_all(format!("{first}\n").as_bytes()).await.unwrap();

@@ -63,7 +63,6 @@ bundle:
     mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
     cp "{{tdir}}/fig_desktop" "{{app}}/Contents/MacOS/$DESKTOP_BIN"
     cp "{{tdir}}/fig_cli"     "{{app}}/Contents/MacOS/$CLI_BIN"
-    cp "{{tdir}}/figterm"     "{{app}}/Contents/MacOS/$PTY_BIN"
     VERSION='{{version}}' MIN_MACOS='{{min_macos}}' \
         perl -pe 's{\@(\w+)\@}{ my $v = $ENV{$1}; die "no value for \@$1\@\n" unless defined $v; $v =~ s/&/&amp;/g; $v =~ s/</&lt;/g; $v =~ s/>/&gt;/g; $v }ge' \
         bundle/macos/Info.plist.in > "{{app}}/Contents/Info.plist"
@@ -87,41 +86,29 @@ sign:
     identity="${identity:--}"; \
     echo "codesign identity: $identity"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.pty" "{{app}}/Contents/MacOS/$PTY_BIN"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
     codesign --verify --deep --strict --verbose=2 "{{app}}"
 
 # app_bundle_path() falls back to /Applications, not ~/Applications, so the bundle goes there.
 # The first `open` registers it with LaunchServices; the app then re-creates the ~/.local/bin
-# links and the "<shell> (<PTY_BIN>)" copies itself (crates/fig_desktop/src/install.rs). It also
-# writes a LaunchAgent labelled "$BUNDLE_ID.launcher" (fig_util::LAUNCH_AGENT_LABEL); making it
-# conditional on app.launchOnStartup is 8단계. A pre-existing regular file at a ~/.local/bin
-# target (another vendor's CLI,
-# not one of our symlinks) is moved aside instead of being clobbered.
+# link itself (crates/fig_desktop/src/install.rs). It also writes a LaunchAgent labelled
+# "$BUNDLE_ID.launcher" (fig_util::LAUNCH_AGENT_LABEL); making it conditional on
+# app.launchOnStartup is 8단계. A pre-existing regular file at the ~/.local/bin target (another
+# vendor's CLI, not one of our symlinks) is moved aside instead of being clobbered.
 # Install into /Applications and run for the first time.
-# The per-shell figterm copies are replaced by rename, never overwritten in place: an
-# executable that is currently running (old terminal tabs) keeps its inode, and the kernel
-# would otherwise mark the rewritten pages "Code Signature Invalid" and SIGKILL every new
-# figterm (that was a real bug on 2026-09-11).
 install:
     -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
     for _ in $(seq 1 50); do pgrep -x "$DESKTOP_BIN" >/dev/null || break; sleep 0.1; done
     rm -rf "/Applications/$APP_NAME.app"
     ditto "{{app}}" "/Applications/$APP_NAME.app"
     mkdir -p "$HOME/.local/bin"
-    for shell in zsh bash; do \
-        cp "/Applications/$APP_NAME.app/Contents/MacOS/$PTY_BIN" "$HOME/.local/bin/.$shell ($PTY_BIN).new" \
-            && mv -f "$HOME/.local/bin/.$shell ($PTY_BIN).new" "$HOME/.local/bin/$shell ($PTY_BIN)"; \
-    done
-    for bin in "$CLI_BIN" "$PTY_BIN"; do \
-        link="$HOME/.local/bin/$bin"; \
-        if [ -f "$link" ] && [ ! -L "$link" ]; then \
-            backup="$link.bak-$(date +%Y%m%d%H%M%S)"; \
-            echo "moving existing $link aside to $backup"; \
-            mv -n "$link" "$backup"; \
-        fi; \
-        ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$bin" "$link"; \
-    done
+    link="$HOME/.local/bin/$CLI_BIN"; \
+    if [ -f "$link" ] && [ ! -L "$link" ]; then \
+        backup="$link.bak-$(date +%Y%m%d%H%M%S)"; \
+        echo "moving existing $link aside to $backup"; \
+        mv -n "$link" "$backup"; \
+    fi; \
+    ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" "$link"
     open "/Applications/$APP_NAME.app" --args --no-dashboard
     "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" setup --dotfiles --no-confirm
 

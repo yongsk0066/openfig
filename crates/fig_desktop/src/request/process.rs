@@ -5,15 +5,11 @@ use fig_proto::fig::{
     RunProcessRequest,
     RunProcessResponse,
 };
-use fig_proto::remote::hostbound;
-use fig_remote_ipc::figterm::{
-    FigtermCommand,
-    FigtermState,
+use fig_shell_ipc::session::{
+    ShellCommand,
+    ShellSessions,
 };
-use fig_util::env_var::{
-    FIG_TERM,
-    PROCESS_LAUNCHED_BY_FIG,
-};
+use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::debug;
@@ -22,7 +18,6 @@ use uuid::Uuid;
 use super::RequestResult;
 
 fn set_fig_vars(cmd: &mut Command) {
-    cmd.env(FIG_TERM, env!("CARGO_PKG_VERSION"));
     cmd.env(PROCESS_LAUNCHED_BY_FIG, "1");
 
     cmd.env("HISTFILE", "");
@@ -30,7 +25,7 @@ fn set_fig_vars(cmd: &mut Command) {
     cmd.env("TERM", "xterm-256color");
 }
 
-pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestResult {
+pub async fn run(request: RunProcessRequest, state: &ShellSessions) -> RequestResult {
     debug!({
         term_session =? request.terminal_session_id,
         exe = request.executable,
@@ -50,7 +45,7 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
     let session_sender = state.with_maybe_id(&uuid, |session| session.sender.clone());
 
     if let Some(session_sender) = session_sender {
-        let (message, rx) = FigtermCommand::run_process(
+        let (message, rx) = ShellCommand::run_process(
             request.executable,
             request.arguments,
             request.working_directory,
@@ -59,7 +54,7 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
         );
         session_sender
             .send(message)
-            .map_err(|err| format!("failed sending command to figterm: {err}"))?;
+            .map_err(|err| format!("failed sending command to the shell session: {err}"))?;
         drop(session_sender);
 
         let timeout_duration = request
@@ -70,16 +65,10 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
 
         let response = timeout(timeout_duration, rx)
             .await
-            .map_err(|_err| "Timed out waiting for figterm response")?
-            .map_err(|err| format!("Failed to receive figterm response: {err}"))?;
+            .map_err(|_err| "Timed out waiting for the shell session")?
+            .map_err(|err| format!("Failed to receive the shell session's response: {err}"))?;
 
-        if let hostbound::response::Response::RunProcess(response) = response {
-            RequestResult::Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(
-                RunProcessResponse { ..response },
-            )))
-        } else {
-            Err("invalid response type".into())
-        }
+        RequestResult::Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(response?)))
     } else {
         debug!("running locally");
 

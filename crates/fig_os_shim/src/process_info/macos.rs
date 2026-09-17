@@ -9,7 +9,7 @@ use super::pid::RawPid;
 use crate::Context;
 
 pub(crate) fn current(ctx: Weak<Context>) -> Pid {
-    Pid::Real(ctx.clone(), nix::unistd::getpid().into())
+    Pid(ctx.clone(), nix::unistd::getpid().into())
 }
 
 pub(crate) fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
@@ -54,7 +54,7 @@ pub(crate) fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
     let info = unsafe { info.assume_init() };
     match info.pbi_ppid {
         0 => None,
-        ppid => Some(Box::new(Pid::Real(ctx, RawPid(ppid.try_into().ok()?)))),
+        ppid => Some(Box::new(Pid(ctx, RawPid(ppid.try_into().ok()?)))),
     }
 }
 

@@ -1,4 +1,4 @@
-//! The zsh hook path (`fig.zsh` + `fig_remote_ipc::hook`), docs/15-architecture-study.md §4 stage
+//! The zsh hook path (`fig.zsh` + `fig_shell_ipc::hook`), docs/15-architecture-study.md §4 stage
 //! 3.
 //!
 //! Every test runs `/bin/zsh -i` in a real pty, through `init zsh pre`/`post` as a user's rc file
@@ -6,8 +6,7 @@
 
 use std::time::Duration;
 
-use fig_proto::remote::hostbound::response::Response;
-use fig_remote_ipc::figterm::FigtermCommand;
+use fig_shell_ipc::session::ShellCommand;
 use figterm2::golden;
 use figterm2::hook::{
     Daemon,
@@ -316,7 +315,7 @@ const WORKDIR: &str = "cd $ZDOTDIR && : > uniquefile1\nexport HOOK_TEST_VAR=from
 /// `webview/window.rs`).
 fn show_dropdown(shell: &HookShell) {
     shell
-        .command(FigtermCommand::InterceptFigJs {
+        .command(ShellCommand::InterceptFigJs {
             intercept_keystrokes: true,
             intercept_global_keystrokes: false,
             actions: vec![],
@@ -324,7 +323,7 @@ fn show_dropdown(shell: &HookShell) {
         })
         .unwrap();
     shell
-        .command(FigtermCommand::InterceptFigJSVisible { visible: true })
+        .command(ShellCommand::InterceptFigJSVisible { visible: true })
         .unwrap();
 }
 
@@ -367,7 +366,7 @@ async fn hook_intercepts_keys_only_while_asked() {
     );
 
     shell
-        .command(FigtermCommand::InterceptFigJSVisible { visible: false })
+        .command(ShellCommand::InterceptFigJSVisible { visible: false })
         .unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
     shell.press("\t").unwrap();
@@ -466,7 +465,7 @@ async fn hook_gives_up_on_a_silent_daemon() {
 async fn hook_applies_insertions() {
     let rc = format!("{PLAIN}{WORKDIR}");
     let mut shell = HookShell::spawn(Rc::Text(&rc), Daemon::Real).await.unwrap();
-    let insert = |insertion: &str, buffer: &str| FigtermCommand::InsertText {
+    let insert = |insertion: &str, buffer: &str| ShellCommand::InsertText {
         insertion: Some(insertion.into()),
         deletion: None,
         offset: None,
@@ -495,7 +494,7 @@ async fn hook_applies_insertions() {
     );
 
     // Asked to run the line, but not in answer to a key: typed, left for the user to run (a `zle -F`
-    // handler cannot run it, see `fig_remote_ipc::hook::wire`).
+    // handler cannot run it, see `fig_shell_ipc::hook::wire`).
     shell.press("\x15").unwrap();
     shell.type_text("echo in").await.unwrap();
     expect_buffer(&mut shell, "echo in").await;
@@ -612,7 +611,7 @@ async fn hook_runs_an_app_insertion_that_ends_in_enter() {
         .await
         .unwrap();
     shell
-        .command(FigtermCommand::InsertText {
+        .command(ShellCommand::InsertText {
             insertion: Some("\x08ran$((40+2))\n".into()),
             deletion: None,
             offset: None,
@@ -670,7 +669,7 @@ async fn hook_drops_insertions_while_a_command_runs() {
     shell.press("\r").unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
     shell
-        .command(FigtermCommand::InsertText {
+        .command(ShellCommand::InsertText {
             insertion: Some("stale".into()),
             deletion: None,
             offset: None,
@@ -697,7 +696,7 @@ async fn hook_drops_insertions_while_a_command_runs() {
 async fn hook_runs_processes_where_the_shell_is() {
     let rc = format!("{PLAIN}{WORKDIR}");
     let shell = HookShell::spawn(Rc::Text(&rc), Daemon::Real).await.unwrap();
-    let (command, response) = FigtermCommand::run_process(
+    let (command, response) = ShellCommand::run_process(
         "sh".into(),
         vec!["-c".into(), "pwd -P; echo $HOOK_TEST_VAR".into()],
         None,
@@ -707,12 +706,10 @@ async fn hook_runs_processes_where_the_shell_is() {
     shell.command(command).unwrap();
     let response = tokio::time::timeout(STEP_TIMEOUT, response).await.unwrap().unwrap();
     let zdotdir = shell.zdotdir.canonicalize().unwrap();
-    match response {
-        Response::RunProcess(response) => {
-            assert_eq!(response.stdout, format!("{}\nfrom-the-shell\n", zdotdir.display()));
-        },
-        other => panic!("{other:?}"),
-    }
+    assert_eq!(
+        response.unwrap().stdout,
+        format!("{}\nfrom-the-shell\n", zdotdir.display())
+    );
     assert_eq!(shell.sessions(), 1);
 }
 

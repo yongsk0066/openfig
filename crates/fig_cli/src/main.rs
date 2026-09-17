@@ -52,8 +52,8 @@ fn main() -> Result<ExitCode> {
 
     // Single-threaded on purpose. Every subcommand is a short-lived, sequential CLI run: there is
     // no `block_in_place` anywhere in the crate and nothing here fans out work across cores, so a
-    // worker-per-core runtime only cost thread spawns on the shell's hot path (`q init` and
-    // `q _ pre-cmd` run on every prompt).
+    // worker-per-core runtime only cost thread spawns on the shell's hot path (`q init` runs in
+    // every new shell).
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
 
     let result = runtime.block_on(parsed.execute());

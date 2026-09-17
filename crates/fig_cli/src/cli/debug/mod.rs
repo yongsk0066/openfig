@@ -36,13 +36,11 @@ use fig_ipc::local::{
 };
 use fig_os_shim::Env;
 use fig_util::consts::APP_BUNDLE_ID;
-use fig_util::env_var::FIG_DEBUG_SHELL;
 use fig_util::macos::BUNDLE_CONTENTS_MACOS_PATH;
 use fig_util::{
     APP_BUNDLE_NAME,
     CLI_BINARY_NAME,
     PRODUCT_NAME,
-    PTY_BINARY_NAME,
     Shell,
     directories,
 };
@@ -217,24 +215,7 @@ impl DebugSubcommand {
                     let globset = glob([pattern.to_str().unwrap()])?;
                     glob_dir(&globset, &logs_dir)?
                 } else {
-                    let mut files = files.as_ref().clone();
-                    let mut paths = Vec::new();
-
-                    if files.iter().any(|f| f == PTY_BINARY_NAME) {
-                        // Remove figterm from the list of files to open
-                        files.retain(|f| f != PTY_BINARY_NAME);
-
-                        // Add figterm*.log to the list of files to open
-                        let pattern = logs_dir.join(format!("{PTY_BINARY_NAME}*.log"));
-                        let globset = glob([pattern.to_str().unwrap()])?;
-                        let pty_logs = glob_dir(&globset, &logs_dir)?;
-                        paths.extend(pty_logs);
-                    }
-
-                    // Push any remaining files to open
-                    paths.extend(files.iter().map(|file| logs_dir.join(format!("{file}.log"))));
-
-                    paths
+                    files.iter().map(|file| logs_dir.join(format!("{file}.log"))).collect()
                 };
 
                 Command::new("tail")
@@ -435,13 +416,6 @@ impl DebugSubcommand {
                                 .preexec
                                 .map_or_else(|| "None".to_string(), |s| s.to_string())
                         )?;
-                        writeln!(
-                            &mut out,
-                            "OSCLock: {}",
-                            shell_context
-                                .osc_lock
-                                .map_or_else(|| "None".to_string(), |s| s.to_string())
-                        )?;
                     }
 
                     writeln!(
@@ -492,18 +466,13 @@ impl DebugSubcommand {
                 let mut profile = NamedTempFile::new()?;
                 let tmp_dir = TempDir::new()?;
 
-                let mut command = Command::new(PTY_BINARY_NAME);
-                command.env(FIG_DEBUG_SHELL, "1").arg("--");
-
                 match Shell::current_shell() {
                     Some(shell) => {
-                        let mut command = match shell {
+                        let mut command = Command::new(shell.as_str());
+                        match shell {
                             Shell::Bash => {
                                 writeln!(profile, "eval \"$({CLI_BINARY_NAME} init bash post)\"")?;
-                                command
-                                    .args([shell.as_str(), "--noprofile", "--norc", "--rcfile"])
-                                    .arg(profile.path());
-                                command
+                                command.args(["--noprofile", "--norc", "--rcfile"]).arg(profile.path());
                             },
                             Shell::Zsh => {
                                 std::fs::write(
@@ -512,10 +481,9 @@ impl DebugSubcommand {
                                 )
                                 .unwrap();
 
-                                command.args([shell.as_str()]).env("ZDOTDIR", tmp_dir.path());
-                                command
+                                command.env("ZDOTDIR", tmp_dir.path());
                             },
-                        };
+                        }
 
                         println!("Starting {PRODUCT_NAME} debug shell");
                         println!();

@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use fig_proto::fig::EnvironmentVariable;
+use fig_proto::fig::{
+    EnvironmentVariable,
+    RunProcessResponse,
+};
 use fig_proto::local::{
     ShellContext,
     TerminalCursorCoordinates,
-};
-use fig_proto::remote::{
-    Clientbound,
-    hostbound,
 };
 use parking_lot::lock_api::MutexGuard;
 use parking_lot::{
@@ -27,33 +26,34 @@ pub struct EditBuffer {
 }
 
 #[derive(Debug, Default, Serialize)]
-pub struct InnerFigtermState {
-    /// All current sessions of [FigtermSession]'s.
-    pub linked_sessions: HashMap<Uuid, FigtermSession>,
-    /// The most recent figterm session
+pub struct InnerShellSessions {
+    /// Every connected shell, by session id.
+    pub linked_sessions: HashMap<Uuid, ShellSession>,
+    /// The session that reported last.
     most_recent: Option<Uuid>,
 }
 
+/// The shells connected to the desktop, each a `fig.zsh` on `hook.sock` ([`crate::hook`]).
 #[derive(Debug, Default, Serialize)]
-pub struct FigtermState {
+pub struct ShellSessions {
     #[serde(flatten)]
-    pub inner: FairMutex<InnerFigtermState>,
+    pub inner: FairMutex<InnerShellSessions>,
 }
 
-impl FigtermState {
+impl ShellSessions {
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Inserts a new session id
-    pub(crate) fn insert(&self, session: FigtermSession) {
-        let mut figterm_state = self.inner.lock();
-        figterm_state.most_recent = Some(session.id);
-        figterm_state.linked_sessions.insert(session.id, session);
+    pub(crate) fn insert(&self, session: ShellSession) {
+        let mut sessions = self.inner.lock();
+        sessions.most_recent = Some(session.id);
+        sessions.linked_sessions.insert(session.id, session);
     }
 
     /// Gets mutable reference to the given session id and sets the most recent session id
-    pub fn with_update<T>(&self, key: Uuid, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
+    pub fn with_update<T>(&self, key: Uuid, f: impl FnOnce(&mut ShellSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
         let res = guard.linked_sessions.get_mut(&key).map(f);
 
@@ -64,22 +64,22 @@ impl FigtermState {
         res
     }
 
-    fn with_most_recent<T>(&self, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
+    fn with_most_recent<T>(&self, f: impl FnOnce(&mut ShellSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
         let id = guard.most_recent?;
         guard.linked_sessions.get_mut(&id).map(f)
     }
 
     /// Gets mutable reference to the given session id
-    pub fn with<T>(&self, session_id: &Uuid, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
+    pub fn with<T>(&self, session_id: &Uuid, f: impl FnOnce(&mut ShellSession) -> T) -> Option<T> {
         let mut guard = self.inner.lock();
         guard.linked_sessions.get_mut(session_id).map(f)
     }
 
-    pub fn most_recent(&self) -> Option<MappedFairMutexGuard<'_, FigtermSession>> {
-        MutexGuard::<'_, RawFairMutex, InnerFigtermState>::try_map(
+    pub fn most_recent(&self) -> Option<MappedFairMutexGuard<'_, ShellSession>> {
+        MutexGuard::<'_, RawFairMutex, InnerShellSessions>::try_map(
             self.inner.lock(),
-            |guard: &mut InnerFigtermState| {
+            |guard: &mut InnerShellSessions| {
                 guard
                     .most_recent
                     .as_mut()
@@ -89,31 +89,20 @@ impl FigtermState {
         .ok()
     }
 
-    pub fn with_maybe_id<T>(&self, session_id: &Option<Uuid>, f: impl FnOnce(&mut FigtermSession) -> T) -> Option<T> {
+    pub fn with_maybe_id<T>(&self, session_id: &Option<Uuid>, f: impl FnOnce(&mut ShellSession) -> T) -> Option<T> {
         match session_id {
             Some(session_id) => self.with(session_id, f),
             None => self.with_most_recent(f),
         }
     }
 
-    pub(crate) fn remove_id(&self, session_id: &Uuid) -> Option<FigtermSession> {
+    pub(crate) fn remove_id(&self, session_id: &Uuid) -> Option<ShellSession> {
         let mut guard = self.inner.lock();
         if guard.most_recent.as_ref() == Some(session_id) {
             guard.most_recent = None;
         }
         guard.linked_sessions.remove(session_id)
     }
-}
-
-/// How a session reaches the desktop.
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-pub enum SessionKind {
-    /// The pty binary over `remote.sock` (`crate::remote`): the edit buffer is read off the screen
-    /// and commands are carried out inside the pty binary.
-    Figterm,
-    /// `fig.zsh` over `hook.sock` (`crate::hook`): zsh reports its own edit buffer, and commands
-    /// the shell cannot carry out — running a process — are carried out by the desktop.
-    ZshHook,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -142,49 +131,26 @@ impl From<InterceptMode> for bool {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FigtermSession {
+pub struct ShellSession {
     pub id: Uuid,
-    pub kind: SessionKind,
     #[serde(skip)]
-    pub sender: flume::Sender<FigtermCommand>,
-    #[serde(skip)]
-    pub(crate) writer: Option<flume::Sender<Clientbound>>,
+    pub sender: flume::Sender<ShellCommand>,
     #[serde(skip)]
     pub edit_buffer: EditBuffer,
     pub context: Option<ShellContext>,
     #[serde(skip)]
     pub terminal_cursor_coordinates: Option<TerminalCursorCoordinates>,
-    #[serde(skip)]
-    pub(crate) response_map: HashMap<u64, oneshot::Sender<hostbound::response::Response>>,
-    #[serde(skip)]
-    pub(crate) nonce_counter: u64,
     pub intercept: InterceptMode,
     pub intercept_global: InterceptMode,
 }
 
+/// What the desktop asks of a shell session; [`crate::hook`] carries it out.
 #[derive(Debug)]
-pub struct FigtermSessionInfo {
-    pub edit_buffer: EditBuffer,
-    pub context: Option<ShellContext>,
-}
-
-impl FigtermSession {
-    #[allow(dead_code)]
-    pub fn get_info(&self) -> FigtermSessionInfo {
-        FigtermSessionInfo {
-            edit_buffer: self.edit_buffer.clone(),
-            context: self.context.clone(),
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum FigtermCommand {
+pub enum ShellCommand {
     InterceptFigJs {
         intercept_keystrokes: bool,
         intercept_global_keystrokes: bool,
-        actions: Vec<fig_proto::figterm::Action>,
+        actions: Vec<fig_proto::shell::Action>,
         override_actions: bool,
     },
     InterceptFigJSVisible {
@@ -199,7 +165,7 @@ pub enum FigtermCommand {
         insert_during_command: Option<bool>,
     },
     RunProcess {
-        channel: oneshot::Sender<hostbound::response::Response>,
+        channel: oneshot::Sender<Result<RunProcessResponse, String>>,
         executable: String,
         arguments: Vec<String>,
         working_directory: Option<String>,
@@ -208,22 +174,26 @@ pub enum FigtermCommand {
     },
 }
 
-macro_rules! field {
-    ($fn_name:ident: $enum_name:ident, $($field_name: ident: $field_type: ty),*,) => {
-        pub fn $fn_name($($field_name: $field_type),*) -> (Self, oneshot::Receiver<hostbound::response::Response>) {
-            let (tx, rx) = oneshot::channel();
-            (Self::$enum_name {channel: tx, $($field_name),*}, rx)
-        }
-    };
-}
-
-impl FigtermCommand {
-    field!(
-        run_process: RunProcess,
+impl ShellCommand {
+    /// [`ShellCommand::RunProcess`] and the receiver its answer arrives on.
+    pub fn run_process(
         executable: String,
         arguments: Vec<String>,
         working_directory: Option<String>,
         env: Vec<EnvironmentVariable>,
         timeout: Option<Duration>,
-    );
+    ) -> (Self, oneshot::Receiver<Result<RunProcessResponse, String>>) {
+        let (channel, rx) = oneshot::channel();
+        (
+            Self::RunProcess {
+                channel,
+                executable,
+                arguments,
+                working_directory,
+                env,
+                timeout,
+            },
+            rx,
+        )
+    }
 }

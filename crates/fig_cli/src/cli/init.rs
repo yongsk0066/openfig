@@ -15,7 +15,6 @@ use fig_integrations::shell::{
     ShellExt,
     When,
 };
-use fig_os_shim::Context;
 use fig_util::env_var::FIG_SHELL;
 use fig_util::{
     CLI_BINARY_NAME,
@@ -23,8 +22,6 @@ use fig_util::{
     Shell,
     get_parent_process_exe,
 };
-
-use super::internal::should_figterm_launch::should_figterm_launch_exit_status;
 
 const SHELL_INTEGRATIONS_ENABLED_STATE_KEY: &str = "shell-integrations.enabled";
 
@@ -110,34 +107,20 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
 
     let mut to_source = Vec::new();
 
-    // zsh's `pre` only puts `~/.local/bin` on `PATH` and its `post` is the hook (`fig.zsh`); these
-    // variables are read by bash's pty binary launch and nothing else.
-    if *shell == Shell::Bash {
-        if let Some(parent_process) = get_parent_process_exe() {
-            to_source.push(assign_shell_variable(
-                shell,
-                FIG_SHELL,
-                if *IS_SNAPSHOT_TEST {
-                    Path::new("/bin/zsh").display()
-                } else {
-                    parent_process.display()
-                },
-                false,
-            ));
-        };
-
-        if when == &When::Pre {
-            let status = if *IS_SNAPSHOT_TEST {
-                0
+    // zsh's `post` is the hook (`fig.zsh`), which does not read it; bash's markers do.
+    if *shell == Shell::Bash
+        && let Some(parent_process) = get_parent_process_exe()
+    {
+        to_source.push(assign_shell_variable(
+            shell,
+            FIG_SHELL,
+            if *IS_SNAPSHOT_TEST {
+                Path::new("/bin/zsh").display()
             } else {
-                should_figterm_launch_exit_status(&Context::new(), true)
-            };
-            to_source.push(assign_shell_variable(shell, "SHOULD_FIGTERM_LAUNCH", status, false));
-        }
-
-        if let Some(path) = fig_settings::settings::get_string_opt("figterm.path") {
-            to_source.push(assign_shell_variable(shell, "FIG_TERM_PATH", path, false));
-        }
+                parent_process.display()
+            },
+            false,
+        ));
     }
 
     to_source.push(shell.get_fig_integration_source(when)?);

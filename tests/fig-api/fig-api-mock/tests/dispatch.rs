@@ -11,7 +11,7 @@
 //! touch the real ones. The child's environment is cleared apart from `HOME`, so the recording does
 //! not depend on the caller's (`CI=1` included).
 //!
-//! The seven requests only the desktop app can answer (window, figterm session, event loop) reach
+//! The seven requests only the desktop app can answer (window, shell session, event loop) reach
 //! the mock's own handler here; `crates/fig_desktop/src/protocol/api.rs` records what the desktop
 //! itself answers for six of them (not `UpdateApplicationPropertiesRequest`, see there).
 

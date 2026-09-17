@@ -4,7 +4,7 @@ use fig_proto::fig::{
     PositionWindowRequest,
     PositionWindowResponse,
 };
-use fig_remote_ipc::figterm::FigtermState;
+use fig_shell_ipc::session::ShellSessions;
 use tao::dpi::LogicalSize;
 use tracing::debug;
 
@@ -24,7 +24,7 @@ use crate::webview::WindowId;
 pub async fn position_window(
     request: PositionWindowRequest,
     window_id: WindowId,
-    figterm_state: &FigtermState,
+    shell_sessions: &ShellSessions,
     proxy: &dyn EventSender,
 ) -> RequestResult {
     debug!(?request, %window_id, "Position Window Request");
@@ -34,7 +34,7 @@ pub async fn position_window(
 
     if window_id == AUTOCOMPLETE_ID
         && !is_hide
-        && figterm_state
+        && shell_sessions
             .most_recent()
             .and_then(|session| session.context.as_ref().map(|context| context.preexec()))
             .unwrap_or(false)

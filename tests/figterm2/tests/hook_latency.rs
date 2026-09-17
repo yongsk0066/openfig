@@ -1,5 +1,5 @@
 //! Stage 0 latency benchmark, zsh hook path (docs/16-latency.md): `key→hook` from the write to the
-//! pty master until the edit buffer is decoded by the desktop's server (`fig_remote_ipc::hook`,
+//! pty master until the edit buffer is decoded by the desktop's server (`fig_shell_ipc::hook`,
 //! handler entry), `key→echo` until the first output. The terminal talks to zsh directly, and
 //! `fig.zsh` reports from `zle-line-pre-redraw` over `hook.sock`. `bare echo` is the same keys into
 //! `zsh -f`, the floor the other two sit on.
@@ -17,7 +17,7 @@ use std::time::{
     Instant,
 };
 
-use fig_remote_ipc::figterm::FigtermCommand;
+use fig_shell_ipc::session::ShellCommand;
 use figterm2::hook::{
     Daemon,
     HookEvent,
@@ -200,13 +200,13 @@ async fn latency_zsh_hook_insert() {
             .await
             .unwrap();
         for command in [
-            FigtermCommand::InterceptFigJs {
+            ShellCommand::InterceptFigJs {
                 intercept_keystrokes: true,
                 intercept_global_keystrokes: false,
                 actions: vec![],
                 override_actions: false,
             },
-            FigtermCommand::InterceptFigJSVisible { visible: true },
+            ShellCommand::InterceptFigJSVisible { visible: true },
         ] {
             shell.command(command).unwrap();
         }
@@ -223,7 +223,7 @@ async fn latency_zsh_hook_insert() {
             .await
             .unwrap();
         shell
-            .command(FigtermCommand::InsertText {
+            .command(ShellCommand::InsertText {
                 insertion: Some("\x08\x08checkout ".into()),
                 deletion: None,
                 offset: None,
@@ -243,7 +243,7 @@ async fn latency_zsh_hook_insert() {
         to_insert.push(applied.saturating_duration_since(start));
 
         shell
-            .command(FigtermCommand::InterceptFigJSVisible { visible: false })
+            .command(ShellCommand::InterceptFigJSVisible { visible: false })
             .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         shell.press("\x15").unwrap();

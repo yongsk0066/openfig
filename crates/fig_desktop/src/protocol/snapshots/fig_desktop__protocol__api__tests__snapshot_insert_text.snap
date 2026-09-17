@@ -9,8 +9,8 @@ expression: transcript(requests).await
 < 200 OK CAISSnRlcm1pbmFsX3Nlc3Npb25faWQgaXMgbm90IGEgdmFsaWQgVVVJRDogaW52YWxpZCBjaGFyYWN0ZXI6IGZvdW5kIGBuYCBhdCAw
 < ServerOriginatedMessage { id: Some(2), submessage: Some(Error("terminal_session_id is not a valid UUID: invalid character: found `n` at 0")) }
 > ClientOriginatedMessage { id: Some(3), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: Some("00000000-0000-0000-0000-000000000000"), r#type: Some(Text("echo")) })) }
-< 200 OK CAMSE05vIGZpZ3Rlcm0gc2Vzc2lvbnM=
-< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("No figterm sessions")) }
+< 200 OK CAMSEU5vIHNoZWxsIHNlc3Npb25z
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("No shell sessions")) }
 > ClientOriginatedMessage { id: Some(4), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: None, r#type: None })) }
 < 200 OK CAQSKEluc2VydFRleHRSZXF1ZXN0IGV4cGVjdHMgYSByZXF1ZXN0IHR5cGU=
 < ServerOriginatedMessage { id: Some(4), submessage: Some(Error("InsertTextRequest expects a request type")) }

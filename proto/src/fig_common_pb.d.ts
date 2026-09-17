@@ -222,14 +222,14 @@ export declare type ShellContext = Message<"fig_common.ShellContext"> & {
   sessionId?: string | undefined;
 
   /**
-   * the parent terminal of figterm
+   * the terminal the shell runs in
    *
    * @generated from field: optional string terminal = 7;
    */
   terminal?: string | undefined;
 
   /**
-   * the hostname of the computer figterm is running on
+   * the hostname of the computer the shell runs on
    *
    * @generated from field: optional string hostname = 8;
    */
@@ -257,25 +257,11 @@ export declare type ShellContext = Message<"fig_common.ShellContext"> & {
   environmentVariables: EnvironmentVariable[];
 
   /**
-   * the version of the pty wrapper
-   *
-   * @generated from field: optional string figterm_version = 14;
-   */
-  figtermVersion?: string | undefined;
-
-  /**
    * true if a command is running
    *
    * @generated from field: optional bool preexec = 15;
    */
   preexec?: boolean | undefined;
-
-  /**
-   * true if OSCs are locked
-   *
-   * @generated from field: optional bool osc_lock = 16;
-   */
-  oscLock?: boolean | undefined;
 
   /**
    * the raw output of `alias` run in the shell

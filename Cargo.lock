@@ -1321,8 +1321,8 @@ dependencies = [
  "fig_log",
  "fig_os_shim",
  "fig_proto",
- "fig_remote_ipc",
  "fig_settings",
+ "fig_shell_ipc",
  "fig_util",
  "flume",
  "fnv",
@@ -1456,25 +1456,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fig_remote_ipc"
-version = "1.19.7"
-dependencies = [
- "anyhow",
- "async-trait",
- "fig_ipc",
- "fig_proto",
- "fig_settings",
- "fig_util",
- "flume",
- "parking_lot",
- "serde",
- "tempfile",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "fig_settings"
 version = "1.19.7"
 dependencies = [
@@ -1487,6 +1468,24 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
+]
+
+[[package]]
+name = "fig_shell_ipc"
+version = "1.19.7"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "fig_proto",
+ "fig_settings",
+ "fig_util",
+ "flume",
+ "parking_lot",
+ "serde",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1521,7 +1520,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "fig_proto",
- "fig_remote_ipc",
+ "fig_shell_ipc",
  "fig_util",
  "portable-pty",
  "serde_json",

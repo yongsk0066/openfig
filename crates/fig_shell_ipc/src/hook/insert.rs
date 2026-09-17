@@ -8,7 +8,7 @@
 //! keystrokes computed the same way, then replayed here as [`Insert`] edits of `LBUFFER`, which
 //! is what `fig.zsh` can apply atomically.
 
-use fig_proto::figterm::InsertTextRequest;
+use fig_proto::shell::InsertTextRequest;
 
 use super::wire::Insert;
 

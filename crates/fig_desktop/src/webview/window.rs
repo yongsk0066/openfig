@@ -12,9 +12,9 @@ use fig_proto::fig::{
     ServerOriginatedMessage,
 };
 use fig_proto::prost::Message;
-use fig_remote_ipc::figterm::{
-    FigtermCommand,
-    FigtermState,
+use fig_shell_ipc::session::{
+    ShellCommand,
+    ShellSessions,
 };
 use parking_lot::Mutex;
 use tao::dpi::{
@@ -405,7 +405,7 @@ impl WindowState {
     pub fn handle(
         &self,
         event: WindowEvent,
-        figterm_state: &FigtermState,
+        shell_sessions: &ShellSessions,
         platform_state: &PlatformState,
         notifications_state: &WebviewNotificationsState,
         window_target: &EventLoopWindowTarget,
@@ -434,10 +434,10 @@ impl WindowState {
 
                 if self.window_id == AUTOCOMPLETE_ID {
                     platform_state.set_autocomplete_visible(false);
-                    for session in figterm_state.inner.lock().linked_sessions.values_mut() {
+                    for session in shell_sessions.inner.lock().linked_sessions.values_mut() {
                         let _ = session
                             .sender
-                            .send(FigtermCommand::InterceptFigJSVisible { visible: false });
+                            .send(ShellCommand::InterceptFigJSVisible { visible: false });
                     }
 
                     // This used to toggle `set_resizable(true)` then `set_resizable(false)` on
@@ -470,13 +470,13 @@ impl WindowState {
             WindowEvent::Show => {
                 if self.window_id == AUTOCOMPLETE_ID {
                     // `Hide` has always checked; `Show` did not, so every keystroke re-sent
-                    // `InterceptFigJSVisible` to every linked figterm session and re-called
+                    // `InterceptFigJSVisible` to every linked shell session and re-called
                     // `set_visible(true)` on an already visible window.
                     if !self.window.is_visible() {
-                        for session in figterm_state.inner.lock().linked_sessions.values_mut() {
+                        for session in shell_sessions.inner.lock().linked_sessions.values_mut() {
                             let _ = session
                                 .sender
-                                .send(FigtermCommand::InterceptFigJSVisible { visible: true });
+                                .send(ShellCommand::InterceptFigJSVisible { visible: true });
                         }
 
                         self.window.set_visible(true);
@@ -574,7 +574,13 @@ impl WindowState {
             },
             WindowEvent::Batch(events) => {
                 for event in events {
-                    self.handle(event, figterm_state, platform_state, notifications_state, window_target);
+                    self.handle(
+                        event,
+                        shell_sessions,
+                        platform_state,
+                        notifications_state,
+                        window_target,
+                    );
                 }
             },
         }

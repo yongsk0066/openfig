@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(DragWindowRequest(DragWindowRequest)) }
+< CAESIkRyYWdXaW5kb3dSZXF1ZXN0IGlzIHVuaW1wbGVtZW50ZWQ=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("DragWindowRequest is unimplemented")) }

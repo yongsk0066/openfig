@@ -1,0 +1,22 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(ReadFileRequest(ReadFileRequest { path: Some(FilePath { path: "read.txt", relative_to: None, expand_tilde_in_path: None }), is_binary_file: None })) }
+< CAGyBgcSBWhlbGxv
+< ServerOriginatedMessage { id: Some(1), submessage: Some(ReadFileResponse(ReadFileResponse { r#type: Some(Text("hello")) })) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(ReadFileRequest(ReadFileRequest { path: Some(FilePath { path: "read.txt", relative_to: None, expand_tilde_in_path: None }), is_binary_file: Some(true) })) }
+< CAKyBgcKBWhlbGxv
+< ServerOriginatedMessage { id: Some(2), submessage: Some(ReadFileResponse(ReadFileResponse { r#type: Some(Data([104, 101, 108, 108, 111])) })) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(ReadFileRequest(ReadFileRequest { path: Some(FilePath { path: "nested.txt", relative_to: Some("sub"), expand_tilde_in_path: None }), is_binary_file: None })) }
+< CAOyBggSBm5lc3RlZA==
+< ServerOriginatedMessage { id: Some(3), submessage: Some(ReadFileResponse(ReadFileResponse { r#type: Some(Text("nested")) })) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(ReadFileRequest(ReadFileRequest { path: Some(FilePath { path: "~/tilde.txt", relative_to: None, expand_tilde_in_path: Some(true) }), is_binary_file: None })) }
+< CASyBgsSCWZyb20gaG9tZQ==
+< ServerOriginatedMessage { id: Some(4), submessage: Some(ReadFileResponse(ReadFileResponse { r#type: Some(Text("from home")) })) }
+> ClientOriginatedMessage { id: Some(5), submessage: Some(ReadFileRequest(ReadFileRequest { path: Some(FilePath { path: "missing.txt", relative_to: None, expand_tilde_in_path: None }), is_binary_file: None })) }
+< CAUSSkZhaWxlZCByZWFkaW5nIGZpbGUgYXQgbWlzc2luZy50eHQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkgKG9zIGVycm9yIDIp
+< ServerOriginatedMessage { id: Some(5), submessage: Some(Error("Failed reading file at missing.txt: No such file or directory (os error 2)")) }
+> ClientOriginatedMessage { id: Some(6), submessage: Some(ReadFileRequest(ReadFileRequest { path: None, is_binary_file: None })) }
+< CAYSEE5vIHBhdGggcHJvdmlkZWQ=
+< ServerOriginatedMessage { id: Some(6), submessage: Some(Error("No path provided")) }

@@ -1,0 +1,14 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(AppendToFileRequest(AppendToFileRequest { path: Some(FilePath { path: "log.txt", relative_to: None, expand_tilde_in_path: None }), data: Some(Text("b")) })) }
+< CAEYAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(AppendToFileRequest(AppendToFileRequest { path: Some(FilePath { path: "log.txt", relative_to: None, expand_tilde_in_path: None }), data: Some(Binary([99])) })) }
+< CAIYAQ==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(AppendToFileRequest(AppendToFileRequest { path: Some(FilePath { path: "missing.txt", relative_to: None, expand_tilde_in_path: None }), data: Some(Text("lost")) })) }
+< CAMSSkZhaWxlZCBvcGVuaW5nIGZpbGUgYXQgbWlzc2luZy50eHQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkgKG9zIGVycm9yIDIp
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("Failed opening file at missing.txt: No such file or directory (os error 2)")) }
+# cwd/log.txt: "abc"

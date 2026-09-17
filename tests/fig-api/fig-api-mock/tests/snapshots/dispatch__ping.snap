@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(PingRequest(PingRequest)) }
+< CAG6BwA=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(PingResponse(PingResponse)) }

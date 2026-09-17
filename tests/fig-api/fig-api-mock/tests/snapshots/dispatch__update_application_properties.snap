@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(UpdateApplicationPropertiesRequest(UpdateApplicationPropertiesRequest { intercept_bound_keystrokes: Some(true), intercept_global_keystrokes: None, action_list: None, current_terminal_session_id: None })) }
+< CAESM1VwZGF0ZUFwcGxpY2F0aW9uUHJvcGVydGllc1JlcXVlc3QgaXMgdW5pbXBsZW1lbnRlZA==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("UpdateApplicationPropertiesRequest is unimplemented")) }

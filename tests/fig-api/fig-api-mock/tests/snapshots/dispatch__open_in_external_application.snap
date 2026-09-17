@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(OpenInExternalApplicationRequest(OpenInExternalApplicationRequest { url: None })) }
+< CAESF05vIHVybCBwcm92aWRlZCB0byBvcGVu
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("No url provided to open")) }

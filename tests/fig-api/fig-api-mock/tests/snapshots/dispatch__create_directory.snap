@@ -1,0 +1,23 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(CreateDirectoryRequest(CreateDirectoryRequest { path: Some(FilePath { path: "deep/a/b", relative_to: None, expand_tilde_in_path: None }), recursive: Some(true) })) }
+< CAEYAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(CreateDirectoryRequest(CreateDirectoryRequest { path: Some(FilePath { path: "flat", relative_to: None, expand_tilde_in_path: None }), recursive: Some(false) })) }
+< CAIYAQ==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(CreateDirectoryRequest(CreateDirectoryRequest { path: Some(FilePath { path: "flat", relative_to: None, expand_tilde_in_path: None }), recursive: None })) }
+< CAMSL0ZhaWxlZCB0byBjcmVhdGUgZGlyOiBGaWxlIGV4aXN0cyAob3MgZXJyb3IgMTcp
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("Failed to create dir: File exists (os error 17)")) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(CreateDirectoryRequest(CreateDirectoryRequest { path: Some(FilePath { path: "no-parent/child", relative_to: None, expand_tilde_in_path: None }), recursive: None })) }
+< CAQSPEZhaWxlZCB0byBjcmVhdGUgZGlyOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5IChvcyBlcnJvciAyKQ==
+< ServerOriginatedMessage { id: Some(4), submessage: Some(Error("Failed to create dir: No such file or directory (os error 2)")) }
+> ClientOriginatedMessage { id: Some(5), submessage: Some(CreateDirectoryRequest(CreateDirectoryRequest { path: Some(FilePath { path: "~/made-in-home", relative_to: None, expand_tilde_in_path: Some(true) }), recursive: None })) }
+< CAUYAQ==
+< ServerOriginatedMessage { id: Some(5), submessage: Some(Success(true)) }
+# cwd/deep/a/b is a directory: true
+# cwd/flat is a directory: true
+# cwd/no-parent is a directory: false
+# home/made-in-home is a directory: true

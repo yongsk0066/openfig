@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(GetPlatformInfoRequest(GetPlatformInfoRequest)) }
+< CAHqBwA=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(GetPlatformInfoResponse(GetPlatformInfoResponse { os: Macos, desktop_environment: None, display_server_protocol: None, app_bundle_type: None })) }

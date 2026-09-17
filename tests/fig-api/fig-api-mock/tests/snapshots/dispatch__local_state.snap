@@ -1,0 +1,28 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(GetLocalStateRequest(GetLocalStateRequest { key: Some("snapshot.key") })) }
+< CAESH05vIHZhbHVlIGZvciBrZXkgJ3NuYXBzaG90LmtleSc=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("No value for key 'snapshot.key'")) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(UpdateLocalStateRequest(UpdateLocalStateRequest { key: Some("snapshot.key"), value: Some("{\"nested\":[1,2]}") })) }
+< CAIYAQ==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(GetLocalStateRequest(GetLocalStateRequest { key: Some("snapshot.key") })) }
+< CAPyBhIKEHsibmVzdGVkIjpbMSwyXX0=
+< ServerOriginatedMessage { id: Some(3), submessage: Some(GetLocalStateResponse(GetLocalStateResponse { json_blob: Some("{\"nested\":[1,2]}") })) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(UpdateLocalStateRequest(UpdateLocalStateRequest { key: Some("snapshot.key"), value: Some("not json") })) }
+< CAQYAQ==
+< ServerOriginatedMessage { id: Some(4), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(5), submessage: Some(GetLocalStateRequest(GetLocalStateRequest { key: Some("snapshot.key") })) }
+< CAXyBgwKCiJub3QganNvbiI=
+< ServerOriginatedMessage { id: Some(5), submessage: Some(GetLocalStateResponse(GetLocalStateResponse { json_blob: Some("\"not json\"") })) }
+> ClientOriginatedMessage { id: Some(6), submessage: Some(UpdateLocalStateRequest(UpdateLocalStateRequest { key: Some("snapshot.key"), value: None })) }
+< CAYYAQ==
+< ServerOriginatedMessage { id: Some(6), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(7), submessage: Some(GetLocalStateRequest(GetLocalStateRequest { key: Some("snapshot.key") })) }
+< CAcSH05vIHZhbHVlIGZvciBrZXkgJ3NuYXBzaG90LmtleSc=
+< ServerOriginatedMessage { id: Some(7), submessage: Some(Error("No value for key 'snapshot.key'")) }
+> ClientOriginatedMessage { id: Some(8), submessage: Some(UpdateLocalStateRequest(UpdateLocalStateRequest { key: None, value: Some("1") })) }
+< CAgSHE5vIGtleSBwcm92aWRlZCB3aXRoIHJlcXVlc3Q=
+< ServerOriginatedMessage { id: Some(8), submessage: Some(Error("No key provided with request")) }

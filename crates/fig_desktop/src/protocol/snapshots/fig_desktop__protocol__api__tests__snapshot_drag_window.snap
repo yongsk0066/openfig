@@ -1,0 +1,7 @@
+---
+source: crates/fig_desktop/src/protocol/api.rs
+expression: transcript(requests).await
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(DragWindowRequest(DragWindowRequest)) }
+< 200 OK CAESGXRoZSBldmVudCBsb29wIGhhcyBleGl0ZWQ=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("the event loop has exited")) }

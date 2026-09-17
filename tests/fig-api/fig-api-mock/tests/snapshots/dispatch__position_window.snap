@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(PositionWindowRequest(PositionWindowRequest { anchor: None, size: None, dryrun: None })) }
+< CAESJlBvc2l0aW9uV2luZG93UmVxdWVzdCBpcyB1bmltcGxlbWVudGVk
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("PositionWindowRequest is unimplemented")) }

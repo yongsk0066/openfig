@@ -1,0 +1,18 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(WriteFileRequest(WriteFileRequest { path: Some(FilePath { path: "text.txt", relative_to: None, expand_tilde_in_path: None }), data: Some(Text("text")) })) }
+< CAEYAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(WriteFileRequest(WriteFileRequest { path: Some(FilePath { path: "~/binary.bin", relative_to: None, expand_tilde_in_path: Some(true) }), data: Some(Binary([98, 105, 110, 97, 114, 121])) })) }
+< CAIYAQ==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(WriteFileRequest(WriteFileRequest { path: Some(FilePath { path: "no-such-dir/file.txt", relative_to: None, expand_tilde_in_path: None }), data: Some(Text("lost")) })) }
+< CAMSVkZhaWxlZCB3cml0aW5nIHRvIGZpbGUgYXQgbm8tc3VjaC1kaXIvZmlsZS50eHQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkgKG9zIGVycm9yIDIp
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("Failed writing to file at no-such-dir/file.txt: No such file or directory (os error 2)")) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(WriteFileRequest(WriteFileRequest { path: None, data: None })) }
+< CAQSEE5vIHBhdGggcHJvdmlkZWQ=
+< ServerOriginatedMessage { id: Some(4), submessage: Some(Error("No path provided")) }
+# cwd/text.txt: "text"
+# home/binary.bin: "binary"

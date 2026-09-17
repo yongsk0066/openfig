@@ -1,0 +1,25 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(GetSettingsPropertyRequest(GetSettingsPropertyRequest { key: Some("snapshot.key") })) }
+< CAESH05vIHZhbHVlIGZvciBrZXkgJ3NuYXBzaG90LmtleSc=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("No value for key 'snapshot.key'")) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(UpdateSettingsPropertyRequest(UpdateSettingsPropertyRequest { key: Some("snapshot.key"), value: Some("true") })) }
+< CAIYAQ==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(GetSettingsPropertyRequest(GetSettingsPropertyRequest { key: Some("snapshot.key") })) }
+< CAPCBgYKBHRydWU=
+< ServerOriginatedMessage { id: Some(3), submessage: Some(GetSettingsPropertyResponse(GetSettingsPropertyResponse { json_blob: Some("true"), is_default: None })) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(GetSettingsPropertyRequest(GetSettingsPropertyRequest { key: None })) }
+< CATCBhcKFXsic25hcHNob3Qua2V5Ijp0cnVlfQ==
+< ServerOriginatedMessage { id: Some(4), submessage: Some(GetSettingsPropertyResponse(GetSettingsPropertyResponse { json_blob: Some("{\"snapshot.key\":true}"), is_default: None })) }
+> ClientOriginatedMessage { id: Some(5), submessage: Some(UpdateSettingsPropertyRequest(UpdateSettingsPropertyRequest { key: Some("snapshot.key"), value: None })) }
+< CAUYAQ==
+< ServerOriginatedMessage { id: Some(5), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(6), submessage: Some(GetSettingsPropertyRequest(GetSettingsPropertyRequest { key: Some("snapshot.key") })) }
+< CAYSH05vIHZhbHVlIGZvciBrZXkgJ3NuYXBzaG90LmtleSc=
+< ServerOriginatedMessage { id: Some(6), submessage: Some(Error("No value for key 'snapshot.key'")) }
+> ClientOriginatedMessage { id: Some(7), submessage: Some(UpdateSettingsPropertyRequest(UpdateSettingsPropertyRequest { key: None, value: Some("1") })) }
+< CAcSHE5vIGtleSBwcm92aWRlZCB3aXRoIHJlcXVlc3Q=
+< ServerOriginatedMessage { id: Some(7), submessage: Some(Error("No key provided with request")) }

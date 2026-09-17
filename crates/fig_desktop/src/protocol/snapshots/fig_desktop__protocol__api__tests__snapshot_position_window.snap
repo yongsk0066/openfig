@@ -1,0 +1,13 @@
+---
+source: crates/fig_desktop/src/protocol/api.rs
+expression: transcript(requests).await
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(PositionWindowRequest(PositionWindowRequest { anchor: None, size: None, dryrun: None })) }
+< 200 OK CAESJlBvc2l0aW9uV2luZG93UmVxdWVzdCBtdXN0IGhhdmUgYSBzaXpl
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("PositionWindowRequest must have a size")) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(PositionWindowRequest(PositionWindowRequest { anchor: None, size: Some(Size { width: 300.0, height: 200.0 }), dryrun: None })) }
+< 200 OK CAISKVBvc2l0aW9uV2luZG93UmVxdWVzdCBtdXN0IGhhdmUgYW4gYW5jaG9y
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Error("PositionWindowRequest must have an anchor")) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(PositionWindowRequest(PositionWindowRequest { anchor: Some(Point { x: 10.0, y: 20.0 }), size: Some(Size { width: 300.0, height: 200.0 }), dryrun: Some(true) })) }
+< 200 OK CAMSGXRoZSBldmVudCBsb29wIGhhcyBleGl0ZWQ=
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Error("the event loop has exited")) }

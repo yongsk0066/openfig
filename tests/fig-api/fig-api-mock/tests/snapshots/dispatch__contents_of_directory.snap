@@ -1,0 +1,10 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(ContentsOfDirectoryRequest(ContentsOfDirectoryRequest { directory: Some(FilePath { path: "dir", relative_to: None, expand_tilde_in_path: None }) })) }
+< CAG6BgoKCG9ubHkudHh0
+< ServerOriginatedMessage { id: Some(1), submessage: Some(ContentsOfDirectoryResponse(ContentsOfDirectoryResponse { file_names: ["only.txt"] })) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(ContentsOfDirectoryRequest(ContentsOfDirectoryRequest { directory: Some(FilePath { path: "missing-dir", relative_to: None, expand_tilde_in_path: None }) })) }
+< CAIST0ZhaWxlZCBsaXN0aW5nIGRpcmVjdG9yeSBpbiBtaXNzaW5nLWRpcjogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeSAob3MgZXJyb3IgMik=
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Error("Failed listing directory in missing-dir: No such file or directory (os error 2)")) }

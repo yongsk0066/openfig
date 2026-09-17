@@ -174,4 +174,219 @@ mod tests {
             message.submessage
         );
     }
+
+    /// Sends each request through [`handle`] against one fresh [`ApiState`] and records every
+    /// exchange: the base64 of the response body (the bytes the webview receives) and its decoded
+    /// form for reading.
+    async fn transcript(requests: Vec<ClientOriginatedMessage>) -> String {
+        use std::fmt::Write as _;
+
+        use base64::prelude::*;
+
+        let state = api_state();
+        let mut transcript = String::new();
+        for request in requests {
+            writeln!(transcript, "> {request:?}").unwrap();
+            let http_request = Request::builder()
+                .method(Method::POST)
+                .header(CONTENT_TYPE, APPLICATION_FIG_API.clone())
+                .body(request.encode_to_vec())
+                .unwrap();
+            match handle(state.clone(), http_request, AUTOCOMPLETE_ID).await {
+                Ok(response) => {
+                    let body = response.body().as_ref();
+                    let message = fig_proto::fig::ServerOriginatedMessage::decode(body).unwrap();
+                    writeln!(transcript, "< {} {}", response.status(), BASE64_STANDARD.encode(body)).unwrap();
+                    writeln!(transcript, "< {message:?}").unwrap();
+                },
+                Err(err) => writeln!(transcript, "! {err}").unwrap(),
+            }
+        }
+        transcript
+    }
+
+    fn message(id: i64, submessage: ClientOriginatedSubMessage) -> ClientOriginatedMessage {
+        ClientOriginatedMessage {
+            id: Some(id),
+            submessage: Some(submessage),
+        }
+    }
+
+    // What the desktop answers for the requests only it can handle, recorded before the dispatch
+    // was flattened (docs/15-architecture-study.md §2.3 B); each must stay byte identical.
+    // `tests/fig-api/fig-api-mock/tests/dispatch.rs` records every variant through the shared
+    // handlers with a sandboxed `HOME`. Only requests that cannot change the machine are sent
+    // here: no session exists, so nothing reaches a figterm, and `NoEventLoop` refuses every
+    // window event. `UpdateApplicationPropertiesRequest` is left out because the desktop's
+    // handler loads keybindings from the user's real settings file and creates it if missing.
+
+    #[tokio::test]
+    async fn snapshot_envelope() {
+        let requests = vec![
+            ClientOriginatedMessage {
+                id: None,
+                submessage: Some(ClientOriginatedSubMessage::PingRequest(PingRequest {})),
+            },
+            ClientOriginatedMessage {
+                id: Some(1),
+                submessage: None,
+            },
+            message(2, ClientOriginatedSubMessage::PingRequest(PingRequest {})),
+        ];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_insert_text() {
+        use fig_proto::fig::insert_text_request::Type;
+        use fig_proto::fig::{
+            InsertTextRequest,
+            TextUpdate,
+        };
+
+        let requests = vec![
+            message(
+                1,
+                ClientOriginatedSubMessage::InsertTextRequest(InsertTextRequest {
+                    r#type: Some(Type::Text("echo".into())),
+                    terminal_session_id: None,
+                }),
+            ),
+            message(
+                2,
+                ClientOriginatedSubMessage::InsertTextRequest(InsertTextRequest {
+                    r#type: Some(Type::Update(TextUpdate::default())),
+                    terminal_session_id: Some("not-a-uuid".into()),
+                }),
+            ),
+            message(
+                3,
+                ClientOriginatedSubMessage::InsertTextRequest(InsertTextRequest {
+                    r#type: Some(Type::Text("echo".into())),
+                    terminal_session_id: Some("00000000-0000-0000-0000-000000000000".into()),
+                }),
+            ),
+            message(
+                4,
+                ClientOriginatedSubMessage::InsertTextRequest(InsertTextRequest {
+                    r#type: None,
+                    terminal_session_id: None,
+                }),
+            ),
+        ];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_notification() {
+        use fig_proto::fig::{
+            NotificationRequest,
+            NotificationType,
+        };
+
+        let request = |id, subscribe, r#type: Option<NotificationType>| {
+            message(
+                id,
+                ClientOriginatedSubMessage::NotificationRequest(NotificationRequest {
+                    subscribe,
+                    r#type: r#type.map(Into::into),
+                }),
+            )
+        };
+
+        let requests = vec![
+            request(1, Some(true), Some(NotificationType::NotifyOnSettingsChange)),
+            request(2, None, Some(NotificationType::NotifyOnSettingsChange)),
+            request(3, Some(false), Some(NotificationType::NotifyOnSettingsChange)),
+            request(4, Some(false), Some(NotificationType::NotifyOnSettingsChange)),
+            request(5, Some(true), Some(NotificationType::All)),
+            request(6, Some(true), None),
+        ];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_run_process() {
+        use fig_proto::fig::RunProcessRequest;
+
+        // An unparseable session id is rejected before anything would run.
+        let requests = vec![message(
+            1,
+            ClientOriginatedSubMessage::RunProcessRequest(RunProcessRequest {
+                executable: "true".into(),
+                terminal_session_id: Some("not-a-uuid".into()),
+                ..Default::default()
+            }),
+        )];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_position_window() {
+        use fig_proto::fig::{
+            Point,
+            PositionWindowRequest,
+            Size,
+        };
+
+        let size = Some(Size {
+            width: 300.0,
+            height: 200.0,
+        });
+        let requests = vec![
+            message(
+                1,
+                ClientOriginatedSubMessage::PositionWindowRequest(PositionWindowRequest::default()),
+            ),
+            message(
+                2,
+                ClientOriginatedSubMessage::PositionWindowRequest(PositionWindowRequest {
+                    size,
+                    ..Default::default()
+                }),
+            ),
+            message(
+                3,
+                ClientOriginatedSubMessage::PositionWindowRequest(PositionWindowRequest {
+                    anchor: Some(Point { x: 10.0, y: 20.0 }),
+                    size,
+                    dryrun: Some(true),
+                }),
+            ),
+        ];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_drag_window() {
+        use fig_proto::fig::DragWindowRequest;
+
+        let requests = vec![message(
+            1,
+            ClientOriginatedSubMessage::DragWindowRequest(DragWindowRequest {}),
+        )];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
+
+    #[tokio::test]
+    async fn snapshot_onboarding() {
+        use fig_proto::fig::{
+            OnboardingAction,
+            OnboardingRequest,
+        };
+
+        // The other actions install or remove dotfiles, write state, open Terminal or prompt for
+        // accessibility.
+        let request = |id, action: OnboardingAction| {
+            message(
+                id,
+                ClientOriginatedSubMessage::OnboardingRequest(OnboardingRequest { action: action.into() }),
+            )
+        };
+        let requests = vec![
+            request(1, OnboardingAction::CloseAccessibilityPromptWindow),
+            request(2, OnboardingAction::RequestRestart),
+        ];
+        insta::assert_snapshot!(transcript(requests).await);
+    }
 }

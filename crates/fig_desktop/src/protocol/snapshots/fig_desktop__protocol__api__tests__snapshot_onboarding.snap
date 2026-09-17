@@ -1,0 +1,10 @@
+---
+source: crates/fig_desktop/src/protocol/api.rs
+expression: transcript(requests).await
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(OnboardingRequest(OnboardingRequest { action: CloseAccessibilityPromptWindow })) }
+< 200 OK CAESDVVuaW1wbGVtZW50ZWQ=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("Unimplemented")) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(OnboardingRequest(OnboardingRequest { action: RequestRestart })) }
+< 200 OK CAISDVVuaW1wbGVtZW50ZWQ=
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Error("Unimplemented")) }

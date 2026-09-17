@@ -1,0 +1,12 @@
+---
+source: crates/fig_desktop/src/protocol/api.rs
+expression: transcript(requests).await
+---
+> ClientOriginatedMessage { id: None, submessage: Some(PingRequest(PingRequest)) }
+! no message id
+> ClientOriginatedMessage { id: Some(1), submessage: None }
+< 200 OK CAESEk1pc3Npbmcgc3VibWVzc2FnZQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Error("Missing submessage")) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(PingRequest(PingRequest)) }
+< 200 OK CAK6BwA=
+< ServerOriginatedMessage { id: Some(2), submessage: Some(PingResponse(PingResponse)) }

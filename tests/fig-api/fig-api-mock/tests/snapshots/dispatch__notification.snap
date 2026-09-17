@@ -1,0 +1,7 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(true), r#type: Some(NotifyOnSettingsChange) })) }
+< CAEYAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Success(true)) }

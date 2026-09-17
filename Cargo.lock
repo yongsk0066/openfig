@@ -1257,11 +1257,14 @@ name = "fig-api-mock"
 version = "1.19.7"
 dependencies = [
  "async-trait",
+ "base64 0.23.1",
  "clap",
  "fig_desktop_api",
  "fig_os_shim",
  "fig_proto",
  "fig_settings",
+ "insta",
+ "tempfile",
  "tokio",
 ]
 
@@ -1343,6 +1346,7 @@ dependencies = [
  "image",
  "indoc",
  "infer",
+ "insta",
  "libc",
  "macos-utils",
  "mime",

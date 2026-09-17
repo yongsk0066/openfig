@@ -1,0 +1,22 @@
+---
+source: crates/fig_desktop/src/protocol/api.rs
+expression: transcript(requests).await
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(true), r#type: Some(NotifyOnSettingsChange) })) }
+< 200 OK CAEYAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(NotificationRequest(NotificationRequest { subscribe: None, r#type: Some(NotifyOnSettingsChange) })) }
+< 200 OK CAISPkFscmVhZHkgc3Vic2NyaWJlZCB0byBub3RpZmljYXRpb24gdHlwZSBOb3RpZnlPblNldHRpbmdzQ2hhbmdl
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Error("Already subscribed to notification type NotifyOnSettingsChange")) }
+> ClientOriginatedMessage { id: Some(3), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(false), r#type: Some(NotifyOnSettingsChange) })) }
+< 200 OK CAMYAQ==
+< ServerOriginatedMessage { id: Some(3), submessage: Some(Success(true)) }
+> ClientOriginatedMessage { id: Some(4), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(false), r#type: Some(NotifyOnSettingsChange) })) }
+< 200 OK CAQSN05vdCBzdWJzY3JpYmVkIG5vdGlmaWNhdGlvbiB0eXBlIE5vdGlmeU9uU2V0dGluZ3NDaGFuZ2U=
+< ServerOriginatedMessage { id: Some(4), submessage: Some(Error("Not subscribed notification type NotifyOnSettingsChange")) }
+> ClientOriginatedMessage { id: Some(5), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(true), r#type: Some(All) })) }
+< 200 OK CAUSKUNhbm5vdCBzdWJzY3JpYmUgdG8gQWxsIG5vdGlmaWNhdGlvbiB0eXBl
+< ServerOriginatedMessage { id: Some(5), submessage: Some(Error("Cannot subscribe to All notification type")) }
+> ClientOriginatedMessage { id: Some(6), submessage: Some(NotificationRequest(NotificationRequest { subscribe: Some(true), r#type: None })) }
+< 200 OK CAYSJU5vdGlmaWNhdGlvblJlcXVlc3QgaXMgbWlzc2luZyBhIHR5cGU=
+< ServerOriginatedMessage { id: Some(6), submessage: Some(Error("NotificationRequest is missing a type")) }

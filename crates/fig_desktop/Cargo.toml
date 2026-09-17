@@ -67,6 +67,7 @@ wry = { version = "0.57.0", default-features = false, features = ["devtools"] }
 
 [dev-dependencies]
 indoc.workspace = true
+insta.workspace = true
 
 [build-dependencies]
 image = "0.25.6"

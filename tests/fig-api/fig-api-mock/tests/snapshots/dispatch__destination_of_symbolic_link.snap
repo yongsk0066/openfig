@@ -1,0 +1,10 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(DestinationOfSymbolicLinkRequest(DestinationOfSymbolicLinkRequest { path: Some(FilePath { path: "/etc", relative_to: None, expand_tilde_in_path: None }) })) }
+< CAHKBhIKEAoML3ByaXZhdGUvZXRjGAA=
+< ServerOriginatedMessage { id: Some(1), submessage: Some(DestinationOfSymbolicLinkResponse(DestinationOfSymbolicLinkResponse { destination: Some(FilePath { path: "/private/etc", relative_to: None, expand_tilde_in_path: Some(false) }) })) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(DestinationOfSymbolicLinkRequest(DestinationOfSymbolicLinkRequest { path: Some(FilePath { path: "missing-link", relative_to: None, expand_tilde_in_path: None }) })) }
+< CAISUEZhaWxlZCByZXNvbHZpbmcgc3ltbGluayBhdCBtaXNzaW5nLWxpbms6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkgKG9zIGVycm9yIDIp
+< ServerOriginatedMessage { id: Some(2), submessage: Some(Error("Failed resolving symlink at missing-link: No such file or directory (os error 2)")) }

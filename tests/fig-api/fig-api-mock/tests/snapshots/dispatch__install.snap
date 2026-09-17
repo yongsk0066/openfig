@@ -1,0 +1,10 @@
+---
+source: tests/fig-api/fig-api-mock/tests/dispatch.rs
+expression: sandbox.transcript()
+---
+> ClientOriginatedMessage { id: Some(1), submessage: Some(InstallRequest(InstallRequest { component: Dotfiles, action: Status })) }
+< CAGKBwIQAQ==
+< ServerOriginatedMessage { id: Some(1), submessage: Some(InstallResponse(InstallResponse { response: Some(InstallationStatus(NotInstalled)) })) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(InstallRequest(InstallRequest { component: Ibus, action: Install })) }
+< CAKKBykKJwgBEiNDb21wb25lbnQgaXMgbm90IGF2YWlsYWJsZSBvbiBtYWNPUw==
+< ServerOriginatedMessage { id: Some(2), submessage: Some(InstallResponse(InstallResponse { response: Some(Result(Result { result: Error, error: Some("Component is not available on macOS") })) })) }

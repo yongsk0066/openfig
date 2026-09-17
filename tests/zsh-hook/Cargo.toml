@@ -1,5 +1,5 @@
 [package]
-name = "figterm2"
+name = "zsh-hook-tests"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true

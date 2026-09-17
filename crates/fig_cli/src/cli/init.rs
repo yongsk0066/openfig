@@ -171,7 +171,7 @@ mod tests {
         }
         assert!(!pre.contains("exec"), "{pre}");
 
-        // Not interactive, so `fig.zsh` defines nothing; the interactive half is figterm2's.
+        // Not interactive, so `fig.zsh` defines nothing; the interactive half is tests/zsh-hook's.
         let output = Command::new("/bin/zsh")
             .args([
                 "-f",

@@ -2,13 +2,13 @@
 //! 3.
 //!
 //! Every test runs `/bin/zsh -i` in a real pty, through `init zsh pre`/`post` as a user's rc file
-//! would, against a daemon on `hook.sock` (`figterm2::hook`).
+//! would, against a daemon on `hook.sock` (`zsh_hook_tests::hook`).
 
 use std::time::Duration;
 
 use fig_shell_ipc::session::ShellCommand;
-use figterm2::golden;
-use figterm2::hook::{
+use zsh_hook_tests::golden;
+use zsh_hook_tests::hook::{
     Daemon,
     HookEvent,
     HookShell,

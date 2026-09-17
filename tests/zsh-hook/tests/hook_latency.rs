@@ -6,7 +6,7 @@
 //!
 //! Ignored because they are measurements, not checks: they only fail when a keystroke produces no
 //! report or no echo at all. `just latency`, or
-//! `cargo nextest run -p figterm2 --run-ignored only --no-capture -- latency_`.
+//! `cargo nextest run -p zsh-hook-tests --run-ignored only --no-capture -- latency_`.
 
 use std::io::{
     Read as _,
@@ -18,18 +18,18 @@ use std::time::{
 };
 
 use fig_shell_ipc::session::ShellCommand;
-use figterm2::hook::{
-    Daemon,
-    HookEvent,
-    HookShell,
-    Rc,
-};
-use figterm2::latency::Summary;
 use portable_pty::{
     CommandBuilder,
     PtySize,
     native_pty_system,
 };
+use zsh_hook_tests::hook::{
+    Daemon,
+    HookEvent,
+    HookShell,
+    Rc,
+};
+use zsh_hook_tests::latency::Summary;
 
 /// Typed and then erased key by key, so both inserts and deletes are sampled and the line never
 /// wraps.

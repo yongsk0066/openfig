@@ -134,7 +134,7 @@ test:
     pnpm exec vitest run
 
 # Format, lint (clippy --all-targets, oxlint type-aware), turbo boundaries, codegen zero-diff,
-# typecheck, vitest, every nextest test including the real-pty figterm2 suite. There is no CI;
+# typecheck, vitest, every nextest test including the real-pty zsh hook suite. There is no CI;
 # this is it, and it must also pass as `CI=1 just gate`.
 # Local merge gate (scripts/gate.sh)
 gate:
@@ -165,17 +165,17 @@ hooks:
 # Stage 0 latency, zsh hook path
 latency:
     cargo build --locked --release -p fig_cli
-    cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- latency_
+    cargo nextest run --locked --cargo-profile release -p zsh-hook-tests --run-ignored only --no-capture -- latency_
 
-# Re-records tests/figterm2/ref/fig_*/edit_buffer.json from a real /bin/zsh and replays every case
+# Re-records tests/zsh-hook/ref/fig_*/edit_buffer.json from a real /bin/zsh and replays every case
 # into a zsh running the hook. The expected edit buffers are zsh's own $PREBUFFER$BUFFER/$CURSOR,
 # so a diff in edit_buffer.json means zsh changed, not the hook. Pass a comma-separated subset to
 # record only those (`just golden-record fig_plain,fig_ps2`).
 # Edit-buffer goldens (docs/15-architecture-study.md §4 stage 2)
 golden-record cases="":
     cargo build --locked -p fig_cli
-    FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p figterm2 --run-ignored only --no-capture -- golden_record
-    cargo nextest run --locked -p figterm2 -- hook_golden_
+    FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p zsh-hook-tests --run-ignored only --no-capture -- golden_record
+    cargo nextest run --locked -p zsh-hook-tests -- hook_golden_
 
 # Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
 # Stage 0 latency, desktop half

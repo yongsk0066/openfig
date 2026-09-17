@@ -8,7 +8,7 @@
     "build/**",
     "target/**",
     "crates/**",
-    "tests/figterm2/**",
+    "tests/zsh-hook/**",
     "specs/src/**",
     "proto/src/**",
     "packages/fuzzysort/**",

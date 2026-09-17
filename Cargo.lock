@@ -1512,22 +1512,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "figterm2"
-version = "1.19.7"
-dependencies = [
- "anyhow",
- "async-trait",
- "fig_proto",
- "fig_shell_ipc",
- "fig_util",
- "portable-pty",
- "serde_json",
- "tempfile",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "filedescriptor"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5978,6 +5962,22 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zsh-hook-tests"
+version = "1.19.7"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "fig_proto",
+ "fig_shell_ipc",
+ "fig_util",
+ "portable-pty",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "zune-core"

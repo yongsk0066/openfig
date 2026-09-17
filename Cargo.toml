@@ -5,7 +5,7 @@ members = [
   "crates/macos-utils/accessibility-master/accessibility",
   "crates/macos-utils/accessibility-master/accessibility-sys",
   "tests/fig-api/fig-api-mock",
-  "tests/figterm2",
+  "tests/zsh-hook",
 ]
 default-members = ["crates/fig_desktop", "crates/fig_cli"]
 

@@ -5,7 +5,7 @@
 //! one of them:
 //!
 //! ```text
-//! tests/figterm2/ref/<case>/edit_buffer.json   the expected edit buffer before any input and after
+//! tests/zsh-hook/ref/<case>/edit_buffer.json   the expected edit buffer before any input and after
 //!                                              every step
 //! ```
 //!
@@ -308,7 +308,7 @@ pub fn case(name: &str) -> Option<&'static Case> {
     CASES.iter().find(|case| case.name == name)
 }
 
-/// `tests/figterm2/ref`.
+/// `tests/zsh-hook/ref`.
 pub fn ref_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("ref")
 }

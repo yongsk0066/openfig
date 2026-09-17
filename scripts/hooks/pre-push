@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# git pre-push hook: `just gate` on the tree being pushed. Hooks are not versioned; install with
+# `just hooks` (symlinks this file into the repository's common hooks directory). Skip once with
+# `git push --no-verify`.
+#
+# git runs a hook from the top of the work tree that is pushing, and every linked worktree shares
+# the one hooks directory, so the gate runs against whichever checkout invoked `git push` — not
+# the checkout this file happens to live in.
+
+set -euo pipefail
+
+# git writes the refs being pushed to stdin; the gate does not need them.
+cat >/dev/null
+
+cd "$(git rev-parse --show-toplevel)"
+exec just gate

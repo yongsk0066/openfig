@@ -146,6 +146,33 @@ test:
     pnpm exec turbo typecheck
     pnpm exec vitest run
 
+# Format, lint (clippy --all-targets, oxlint type-aware), turbo boundaries, codegen zero-diff,
+# typecheck, vitest, every nextest test including the real-pty figterm2 suite. There is no CI;
+# this is it, and it must also pass as `CI=1 just gate`.
+# Local merge gate (scripts/gate.sh)
+gate:
+    scripts/gate.sh
+
+# Git hooks are not versioned. Every worktree shares the one hooks directory, so run this from
+# the main checkout; a link into a linked worktree dangles once the worktree is removed. A
+# pre-existing hook that is a regular file is moved aside.
+# Link <git common dir>/hooks/pre-push -> scripts/hooks/pre-push (runs `just gate`)
+hooks:
+    hooks_dir="$(git rev-parse --path-format=absolute --git-common-dir)/hooks"; \
+    target="{{justfile_directory()}}/scripts/hooks/pre-push"; \
+    link="$hooks_dir/pre-push"; \
+    mkdir -p "$hooks_dir"; \
+    if [ -e "$link" ] && [ ! -L "$link" ]; then \
+        backup="$link.bak-$(date +%Y%m%d%H%M%S)"; \
+        echo "moving existing $link aside to $backup"; \
+        mv "$link" "$backup"; \
+    fi; \
+    ln -sfn "$target" "$link"; \
+    echo "$link -> $target"; \
+    if [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then \
+        echo "note: this is a linked worktree; re-run 'just hooks' from the main checkout before removing it"; \
+    fi
+
 # Run only to refresh them.
 # ~/oss/fig/themes -> resources/themes (committed)
 vendor-themes:

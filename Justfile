@@ -180,6 +180,16 @@ latency:
     cargo build --locked --release -p figterm -p fig_cli
     cargo nextest run --locked --cargo-profile release -p figterm2 --run-ignored only --no-capture -- latency_
 
+# Re-records crates/figterm/tests/ref/fig_* from a real /bin/zsh and replays them through figterm's
+# edit-buffer code without a pty. The expected edit buffers are zsh's own $PREBUFFER$BUFFER/$CURSOR,
+# not figterm's output, so a diff in edit_buffer.json means zsh changed, not figterm. Pass a
+# comma-separated subset to record only those (`just golden-record fig_plain,fig_ps2`).
+# Edit-buffer goldens (docs/15-architecture-study.md §4 stage 2)
+golden-record cases="":
+    cargo build --locked -p figterm -p fig_cli
+    FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p figterm2 --run-ignored only --no-capture -- golden_record
+    cargo nextest run --locked -p figterm -- golden::
+
 # Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
 # Stage 0 latency, desktop half
 latency-trace log=(env("TMPDIR", "/tmp") / "figlog" / "fig_desktop.log"):

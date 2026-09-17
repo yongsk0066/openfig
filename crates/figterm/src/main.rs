@@ -1,5 +1,7 @@
 pub mod cli;
 mod event_handler;
+#[cfg(test)]
+mod golden;
 pub mod history;
 pub mod input;
 pub mod interceptor;

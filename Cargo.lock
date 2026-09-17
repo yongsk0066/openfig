@@ -1553,6 +1553,7 @@ dependencies = [
  "num-traits",
  "portable-pty",
  "predicates",
+ "serde_json",
  "shell_color",
  "shlex",
  "sysinfo",

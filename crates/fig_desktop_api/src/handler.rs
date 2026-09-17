@@ -1,11 +1,7 @@
 use std::time::Duration;
 
 use base64::prelude::*;
-use fig_os_shim::{
-    ContextArcProvider,
-    ContextProvider,
-    EnvProvider,
-};
+use fig_os_shim::Env;
 pub use fig_proto::fig::client_originated_message::Submessage as ClientOriginatedSubMessage;
 pub use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
@@ -20,8 +16,6 @@ use fig_proto::fig::{
     UpdateApplicationPropertiesRequest,
 };
 use fig_proto::prost::Message;
-use fig_settings::settings::SettingsProvider;
-use fig_settings::state::StateProvider;
 use tracing::warn;
 
 use crate::error::Result;
@@ -31,46 +25,17 @@ use crate::requests::{
     RequestResultImpl,
 };
 
-pub struct Wrapped<Ctx, Req> {
-    pub message_id: i64,
-    pub context: Ctx,
-    pub request: Req,
-}
-
-#[async_trait::async_trait]
-pub trait EventHandler {
-    type Ctx: EnvProvider + Sync + Send;
-
-    async fn notification(&self, request: Wrapped<Self::Ctx, NotificationRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn insert_text(&self, request: Wrapped<Self::Ctx, InsertTextRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn position_window(&self, request: Wrapped<Self::Ctx, PositionWindowRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn onboarding(&self, request: Wrapped<Self::Ctx, OnboardingRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn run_process(&self, request: Wrapped<Self::Ctx, RunProcessRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn update_application_properties(
-        &self,
-        request: Wrapped<Self::Ctx, UpdateApplicationPropertiesRequest>,
-    ) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn drag_window(&self, request: Wrapped<Self::Ctx, DragWindowRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
+/// A request this crate cannot answer by itself, because it needs a window, a figterm session or
+/// the event loop. [`api_request`] hands these to the caller.
+#[derive(Debug)]
+pub enum DesktopRequest {
+    InsertText(InsertTextRequest),
+    Notification(NotificationRequest),
+    RunProcess(RunProcessRequest),
+    UpdateApplicationProperties(UpdateApplicationPropertiesRequest),
+    PositionWindow(PositionWindowRequest),
+    DragWindow(DragWindowRequest),
+    Onboarding(OnboardingRequest),
 }
 
 pub fn request_from_b64(request_b64: &str) -> Result<ClientOriginatedMessage> {
@@ -82,15 +47,16 @@ pub fn response_to_b64(response_message: ServerOriginatedMessage) -> String {
     BASE64_STANDARD.encode(response_message.encode_to_vec())
 }
 
-pub async fn api_request<Ctx, E>(
-    event_handler: E,
-    ctx: Ctx,
+/// Answers one API request.
+///
+/// Every request that does not need the desktop app is answered here; the rest go to `desktop`
+/// together with the message id. This is the whole dispatch: the desktop app and `fig-api-mock`
+/// each pass in a `match` over [`DesktopRequest`].
+pub async fn api_request(
     request: ClientOriginatedMessage,
-) -> Result<ServerOriginatedMessage>
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-    E: EventHandler<Ctx = Ctx> + Sync,
-{
+    env: &Env,
+    desktop: impl AsyncFnOnce(i64, DesktopRequest) -> RequestResult,
+) -> Result<ServerOriginatedMessage> {
     let request_id = match request.id {
         Some(request_id) => request_id,
         None => return Err(crate::error::Error::NoMessageId),
@@ -98,7 +64,7 @@ where
 
     let response = match tokio::time::timeout(
         Duration::from_secs(60),
-        handle_request(event_handler, ctx, request_id, request),
+        handle_request(request_id, request, env, desktop),
     )
     .await
     {
@@ -115,26 +81,12 @@ where
     })
 }
 
-async fn handle_request<Ctx, E>(
-    event_handler: E,
-    ctx: Ctx,
+async fn handle_request(
     message_id: i64,
     message: ClientOriginatedMessage,
-) -> RequestResult
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-    E: EventHandler<Ctx = Ctx> + Sync,
-{
-    macro_rules! request {
-        ($request:expr) => {
-            Wrapped {
-                message_id,
-                context: ctx,
-                request: $request,
-            }
-        };
-    }
-
+    env: &Env,
+    desktop: impl AsyncFnOnce(i64, DesktopRequest) -> RequestResult,
+) -> RequestResult {
     match message.submessage {
         Some(submessage) => {
             use ClientOriginatedSubMessage::{
@@ -165,23 +117,21 @@ where
 
             match submessage {
                 // figterm
-                InsertTextRequest(request) => event_handler.insert_text(request!(request)).await,
+                InsertTextRequest(request) => desktop(message_id, DesktopRequest::InsertText(request)).await,
                 // fs
-                ReadFileRequest(request) => fs::read_file(request, ctx.env()).await,
-                WriteFileRequest(request) => fs::write_file(request, ctx.env()).await,
-                AppendToFileRequest(request) => fs::append_to_file(request, ctx.env()).await,
-                DestinationOfSymbolicLinkRequest(request) => {
-                    requests::fs::destination_of_symbolic_link(request, ctx.env()).await
-                },
-                ContentsOfDirectoryRequest(request) => fs::contents_of_directory(request, ctx.env()).await,
-                CreateDirectoryRequest(request) => fs::create_directory_request(request, ctx.env()).await,
+                ReadFileRequest(request) => fs::read_file(request, env).await,
+                WriteFileRequest(request) => fs::write_file(request, env).await,
+                AppendToFileRequest(request) => fs::append_to_file(request, env).await,
+                DestinationOfSymbolicLinkRequest(request) => fs::destination_of_symbolic_link(request, env).await,
+                ContentsOfDirectoryRequest(request) => fs::contents_of_directory(request, env).await,
+                CreateDirectoryRequest(request) => fs::create_directory_request(request, env).await,
                 // notifications
-                NotificationRequest(request) => event_handler.notification(request!(request)).await,
+                NotificationRequest(request) => desktop(message_id, DesktopRequest::Notification(request)).await,
                 // process
-                RunProcessRequest(request) => event_handler.run_process(request!(request)).await,
+                RunProcessRequest(request) => desktop(message_id, DesktopRequest::RunProcess(request)).await,
                 // properties
                 UpdateApplicationPropertiesRequest(request) => {
-                    event_handler.update_application_properties(request!(request)).await
+                    desktop(message_id, DesktopRequest::UpdateApplicationProperties(request)).await
                 },
                 // state
                 GetLocalStateRequest(request) => state::get(request).await,
@@ -190,12 +140,12 @@ where
                 GetSettingsPropertyRequest(request) => settings::get(request).await,
                 UpdateSettingsPropertyRequest(request) => settings::update(request).await,
                 // window
-                PositionWindowRequest(request) => event_handler.position_window(request!(request)).await,
-                DragWindowRequest(request) => event_handler.drag_window(request!(request)).await,
+                PositionWindowRequest(request) => desktop(message_id, DesktopRequest::PositionWindow(request)).await,
+                DragWindowRequest(request) => desktop(message_id, DesktopRequest::DragWindow(request)).await,
                 // onboarding
-                OnboardingRequest(request) => event_handler.onboarding(request!(request)).await,
+                OnboardingRequest(request) => desktop(message_id, DesktopRequest::Onboarding(request)).await,
                 // install
-                InstallRequest(request) => install::install(request, &ctx).await,
+                InstallRequest(request) => install::install(request, env).await,
                 // history
                 HistoryQueryRequest(request) => history::query(request).await,
                 // other

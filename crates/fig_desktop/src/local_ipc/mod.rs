@@ -13,11 +13,7 @@ use fig_ipc::{
     RecvMessage,
     SendMessage,
 };
-use fig_os_shim::{
-    Context as FigContext,
-    ContextArcProvider,
-    ContextProvider,
-};
+use fig_os_shim::Env;
 use fig_proto::local::command_response::Response as CommandResponseTypes;
 use fig_proto::local::local_message::Type as LocalMessageType;
 use fig_proto::local::{
@@ -27,12 +23,6 @@ use fig_proto::local::{
     SuccessResponse,
 };
 use fig_remote_ipc::figterm::FigtermState;
-use fig_settings::settings::SettingsProvider;
-use fig_settings::{
-    Settings,
-    State,
-    StateProvider,
-};
 use fig_util::directories;
 use tokio::net::UnixListener;
 use tracing::{
@@ -58,47 +48,6 @@ pub enum LocalResponse {
 }
 
 pub type LocalResult = Result<LocalResponse, LocalResponse>;
-
-#[derive(Debug)]
-struct LocalIpcContext {
-    settings: Settings,
-    state: State,
-    context: Arc<FigContext>,
-}
-
-impl LocalIpcContext {
-    fn new() -> Self {
-        Self {
-            settings: Settings::new(),
-            state: State::new(),
-            context: FigContext::new(),
-        }
-    }
-}
-
-impl SettingsProvider for LocalIpcContext {
-    fn settings(&self) -> &Settings {
-        &self.settings
-    }
-}
-
-impl StateProvider for LocalIpcContext {
-    fn state(&self) -> &State {
-        &self.state
-    }
-}
-
-impl ContextProvider for LocalIpcContext {
-    fn context(&self) -> &FigContext {
-        &self.context
-    }
-}
-
-impl ContextArcProvider for LocalIpcContext {
-    fn context_arc(&self) -> Arc<FigContext> {
-        Arc::clone(&self.context)
-    }
-}
 
 pub async fn start_local_ipc(
     platform_state: Arc<PlatformState>,
@@ -142,21 +91,17 @@ pub async fn start_local_ipc(
             figterm_state.clone(),
             webview_notifications_state.clone(),
             proxy.clone(),
-            LocalIpcContext::new(),
         ));
     }
 }
 
-async fn handle_local_ipc<Ctx>(
+async fn handle_local_ipc(
     mut stream: BufferedUnixStream,
     platform_state: Arc<PlatformState>,
     figterm_state: Arc<FigtermState>,
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
-    ctx: Ctx,
-) where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-{
+) {
     while let Some(message) = stream.recv_message::<LocalMessage>().await.unwrap_or_else(|err| {
         if !err.is_disconnect() {
             error!("Failed receiving local message: {err}");
@@ -199,7 +144,7 @@ async fn handle_local_ipc<Ctx>(
                             Quit(command) => commands::quit(command, &proxy).await,
                             Diagnostics(command) => commands::diagnostic(command, &figterm_state).await,
                             OpenBrowser(command) => commands::open_browser(command).await,
-                            PromptAccessibility(_) => commands::prompt_for_accessibility_permission(&ctx).await,
+                            PromptAccessibility(_) => commands::prompt_for_accessibility_permission(&Env::new()).await,
                             LogLevel(command) => commands::log_level(command),
                             DumpState(command) => commands::dump_state(
                                 command,

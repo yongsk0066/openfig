@@ -94,16 +94,6 @@ impl State {
     }
 }
 
-pub trait StateProvider {
-    fn state(&self) -> &State;
-}
-
-impl StateProvider for State {
-    fn state(&self) -> &State {
-        self
-    }
-}
-
 pub fn all() -> Result<Map<String, Value>> {
     State::new().all()
 }

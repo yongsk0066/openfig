@@ -1255,13 +1255,11 @@ dependencies = [
 name = "fig-api-mock"
 version = "1.19.7"
 dependencies = [
- "async-trait",
  "base64 0.23.1",
  "clap",
  "fig_desktop_api",
  "fig_os_shim",
  "fig_proto",
- "fig_settings",
  "insta",
  "tempfile",
  "tokio",
@@ -1379,7 +1377,6 @@ name = "fig_desktop_api"
 version = "1.19.7"
 dependencies = [
  "anstream",
- "async-trait",
  "base64 0.23.1",
  "camino",
  "fig_integrations",

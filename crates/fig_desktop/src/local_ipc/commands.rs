@@ -1,9 +1,6 @@
 use std::sync::Mutex;
 
-use fig_os_shim::{
-    ContextArcProvider,
-    ContextProvider,
-};
+use fig_os_shim::Env;
 use fig_proto::local::command_response::Response as CommandResponseTypes;
 use fig_proto::local::dump_state_command::Type as DumpStateType;
 use fig_proto::local::{
@@ -20,8 +17,6 @@ use fig_proto::local::{
     UiElement,
 };
 use fig_remote_ipc::figterm::FigtermState;
-use fig_settings::StateProvider;
-use fig_settings::settings::SettingsProvider;
 use tao::event_loop::ControlFlow;
 use tracing::error;
 
@@ -155,10 +150,7 @@ pub async fn open_browser(command: OpenBrowserCommand) -> LocalResult {
     Ok(LocalResponse::Success(None))
 }
 
-pub async fn prompt_for_accessibility_permission<Ctx>(ctx: &Ctx) -> LocalResult
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-{
+pub async fn prompt_for_accessibility_permission(env: &Env) -> LocalResult {
     use fig_desktop_api::requests::install::install;
     use fig_proto::fig::{
         InstallAction,
@@ -171,7 +163,7 @@ where
             component: InstallComponent::Accessibility.into(),
             action: InstallAction::Install.into(),
         },
-        ctx,
+        env,
     )
     .await
     .ok();

@@ -2,11 +2,7 @@ use std::fmt::Display;
 
 use anstream::adapter::strip_str;
 use fig_integrations::shell::ShellExt;
-use fig_os_shim::{
-    ContextArcProvider,
-    ContextProvider,
-    EnvProvider,
-};
+use fig_os_shim::Env;
 use fig_proto::fig::install_response::{
     InstallationStatus,
     Response,
@@ -20,8 +16,6 @@ use fig_proto::fig::{
     InstallResponse,
     Result as ProtoResult,
 };
-use fig_settings::settings::SettingsProvider;
-use fig_settings::state::StateProvider;
 use fig_util::Shell;
 
 use super::RequestResult;
@@ -41,15 +35,12 @@ fn integration_result(result: Result<(), impl Display>) -> ServerOriginatedSubMe
     })
 }
 
-pub async fn install<Ctx>(request: InstallRequest, ctx: &Ctx) -> RequestResult
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-{
+pub async fn install(request: InstallRequest, env: &Env) -> RequestResult {
     let response = match (request.component(), request.action()) {
         (InstallComponent::Dotfiles, action) => {
             let mut errs: Vec<String> = vec![];
             for shell in Shell::all() {
-                match shell.get_shell_integrations(ctx.env()) {
+                match shell.get_shell_integrations(env) {
                     Ok(integrations) => {
                         for integration in integrations {
                             let res = match action {

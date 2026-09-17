@@ -1,16 +1,9 @@
+use std::sync::Arc;
+
 use fig_integrations::shell::ShellExt;
-use fig_os_shim::{
-    ContextArcProvider,
-    ContextProvider,
-    EnvProvider,
-};
 use fig_proto::fig::{
     OnboardingAction,
     OnboardingRequest,
-};
-use fig_settings::{
-    SettingsProvider,
-    StateProvider,
 };
 use fig_util::Shell;
 use tao::event_loop::ControlFlow;
@@ -31,10 +24,11 @@ async fn finish_onboarding() {
     fig_settings::state::set_value("desktop.completedOnboarding", true).ok();
 }
 
-pub async fn onboarding<Ctx>(request: OnboardingRequest, proxy: &dyn EventSender, ctx: &Ctx) -> RequestResult
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-{
+pub async fn onboarding(
+    request: OnboardingRequest,
+    proxy: &dyn EventSender,
+    ctx: &Arc<fig_os_shim::Context>,
+) -> RequestResult {
     match request.action() {
         OnboardingAction::InstallationScript => {
             let mut errs: Vec<String> = vec![];
@@ -64,7 +58,7 @@ where
                 uninstall,
             };
 
-            let result = match uninstall(InstallComponents::all(), ctx.context_arc()).await {
+            let result = match uninstall(InstallComponents::all(), Arc::clone(ctx)).await {
                 Ok(_) => RequestResult::success(),
                 Err(err) => RequestResult::error(err.to_string()),
             };
@@ -97,7 +91,7 @@ where
                 LocalResponse,
                 commands,
             };
-            let res = commands::prompt_for_accessibility_permission(ctx)
+            let res = commands::prompt_for_accessibility_permission(ctx.env())
                 .await
                 .unwrap_or_else(|e| e);
             match res {

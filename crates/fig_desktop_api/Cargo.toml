@@ -12,7 +12,6 @@ workspace = true
 
 [dependencies]
 anstream.workspace = true
-async-trait.workspace = true
 base64.workspace = true
 camino.workspace = true
 fig_integrations.workspace = true

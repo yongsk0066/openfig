@@ -1,16 +1,10 @@
 mod env;
 pub mod process_info;
-mod providers;
 
 use std::sync::Arc;
 
 pub use env::Env;
 pub use process_info::ProcessInfo;
-pub use providers::{
-    ContextArcProvider,
-    ContextProvider,
-    EnvProvider,
-};
 
 pub trait Shim {
     /// Returns whether or not the shim is a real implementation.

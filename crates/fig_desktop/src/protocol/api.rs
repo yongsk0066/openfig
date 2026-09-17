@@ -5,10 +5,6 @@ use bytes::Bytes;
 use fig_desktop_api::handler::ClientOriginatedSubMessage;
 use fig_proto::fig::ClientOriginatedMessage;
 use fig_proto::prost::Message;
-use fig_settings::{
-    Settings,
-    State,
-};
 use wry::http::header::CONTENT_TYPE;
 use wry::http::{
     HeaderValue,
@@ -18,10 +14,6 @@ use wry::http::{
     StatusCode,
 };
 
-use crate::request::{
-    Context,
-    EventHandler,
-};
 use crate::webview::{
     ApiState,
     WindowId,
@@ -61,21 +53,12 @@ pub async fn handle(
         _ => None,
     };
 
-    let server_message = fig_desktop_api::handler::api_request(
-        EventHandler::default(),
-        Context {
-            window_id: &window_id,
-            figterm_state: &state.figterm_state,
-            intercept_state: &state.intercept_state,
-            notifications_state: &state.notifications_state,
-            proxy: state.proxy.as_ref(),
-            settings: &Settings::new(),
-            state: &State::new(),
-            ctx: fig_os_shim::Context::new(),
-        },
-        client_message,
-    )
-    .await?;
+    let ctx = fig_os_shim::Context::new();
+    let server_message =
+        fig_desktop_api::handler::api_request(client_message, ctx.env(), async |message_id, request| {
+            crate::request::handle(request, message_id, window_id, &state, &ctx).await
+        })
+        .await?;
 
     let body = server_message.encode_to_vec().into();
 

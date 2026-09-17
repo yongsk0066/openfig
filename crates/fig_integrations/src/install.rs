@@ -90,7 +90,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
     }
 
     if components.contains(InstallComponents::DESKTOP_APP) {
-        uninstall_desktop(&ctx).await?;
+        uninstall_desktop().await?;
         // Must be last -- this will kill the running desktop process if this is
         // called from the desktop app.
         let quit_res = tokio::process::Command::new("killall")
@@ -133,7 +133,7 @@ pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
 
 /// Removes everything the desktop app left on the machine: the launch agent, the defaults
 /// domain, the data directory and the app bundle itself.
-async fn uninstall_desktop(_ctx: &Context) -> Result<()> {
+async fn uninstall_desktop() -> Result<()> {
     use fig_util::consts::{
         APP_BUNDLE_ID,
         LAUNCH_AGENT_PREFIX,

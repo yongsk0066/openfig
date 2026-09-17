@@ -7,7 +7,6 @@ use std::path::{
 };
 use std::sync::Arc;
 
-use fig_os_shim::Context;
 use parking_lot::Mutex;
 use serde::{
     Deserialize,
@@ -67,7 +66,7 @@ struct SpecIndex {
 /// the file it wanted. Neither can change while the process runs.
 static SPEC_ROOTS: OnceCell<Vec<PathBuf>> = OnceCell::const_new();
 
-async fn spec_roots(ctx: &Context) -> &'static [PathBuf] {
+async fn spec_roots() -> &'static [PathBuf] {
     SPEC_ROOTS
         .get_or_init(|| async {
             let mut roots = Vec::new();
@@ -81,7 +80,7 @@ async fn spec_roots(ctx: &Context) -> &'static [PathBuf] {
                 Err(err) => error!(%err, "failed to resolve the user spec dir"),
             }
 
-            match fig_util::directories::resources_path_ctx(ctx) {
+            match fig_util::directories::resources_path() {
                 Ok(resources) => roots.push(resources.join("specs")),
                 Err(err) => error!(%err, "failed to resolve the bundled spec dir"),
             }
@@ -232,12 +231,8 @@ async fn handle_roots(roots: &[PathBuf], uri_path: &str) -> anyhow::Result<Respo
 }
 
 // handle `spec://localhost/spec.js`
-pub async fn handle(
-    ctx: Arc<Context>,
-    request: Request<Vec<u8>>,
-    _: WindowId,
-) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
-    handle_roots(spec_roots(&ctx).await, request.uri().path()).await
+pub async fn handle(request: Request<Vec<u8>>, _: WindowId) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
+    handle_roots(spec_roots().await, request.uri().path()).await
 }
 
 #[cfg(test)]

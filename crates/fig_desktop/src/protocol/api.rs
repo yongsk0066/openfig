@@ -115,7 +115,6 @@ mod tests {
 
     fn api_state() -> Arc<ApiState> {
         Arc::new(ApiState {
-            ctx: fig_os_shim::Context::new_fake(),
             figterm_state: Arc::new(FigtermState::default()),
             intercept_state: Default::default(),
             notifications_state: Arc::new(WebviewNotificationsState::default()),

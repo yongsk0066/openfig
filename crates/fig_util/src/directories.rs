@@ -4,10 +4,6 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use camino::Utf8PathBuf;
-use fig_os_shim::{
-    Context,
-    EnvProvider,
-};
 use thiserror::Error;
 use time::OffsetDateTime;
 
@@ -149,8 +145,8 @@ fn host_sockets_dir() -> Result<PathBuf> {
 }
 
 /// The path to all of the themes
-pub fn themes_dir(ctx: &Context) -> Result<PathBuf> {
-    Ok(resources_path_ctx(ctx)?.join("themes"))
+pub fn themes_dir() -> Result<PathBuf> {
+    Ok(resources_path()?.join("themes"))
 }
 
 /// The autocomplete directory
@@ -212,12 +208,8 @@ pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
 /// The path to the resources directory
 ///
 /// - MacOS: "/Applications/{app_name}.app/Contents/Resources"
-fn resources_path() -> Result<PathBuf> {
+pub fn resources_path() -> Result<PathBuf> {
     Ok(crate::app_bundle_path().join(crate::macos::BUNDLE_CONTENTS_RESOURCE_PATH))
-}
-
-pub fn resources_path_ctx<Ctx: EnvProvider>(_ctx: &Ctx) -> Result<PathBuf> {
-    resources_path()
 }
 
 /// The path to the fig settings file
@@ -242,7 +234,6 @@ mod tests {
 
     #[test]
     fn all_paths() {
-        let ctx = Context::new();
         assert!(home_dir().is_ok());
         assert!(home_local_bin().is_ok());
         assert!(fig_data_dir().is_ok());
@@ -253,7 +244,7 @@ mod tests {
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());
-        assert!(themes_dir(&ctx).is_ok());
+        assert!(themes_dir().is_ok());
     }
 
     /// If this test fails then either of these paths were changed.
@@ -324,7 +315,7 @@ mod tests {
 
     #[test]
     fn snapshot_themes_dir() {
-        assert_directory!(themes_dir(&Context::new()), @"/Applications/Fig.app/Contents/Resources/themes");
+        assert_directory!(themes_dir(), @"/Applications/Fig.app/Contents/Resources/themes");
     }
 
     #[test]

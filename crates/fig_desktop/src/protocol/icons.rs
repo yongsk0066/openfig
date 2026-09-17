@@ -8,7 +8,6 @@ use std::sync::{
 };
 
 use dashmap::DashMap;
-use fig_os_shim::Context;
 use image::{
     GenericImage,
     GenericImageView,
@@ -164,11 +163,7 @@ async fn build_default() -> Response<Cow<'static, [u8]>> {
     cached_asset_response(&AssetSpecifier::Named(DEFAULT_ICON.into()), None).await
 }
 
-pub async fn handle(
-    _ctx: Arc<Context>,
-    request: Request<Vec<u8>>,
-    _: WindowId,
-) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
+pub async fn handle(request: Request<Vec<u8>>, _: WindowId) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
     debug!(uri =% request.uri(), "fig:// protocol request");
     let url = Url::parse(&request.uri().to_string())?;
     let domain = url.domain();

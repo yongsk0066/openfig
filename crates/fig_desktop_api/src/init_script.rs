@@ -5,7 +5,6 @@ use std::env::{
 };
 
 use camino::Utf8PathBuf;
-use fig_os_shim::Context;
 use fig_util::{
     APP_BUNDLE_ID,
     CLI_BINARY_NAME,
@@ -56,8 +55,7 @@ pub struct Constants {
 
 impl Constants {
     fn new(support_api_proto: bool) -> Self {
-        let ctx = Context::new();
-        let themes_folder = directories::themes_dir(&ctx)
+        let themes_folder = directories::themes_dir()
             .ok()
             .and_then(|dir| Utf8PathBuf::try_from(dir).ok());
 

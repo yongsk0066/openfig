@@ -9,7 +9,7 @@ use super::{
     ServerOriginatedSubMessage,
 };
 
-pub(crate) async fn get_platform_info<Ctx>(_request: GetPlatformInfoRequest, _ctx: &Ctx) -> RequestResult {
+pub(crate) async fn get_platform_info(_request: GetPlatformInfoRequest) -> RequestResult {
     let response = ServerOriginatedSubMessage::GetPlatformInfoResponse(GetPlatformInfoResponse {
         os: Os::Macos.into(),
         desktop_environment: None,

@@ -30,7 +30,6 @@ use fig_log::{
     LogArgs,
     initialize_logging,
 };
-use fig_os_shim::Context;
 use fig_util::consts::{
     APP_PROCESS_NAME,
     PRODUCT_NAME,
@@ -137,7 +136,6 @@ async fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let ctx = Context::new();
     install::run_install().await;
 
     let accessibility_enabled = PlatformState::accessibility_is_enabled().unwrap_or(true);
@@ -146,7 +144,7 @@ async fn main() -> ExitCode {
     let autocomplete_enabled =
         !fig_settings::settings::get_bool_or("autocomplete.disable", false) && accessibility_enabled;
 
-    let mut webview_manager = WebviewManager::new(ctx, visible);
+    let mut webview_manager = WebviewManager::new(visible);
     webview_manager
         .build_webview(
             DASHBOARD_ID,

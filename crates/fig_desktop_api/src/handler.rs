@@ -202,7 +202,7 @@ where
                 // other
                 OpenInExternalApplicationRequest(request) => other::open_in_external_application(request).await,
                 PingRequest(request) => other::ping(request),
-                GetPlatformInfoRequest(request) => platform::get_platform_info(request, &ctx).await,
+                GetPlatformInfoRequest(request) => platform::get_platform_info(request).await,
             }
         },
         None => {

@@ -13,7 +13,6 @@ use std::sync::{
 
 use ::url::Url;
 use fig_desktop_api::init_script::javascript_init;
-use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
 use fig_util::consts::PRODUCT_NAME;
 use fig_util::{
@@ -149,7 +148,6 @@ pub struct WebviewManager {
 /// signature only carried an `Arc<fig_os_shim::Context>` and a `WindowId`. They made
 /// `protocol/api.rs` untestable — its own TODO said so.
 pub struct ApiState {
-    pub ctx: Arc<Context>,
     pub figterm_state: Arc<FigtermState>,
     pub intercept_state: Arc<InterceptState>,
     pub notifications_state: Arc<WebviewNotificationsState>,
@@ -168,7 +166,7 @@ pub struct ApiState {
 impl WebviewManager {
     #[allow(unused_variables)]
     #[allow(unused_mut)]
-    pub fn new(context: Arc<Context>, visible: bool) -> Self {
+    pub fn new(visible: bool) -> Self {
         let mut event_loop = EventLoopBuilder::with_user_event().build();
 
         if !visible {
@@ -190,7 +188,6 @@ impl WebviewManager {
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApiState {
-            ctx: Arc::clone(&context),
             figterm_state: figterm_state.clone(),
             intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
@@ -609,7 +606,6 @@ pub fn build_dashboard(
         .with_asynchronous_custom_protocol(
             "figresource".into(),
             utils::wrap_custom_protocol(
-                Arc::clone(&state.ctx),
                 "figresource::Dashboard",
                 DashboardId,
                 resource::handle::<resource::Dashboard>,
@@ -617,7 +613,9 @@ pub fn build_dashboard(
         )
         .with_asynchronous_custom_protocol(
             "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&state), "api", DashboardId, api::handle),
+            utils::wrap_custom_protocol("api", DashboardId, move |request, window_id| {
+                api::handle(Arc::clone(&state), request, window_id)
+            }),
         )
         .with_navigation_handler(navigation_handler(DASHBOARD_ID, &[r"^localhost$"]))
         .with_initialization_script(javascript_init(true))
@@ -661,20 +659,19 @@ pub fn build_autocomplete(
         .with_url(self::url::autocomplete().as_str())
         .with_asynchronous_custom_protocol(
             "fig".into(),
-            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "fig", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol("fig", AutocompleteId, icons::handle),
         )
         .with_asynchronous_custom_protocol(
             "icon".into(),
-            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "icon", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol("icon", AutocompleteId, icons::handle),
         )
         .with_asynchronous_custom_protocol(
             "spec".into(),
-            utils::wrap_custom_protocol(Arc::clone(&state.ctx), "spec", AutocompleteId, spec::handle),
+            utils::wrap_custom_protocol("spec", AutocompleteId, spec::handle),
         )
         .with_asynchronous_custom_protocol(
             "figresource".into(),
             utils::wrap_custom_protocol(
-                Arc::clone(&state.ctx),
                 "figresource::Autocomplete",
                 AutocompleteId,
                 resource::handle::<resource::Autocomplete>,
@@ -682,7 +679,9 @@ pub fn build_autocomplete(
         )
         .with_asynchronous_custom_protocol(
             "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&state), "api", AutocompleteId, api::handle),
+            utils::wrap_custom_protocol("api", AutocompleteId, move |request, window_id| {
+                api::handle(Arc::clone(&state), request, window_id)
+            }),
         )
         .with_devtools(true)
         .with_transparent(true)

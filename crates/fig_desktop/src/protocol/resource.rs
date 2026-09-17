@@ -4,9 +4,7 @@ use std::path::{
     Path,
     PathBuf,
 };
-use std::sync::Arc;
 
-use fig_os_shim::Context;
 use tokio::sync::OnceCell;
 use tracing::info;
 use wry::http::header::CONTENT_TYPE;
@@ -50,10 +48,10 @@ impl Scope for Autocomplete {
 /// served from this handler on every reload.
 static RESOURCES_PATH: OnceCell<Option<PathBuf>> = OnceCell::const_new();
 
-async fn resources_path(ctx: &Context) -> Option<&'static Path> {
+async fn resources_path() -> Option<&'static Path> {
     RESOURCES_PATH
         .get_or_init(|| async {
-            match fig_util::directories::resources_path_ctx(ctx) {
+            match fig_util::directories::resources_path() {
                 Ok(path) => tokio::fs::canonicalize(path).await.ok(),
                 Err(err) => {
                     tracing::error!(%err, "failed to resolve the bundle resources dir");
@@ -168,16 +166,12 @@ async fn serve(root: &Path, uri_path: &Path) -> anyhow::Result<Response<Cow<'sta
 }
 
 /// handle `figresource://localhost/`
-pub async fn handle<S: Scope>(
-    ctx: Arc<Context>,
-    request: Request<Vec<u8>>,
-    _: WindowId,
-) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
+pub async fn handle<S: Scope>(request: Request<Vec<u8>>, _: WindowId) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
     if request.uri().host() != Some("localhost") {
         return res_400();
     }
 
-    let Some(root) = resources_path(&ctx).await else {
+    let Some(root) = resources_path().await else {
         return res_500(std::io::Error::new(
             ErrorKind::NotFound,
             "the bundle resources directory could not be resolved",

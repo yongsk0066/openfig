@@ -89,7 +89,6 @@ pub enum InternalSubcommand {
 
 impl InternalSubcommand {
     pub async fn execute(self) -> Result<ExitCode> {
-        let _ctx = OsContext::new();
         match self {
             InternalSubcommand::Install(args) => {
                 let no_confirm = args.no_confirm;

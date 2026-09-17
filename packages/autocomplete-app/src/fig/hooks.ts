@@ -63,9 +63,11 @@ export const useFigSettings = (
   setSettings: React.Dispatch<React.SetStateAction<Record<string, unknown>>>,
 ) => {
   useEffect(() => {
+    // The module-level copy first: `setSettings` recomputes suggestions synchronously and
+    // the ranking reads some settings through `getSetting`.
     Settings.current().then((settings) => {
-      setSettings(settings);
       updateSettings(settings as SettingsMap);
+      setSettings(settings);
       updateSelectSuggestionKeybindings(settings as SettingsMap);
     });
   }, []);
@@ -74,8 +76,8 @@ export const useFigSettings = (
     () =>
       Settings.didChange.subscribe((notification) => {
         const settings = JSON.parse(notification.jsonBlob ?? "{}");
-        setSettings(settings);
         updateSettings(settings);
+        setSettings(settings);
         updateSelectSuggestionKeybindings(settings as SettingsMap);
         return { unsubscribe: false };
       }),

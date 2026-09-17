@@ -180,6 +180,7 @@ const updateSuggestions =
             "parserResult",
             "generatorStates",
             "historyModeEnabled",
+            "settings",
           ]) || !fieldsAreEqual(updatedState.figState, state.figState, ["cwd", "buffer"]);
         const wasVisible = state.visibleState === Visibility.VISIBLE;
         const willBeVisible = updatedState.visibleState === Visibility.VISIBLE;

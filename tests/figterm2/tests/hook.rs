@@ -1,9 +1,8 @@
 //! The zsh hook path (`fig.zsh` + `fig_remote_ipc::hook`), docs/15-architecture-study.md §4 stage
 //! 3.
 //!
-//! Every test runs `/bin/zsh -i` in a real pty with `autocomplete.zshHook` on, through
-//! `init zsh pre`/`post` as a user's rc file would, against a daemon on `hook.sock`
-//! (`figterm2::hook`).
+//! Every test runs `/bin/zsh -i` in a real pty, through `init zsh pre`/`post` as a user's rc file
+//! would, against a daemon on `hook.sock` (`figterm2::hook`).
 
 use std::time::Duration;
 

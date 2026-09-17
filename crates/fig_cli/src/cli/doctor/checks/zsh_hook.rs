@@ -6,19 +6,13 @@ use std::path::{
 use std::time::Duration;
 
 use async_trait::async_trait;
-use fig_integrations::shell::{
-    ZSH_HOOK_MIN_VERSION,
-    ZSH_HOOK_SETTING,
-};
-use fig_util::env_var::FIG_TERM;
+use fig_integrations::shell::ZSH_HOOK_MIN_VERSION;
 use fig_util::{
     CLI_BINARY_NAME,
     HOOK_PING,
     HOOK_PROTOCOL_VERSION,
-    PTY_BINARY_NAME,
     Shell,
 };
-use owo_colors::OwoColorize;
 use tokio::io::{
     AsyncBufReadExt as _,
     AsyncWriteExt as _,
@@ -32,24 +26,17 @@ use crate::cli::doctor::{
     Platform,
 };
 
-const FORCE_FIGTERM: &str = "FIG_FORCE_FIGTERM_LAUNCH";
-
-/// How a new zsh gets autocomplete (docs/15-architecture-study.md §3.3): the decision `init zsh
-/// pre` and `post` make, taken with the same inputs.
+/// Whether a new zsh gets autocomplete (docs/15-architecture-study.md §3.3): `fig.zsh` loads only
+/// in a zsh new enough for its hooks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ZshPath {
     /// `fig.zsh` over `hook.sock`.
     Hook,
-    /// The pty binary: the setting is off, or forced.
-    Figterm { forced: bool },
-    /// The setting is on and zsh is too old for the hook: no autocomplete at all.
+    /// zsh is too old for the hook: no autocomplete at all.
     TooOld,
 }
 
-fn decide(setting: bool, forced: bool, version: Option<&str>) -> ZshPath {
-    if forced || !setting {
-        return ZshPath::Figterm { forced };
-    }
+fn decide(version: Option<&str>) -> ZshPath {
     match version {
         Some(version) if !at_least(version, ZSH_HOOK_MIN_VERSION) => ZshPath::TooOld,
         _ => ZshPath::Hook,
@@ -111,12 +98,10 @@ async fn zsh_version(zsh: &Path) -> Option<String> {
     (!version.is_empty()).then_some(version)
 }
 
-/// Whether the shell `doctor` runs in reports through the hook, so the pty binary's socket check
-/// does not apply to it.
+/// Whether the shell `doctor` runs in reports through the hook, so the pty binary's checks do not
+/// apply to it.
 pub fn current_shell_uses_hook() -> bool {
     Shell::current_shell() == Some(Shell::Zsh)
-        && std::env::var_os(FIG_TERM).is_none()
-        && fig_settings::settings::get_bool_or(ZSH_HOOK_SETTING, false)
 }
 
 /// Which path a new zsh takes, which zsh that is, and whether `hook.sock` answers.
@@ -131,8 +116,7 @@ impl ZshHookCheck {
     pub async fn probe() -> Self {
         let zsh = login_zsh();
         let version = zsh_version(&zsh).await;
-        let setting = fig_settings::settings::get_bool_or(ZSH_HOOK_SETTING, false);
-        let path = decide(setting, std::env::var_os(FORCE_FIGTERM).is_some(), version.as_deref());
+        let path = decide(version.as_deref());
         let socket = match fig_util::directories::hook_socket_path() {
             Ok(socket) => ping(&socket).await,
             Err(err) => Err(err.to_string()),
@@ -150,10 +134,8 @@ impl ZshHookCheck {
 impl DoctorCheck for ZshHookCheck {
     fn name(&self) -> Cow<'static, str> {
         let path = match self.path {
-            ZshPath::Hook => "the zsh hook".to_owned(),
-            ZshPath::Figterm { forced: false } => format!("{PTY_BINARY_NAME} ({ZSH_HOOK_SETTING} is off)"),
-            ZshPath::Figterm { forced: true } => format!("{PTY_BINARY_NAME} ({FORCE_FIGTERM})"),
-            ZshPath::TooOld => "no autocomplete".to_owned(),
+            ZshPath::Hook => "the zsh hook",
+            ZshPath::TooOld => "no autocomplete",
         };
         let socket = match &self.socket {
             Ok(version) => format!("hook.sock answers, protocol {version}"),
@@ -178,9 +160,9 @@ impl DoctorCheck for ZshHookCheck {
     async fn check(&self, _: &()) -> Result<(), DoctorError> {
         match (&self.path, &self.socket) {
             (ZshPath::TooOld, _) => Err(DoctorError::warning(format!(
-                "{ZSH_HOOK_SETTING} is on but zsh {} is older than {ZSH_HOOK_MIN_VERSION}: new zsh shells get no autocomplete. Turn it off with {}",
+                "zsh {} at {} is older than {ZSH_HOOK_MIN_VERSION}: new zsh shells get no autocomplete",
                 self.version.as_deref().unwrap_or("?"),
-                format!("{CLI_BINARY_NAME} settings {ZSH_HOOK_SETTING} false").magenta()
+                self.zsh.display()
             ))),
             (ZshPath::Hook, Err(reason)) => Err(DoctorError::Error {
                 reason: format!("new zsh shells use the hook, but hook.sock does not answer: {reason}").into(),
@@ -201,16 +183,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_path_follows_the_setting_the_force_and_the_version() {
-        assert_eq!(decide(false, false, Some("5.9")), ZshPath::Figterm { forced: false });
-        assert_eq!(decide(true, true, Some("5.9")), ZshPath::Figterm { forced: true });
-        assert_eq!(decide(true, false, Some("5.9")), ZshPath::Hook);
-        assert_eq!(decide(true, false, Some("5.3")), ZshPath::Hook);
-        assert_eq!(decide(true, false, Some("5.2")), ZshPath::TooOld);
-        assert_eq!(decide(true, false, Some("5.0.8")), ZshPath::TooOld);
-        assert_eq!(decide(true, false, Some("5.10-dev-0")), ZshPath::Hook);
+    fn the_path_follows_the_version() {
+        assert_eq!(decide(Some("5.9")), ZshPath::Hook);
+        assert_eq!(decide(Some("5.3")), ZshPath::Hook);
+        assert_eq!(decide(Some("5.2")), ZshPath::TooOld);
+        assert_eq!(decide(Some("5.0.8")), ZshPath::TooOld);
+        assert_eq!(decide(Some("5.10-dev-0")), ZshPath::Hook);
         // An unknown version is not held against the shell: `fig.zsh` checks again itself.
-        assert_eq!(decide(true, false, None), ZshPath::Hook);
+        assert_eq!(decide(None), ZshPath::Hook);
     }
 
     #[tokio::test]

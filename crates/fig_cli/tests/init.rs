@@ -10,6 +10,8 @@ macro_rules! init_test {
                 let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("fig_cli"));
                 cmd.arg("init").arg($shell).arg($stage).arg("--rcfile").arg($file);
                 cmd.env("FIG_INIT_SNAPSHOT_TEST", "1");
+                // zsh's `post` names `hook.sock` under `$TMPDIR`, which differs between machines.
+                cmd.env("TMPDIR", "/fig-init-snapshot");
                 let out = cmd.assert().success().get_output().stdout.clone();
                 Ok(String::from_utf8(out)?)
             }

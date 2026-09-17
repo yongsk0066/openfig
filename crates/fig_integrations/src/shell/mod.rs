@@ -31,17 +31,13 @@ use crate::{
     backup_file,
 };
 
-/// Setting that moves zsh from the pty binary to the shell hook (`scripts/fig.zsh`,
-/// docs/15-architecture-study.md §3.3). With it on, `init zsh pre` never starts the pty binary and
-/// `init zsh post` emits the hook instead of the OSC markers. bash is unaffected.
-pub const ZSH_HOOK_SETTING: &str = "autocomplete.zshHook";
-
 /// The oldest zsh the hook loads in: `zle-line-pre-redraw` and `add-zle-hook-widget` arrived in
 /// 5.3. Older shells get no autocomplete and are otherwise untouched.
 pub const ZSH_HOOK_MIN_VERSION: &str = "5.3";
 
-/// `scripts/fig.zsh` ready to be `eval`ed: socket path and protocol version filled in.
-pub fn zsh_hook_source() -> Result<String> {
+/// `scripts/fig.zsh` ready to be `eval`ed: socket path and protocol version filled in. It is the
+/// whole of zsh's `post` integration (docs/15-architecture-study.md §3.3).
+fn zsh_hook_source() -> Result<String> {
     let socket = directories::hook_socket_path()?;
     // The path goes between single quotes.
     let socket = socket.to_string_lossy().replace('\'', r"'\''");
@@ -91,7 +87,7 @@ pub trait ShellExt {
     fn get_shell_integrations(&self, env: &Env) -> Result<Vec<Box<dyn ShellIntegration>>>;
     /// Script integrations are installed into `<data dir>/shell`
     fn get_script_integrations(&self) -> Result<Vec<ShellScriptShellIntegration>>;
-    fn get_fig_integration_source(&self, when: &When) -> String;
+    fn get_fig_integration_source(&self, when: &When) -> Result<String>;
 }
 
 impl ShellExt for Shell {
@@ -163,10 +159,10 @@ impl ShellExt for Shell {
         Ok(integrations)
     }
 
-    fn get_fig_integration_source(&self, when: &When) -> String {
+    fn get_fig_integration_source(&self, when: &When) -> Result<String> {
         let script = match (self, when) {
-            (Shell::Zsh, When::Pre) => include_str!("scripts/pre.sh"),
-            (Shell::Zsh, When::Post) => include_str!("scripts/post.zsh"),
+            (Shell::Zsh, When::Pre) => include_str!("scripts/pre.zsh"),
+            (Shell::Zsh, When::Post) => return zsh_hook_source(),
             (Shell::Bash, When::Pre) => {
                 concat!(
                     "function __fig_source_bash_preexec() {\n",
@@ -191,9 +187,9 @@ impl ShellExt for Shell {
             },
         };
 
-        script
+        Ok(script
             .replace("{{CLI_BINARY_NAME}}", CLI_BINARY_NAME)
-            .replace("{{PTY_BINARY_NAME}}", PTY_BINARY_NAME)
+            .replace("{{PTY_BINARY_NAME}}", PTY_BINARY_NAME))
     }
 }
 

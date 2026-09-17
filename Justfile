@@ -173,8 +173,8 @@ hooks:
         echo "note: this is a linked worktree; re-run 'just hooks' from the main checkout before removing it"; \
     fi
 
-# Keystroke -> edit buffer hook at a stub desktop, release build; prints median/p90 for bash and zsh
-# through the pty binary and for zsh through the shell hook on hook.sock (docs/16-latency.md).
+# Keystroke -> edit buffer hook at a stub desktop, release build; prints median/p90 for bash through
+# the pty binary, for zsh through the shell hook on hook.sock and for a bare zsh (docs/16-latency.md).
 # Stage 0 latency, figterm and zsh hook paths
 latency:
     cargo build --locked --release -p figterm -p fig_cli

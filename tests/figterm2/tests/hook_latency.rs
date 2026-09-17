@@ -40,7 +40,7 @@ async fn measure(zsh: &str) {
     };
     let label = format!("zsh-hook {}", path.display());
     let rc = "bindkey -e\nunsetopt beep\nPS1='%# '\n";
-    let mut shell = HookShell::spawn_zsh(path.to_str().unwrap(), Rc::Text(rc), Daemon::Real, true)
+    let mut shell = HookShell::spawn_zsh(path.to_str().unwrap(), Rc::Text(rc), Daemon::Real)
         .await
         .unwrap();
 

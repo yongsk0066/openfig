@@ -284,8 +284,7 @@ impl WebviewManager {
             remote_hook.clone(),
         ));
 
-        // zsh shells that report through `fig.zsh` (`autocomplete.zshHook`). Listening costs nothing
-        // when no shell uses it, and `doctor` can tell whether it answers.
+        // zsh shells that report through `fig.zsh`; `doctor` asks it whether it answers.
         {
             let figterm_state = self.figterm_state.clone();
             tokio::spawn(async move {

@@ -5,7 +5,6 @@ use std::io::{
 };
 use std::process::ExitCode;
 
-use fig_integrations::shell::ZSH_HOOK_SETTING;
 use fig_os_shim::Context;
 use fig_util::{
     PTY_BINARY_NAME,
@@ -53,7 +52,7 @@ impl Status {
     }
 }
 
-fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid, zsh_hook: bool) -> Status {
+fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> Status {
     use fig_util::env_var::FIG_TERM;
     let env = ctx.env();
 
@@ -85,14 +84,7 @@ fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid, zsh
 
     // `Shell::try_find_shell` is the same test `Shell::current_shell` uses, so this cannot drift
     // from the set of shells the integration actually supports.
-    let parent_shell = Shell::try_find_shell(parent_name);
-    let valid_parent = parent_shell.is_some();
-
-    // With the hook on, zsh reports its own edit buffer (`fig.zsh`); wrapping it as well would
-    // report every prompt twice.
-    if zsh_hook && parent_shell == Some(Shell::Zsh) {
-        return Status::DontLaunch(format!("zsh uses the shell hook ({ZSH_HOOK_SETTING})").into());
-    }
+    let valid_parent = Shell::try_find_shell(parent_name).is_some();
 
     if env.in_codespaces() {
         return match env.get_os(FIG_TERM) {
@@ -166,11 +158,11 @@ fn grandparent_status(parent_pid: fig_os_shim::process_info::Pid) -> Status {
     })
 }
 
-fn should_launch(ctx: &Context, quiet: bool, zsh_hook: bool) -> u8 {
+fn should_launch(ctx: &Context, quiet: bool) -> u8 {
     let process_info = ctx.process_info();
     let current_pid = process_info.current_pid();
 
-    let parent_info = match parent_status(ctx, current_pid, zsh_hook).exit_status(quiet) {
+    let parent_info = match parent_status(ctx, current_pid).exit_status(quiet) {
         Ok(info) => info,
         Err(i) => return i,
     };
@@ -205,12 +197,6 @@ fn should_launch(ctx: &Context, quiet: bool, zsh_hook: bool) -> u8 {
 }
 
 pub fn should_figterm_launch_exit_status(ctx: &Context, quiet: bool) -> u8 {
-    exit_status(ctx, quiet, fig_settings::settings::get_bool_or(ZSH_HOOK_SETTING, false))
-}
-
-/// [`should_figterm_launch_exit_status`] with the setting passed in, so tests do not read the
-/// settings file of whoever runs them.
-fn exit_status(ctx: &Context, quiet: bool, zsh_hook: bool) -> u8 {
     use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 
     let env = ctx.env();
@@ -288,7 +274,7 @@ fn exit_status(ctx: &Context, quiet: bool, zsh_hook: bool) -> u8 {
         return 1;
     }
 
-    should_launch(ctx, quiet, zsh_hook)
+    should_launch(ctx, quiet)
 }
 
 pub fn should_figterm_launch(ctx: &Context) -> ExitCode {
@@ -318,9 +304,19 @@ mod tests {
     use super::*;
 
     macro_rules! assert_exit_code {
-        ($ctx:expr, $zsh_hook:expr, $exit_code:expr, $msg:expr) => {
-            assert_eq!(exit_status(&$ctx, true, $zsh_hook), $exit_code, "{}", $msg);
-            assert_eq!(exit_status(&$ctx, false, $zsh_hook), $exit_code, "{}", $msg);
+        ($ctx:expr, $exit_code:expr, $msg:expr) => {
+            assert_eq!(
+                should_figterm_launch_exit_status(&$ctx, true),
+                $exit_code,
+                "{}",
+                $msg
+            );
+            assert_eq!(
+                should_figterm_launch_exit_status(&$ctx, false),
+                $exit_code,
+                "{}",
+                $msg
+            );
         };
     }
 
@@ -331,7 +327,6 @@ mod tests {
         parent: Option<FakePid>,
         grandparent_exe: Option<PathBuf>,
         grandparent_cmdline: Option<String>,
-        zsh_hook: bool,
         expected_exit_code: u8,
     }
 
@@ -351,11 +346,6 @@ mod tests {
 
         fn grandparent_exe(mut self, exe: impl Into<PathBuf>) -> Self {
             self.grandparent_exe = Some(exe.into());
-            self
-        }
-
-        fn zsh_hook(mut self) -> Self {
-            self.zsh_hook = true;
             self
         }
 
@@ -386,7 +376,7 @@ mod tests {
                 ctx.build()
             };
 
-            assert_exit_code!(ctx, self.zsh_hook, self.expected_exit_code, self.name);
+            assert_exit_code!(ctx, self.expected_exit_code, self.name);
         }
     }
 
@@ -452,38 +442,6 @@ mod tests {
                 .parent_exe("/usr/bin/zsh")
                 .grandparent_exe("/usr/bin/invalid")
                 .expect(2),
-        ];
-        for test in tests {
-            test.run();
-        }
-    }
-
-    /// With the zsh hook on, zsh is never wrapped — even under a terminal that would otherwise
-    /// launch the pty binary — while bash is decided as before and an explicit force still
-    /// wins.
-    #[test]
-    fn zsh_hook_tests() {
-        let tests = [
-            test("zsh with the hook under tmux")
-                .parent_exe("/bin/zsh")
-                .grandparent_exe("/usr/bin/tmux")
-                .zsh_hook()
-                .expect(1),
-            test("zsh with the hook under Terminal.app")
-                .parent_exe("/bin/zsh")
-                .grandparent_exe("/usr/bin/invalid")
-                .zsh_hook()
-                .expect(1),
-            test("bash with the zsh hook under tmux")
-                .parent_exe("/bin/bash")
-                .grandparent_exe("/usr/bin/tmux")
-                .zsh_hook()
-                .expect(0),
-            test("forced with the hook")
-                .env(&[(FIG_FORCE_FIGTERM_LAUNCH, "1")])
-                .parent_exe("/bin/zsh")
-                .zsh_hook()
-                .expect(0),
         ];
         for test in tests {
             test.run();

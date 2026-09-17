@@ -534,6 +534,11 @@ impl DoctorCheck for FigIntegrationsCheck {
         //    });
         //}
 
+        // A zsh reports through the hook; only a bash runs inside the pty binary.
+        if current_shell_uses_hook() {
+            return Ok(());
+        }
+
         match fig_os_shim::Env::new().fig_term().as_deref() {
             Ok(env!("CARGO_PKG_VERSION")) => Ok(()),
             Ok(ver) if env!("CARGO_PKG_VERSION").ends_with("-dev") || ver.ends_with("-dev") => Err(doctor_warning!(

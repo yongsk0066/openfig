@@ -14,8 +14,6 @@ use eyre::Result;
 use fig_integrations::shell::{
     ShellExt,
     When,
-    ZSH_HOOK_SETTING,
-    zsh_hook_source,
 };
 use fig_os_shim::Context;
 use fig_util::env_var::FIG_SHELL;
@@ -110,59 +108,41 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
         return Ok(shell_integrations_disabled_code(*shell));
     }
 
-    // Snapshots must not depend on the settings of whoever runs them.
-    let zsh_hook =
-        *shell == Shell::Zsh && !*IS_SNAPSHOT_TEST && fig_settings::settings::get_bool_or(ZSH_HOOK_SETTING, false);
-
     let mut to_source = Vec::new();
 
-    if let Some(parent_process) = get_parent_process_exe() {
-        to_source.push(assign_shell_variable(
-            shell,
-            FIG_SHELL,
-            if *IS_SNAPSHOT_TEST {
-                Path::new("/bin/zsh").display()
-            } else {
-                parent_process.display()
-            },
-            false,
-        ));
-    };
-
-    if when == &When::Pre {
-        let status = if *IS_SNAPSHOT_TEST {
-            0
-        } else if zsh_hook {
-            // `pre.sh` execs the pty binary only for 0, or 2 with no `FIG_TERM`.
-            1
-        } else {
-            should_figterm_launch_exit_status(&Context::new(), true)
+    // zsh's `pre` only puts `~/.local/bin` on `PATH` and its `post` is the hook (`fig.zsh`); these
+    // variables are read by bash's pty binary launch and nothing else.
+    if *shell == Shell::Bash {
+        if let Some(parent_process) = get_parent_process_exe() {
+            to_source.push(assign_shell_variable(
+                shell,
+                FIG_SHELL,
+                if *IS_SNAPSHOT_TEST {
+                    Path::new("/bin/zsh").display()
+                } else {
+                    parent_process.display()
+                },
+                false,
+            ));
         };
-        to_source.push(assign_shell_variable(shell, "SHOULD_FIGTERM_LAUNCH", status, false));
+
+        if when == &When::Pre {
+            let status = if *IS_SNAPSHOT_TEST {
+                0
+            } else {
+                should_figterm_launch_exit_status(&Context::new(), true)
+            };
+            to_source.push(assign_shell_variable(shell, "SHOULD_FIGTERM_LAUNCH", status, false));
+        }
+
+        if let Some(path) = fig_settings::settings::get_string_opt("figterm.path") {
+            to_source.push(assign_shell_variable(shell, "FIG_TERM_PATH", path, false));
+        }
     }
 
-    if let Some(path) = fig_settings::settings::get_string_opt("figterm.path") {
-        to_source.push(assign_shell_variable(shell, "FIG_TERM_PATH", path, false));
-    }
-
-    to_source.push(integration_source(shell, when, zsh_hook)?);
+    to_source.push(shell.get_fig_integration_source(when)?);
 
     Ok(to_source.join("\n"))
-}
-
-/// The `pre`/`post` script for `shell`. With the zsh hook on, `post` is `fig.zsh` — unless the
-/// shell already runs under the pty binary (`FIG_TERM`: a tab opened before the setting changed,
-/// or `FIG_FORCE_FIGTERM_LAUNCH`), which only understands the OSC markers of `post.zsh`. Reporting
-/// both ways at once would give the desktop two sessions for one prompt.
-fn integration_source(shell: &Shell, when: &When, zsh_hook: bool) -> Result<String> {
-    let script = shell.get_fig_integration_source(when);
-    if !(zsh_hook && *shell == Shell::Zsh && *when == When::Post) {
-        return Ok(script);
-    }
-    Ok(format!(
-        "if [[ -n \"${{FIG_TERM:-}}\" ]]; then\n{script}\nelse\n{hook}\nfi\n",
-        hook = zsh_hook_source()?
-    ))
 }
 
 fn shell_integrations_disabled_code(shell: Shell) -> String {
@@ -204,45 +184,28 @@ mod tests {
         String::from_utf8(output.stdout).unwrap()
     }
 
-    /// With the hook on, zsh's `pre` never starts the pty binary and `post` carries `fig.zsh` for a
-    /// shell outside the pty binary and `post.zsh` for one inside it.
+    /// zsh's `post` is `fig.zsh` and nothing else, and its `pre` never starts the pty binary.
     #[test]
-    fn zsh_hook_replaces_the_markers_outside_the_pty_binary() {
-        let post = integration_source(&Shell::Zsh, &When::Post, true).unwrap();
+    fn zsh_integration_is_the_hook() {
+        let pre = Shell::Zsh.get_fig_integration_source(&When::Pre).unwrap();
+        let post = Shell::Zsh.get_fig_integration_source(&When::Post).unwrap();
         assert!(post.contains("zsocket"), "fig.zsh missing");
-        assert!(post.contains("OSCUnlock"), "post.zsh missing for the pty-binary branch");
-        assert!(!post.contains("{{"), "unfilled placeholder in {post}");
+        for text in [&pre, &post] {
+            assert!(!text.contains("697;"), "OSC markers in {text}");
+            assert!(!text.contains("{{"), "unfilled placeholder in {text}");
+        }
+        assert!(!pre.contains("exec"), "{pre}");
 
-        let off = integration_source(&Shell::Zsh, &When::Post, false).unwrap();
-        assert!(!off.contains("zsocket"));
-        assert_eq!(
-            integration_source(&Shell::Zsh, &When::Pre, true).unwrap(),
-            Shell::Zsh.get_fig_integration_source(&When::Pre)
-        );
-        assert!(
-            !integration_source(&Shell::Bash, &When::Post, true)
-                .unwrap()
-                .contains("zsocket")
-        );
-
-        // Inside the pty binary the markers still go out and the hook is never defined.
-        let run = |fig_term: &str| {
-            let output = Command::new("/bin/zsh")
-                .args([
-                    "-f",
-                    "-c",
-                    &format!(
-                        "{post}\nprint -r -- \"hook=${{+functions[_fig_report]}} markers=${{+functions[fig_precmd]}}\""
-                    ),
-                ])
-                .env("FIG_TERM", fig_term)
-                .output()
-                .unwrap();
-            String::from_utf8(output.stdout).unwrap()
-        };
-        assert!(run("1").ends_with("hook=0 markers=1\n"), "{}", run("1"));
-        // Not interactive, so `fig.zsh` defines nothing either; the interactive half is figterm2's.
-        assert!(run("").ends_with("hook=0 markers=0\n"), "{}", run(""));
+        // Not interactive, so `fig.zsh` defines nothing; the interactive half is figterm2's.
+        let output = Command::new("/bin/zsh")
+            .args([
+                "-f",
+                "-c",
+                &format!("{pre}\n{post}\nprint -r -- \"hook=${{+functions[_fig_report]}}\""),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "hook=0\n");
     }
 
     #[test]

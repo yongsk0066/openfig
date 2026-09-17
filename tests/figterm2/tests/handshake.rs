@@ -70,11 +70,6 @@ async fn refused_handshake_keeps_the_shell_working(shell_name: &str) {
 }
 
 #[tokio::test]
-async fn zsh_refused_handshake_keeps_the_shell_working() {
-    refused_handshake_keeps_the_shell_working("zsh").await;
-}
-
-#[tokio::test]
 async fn bash_refused_handshake_keeps_the_shell_working() {
     refused_handshake_keeps_the_shell_working("bash").await;
 }

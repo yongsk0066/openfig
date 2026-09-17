@@ -363,8 +363,7 @@ impl Case {
     }
 
     /// Writes `.zshenv` and `.zshrc` into `zdotdir`. `pre_integration` also loads the
-    /// integration's `pre` half, which is what `exec`s the pty binary; the recorder leaves it out
-    /// because it records the shell the pty binary would be reading from.
+    /// integration's `pre` half, as a user's rc file does; the recorder has always left it out.
     pub fn write_zdotdir(&self, zdotdir: &Path, cli: &Path, pre_integration: bool, zle_log: bool) -> Result<()> {
         std::fs::create_dir_all(zdotdir)?;
         // `/etc/zprofile` and `/etc/zshrc` differ between machines and set their own prompt.

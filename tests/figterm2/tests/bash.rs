@@ -23,11 +23,6 @@ async fn bash() {
     shell("bash").await;
 }
 
-#[tokio::test]
-async fn zsh() {
-    shell("zsh").await;
-}
-
 /// A pasted multi-line script must not stop figterm from reporting the edit buffer.
 ///
 /// This is the end-to-end shape of the F-05 self-deadlock: `EventHandler::send_event` runs inside
@@ -56,11 +51,6 @@ async fn paste_keeps_edit_buffer_alive(shell_name: &str) {
 #[tokio::test]
 async fn bash_paste() {
     paste_keeps_edit_buffer_alive("bash").await;
-}
-
-#[tokio::test]
-async fn zsh_paste() {
-    paste_keeps_edit_buffer_alive("zsh").await;
 }
 
 /// SIGTERM and SIGHUP must go through the normal shutdown path.
@@ -102,9 +92,4 @@ async fn signal_shutdown(shell_name: &str, signal: i32) {
 #[tokio::test]
 async fn bash_sigterm_cleans_up() {
     signal_shutdown("bash", libc::SIGTERM).await;
-}
-
-#[tokio::test]
-async fn zsh_sighup_cleans_up() {
-    signal_shutdown("zsh", libc::SIGHUP).await;
 }

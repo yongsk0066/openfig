@@ -161,10 +161,10 @@ async fn latency_bash() {
     measure_bare("bash").await;
 }
 
+/// zsh reports through the hook (`hook_latency.rs`); only the bare floor is measured here.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "benchmark: `just latency`"]
-async fn latency_zsh() {
-    measure("zsh").await;
+async fn latency_zsh_bare() {
     measure_bare("zsh").await;
 }
 
@@ -185,7 +185,7 @@ async fn latency_desktop_drive() {
         println!("latency_desktop_drive: FIGTERM2_DESKTOP_TMPDIR is not set, nothing to drive");
         return;
     };
-    let shell_name = std::env::var("FIGTERM2_DESKTOP_SHELL").unwrap_or_else(|_| "zsh".into());
+    let shell_name = std::env::var("FIGTERM2_DESKTOP_SHELL").unwrap_or_else(|_| "bash".into());
     let mut shell = Shell::spawn_with(&shell_name, Echo::Discard, Desktop::External(tmpdir.into()))
         .await
         .unwrap();
@@ -323,12 +323,6 @@ async fn segments(shell_name: &str) {
         "{shell_name}: only {} complete keys",
         keys.len() - incomplete
     );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "benchmark: `just latency-segments`"]
-async fn segments_zsh() {
-    segments("zsh").await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

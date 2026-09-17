@@ -1,10 +1,10 @@
 //! The zsh hook path in a real pty (docs/15-architecture-study.md §3.3, stage 3).
 //!
 //! [`HookShell`] runs `/bin/zsh -i` with a throwaway `HOME` and `ZDOTDIR` whose `.zshrc` loads this
-//! build's integration through `init zsh pre` / `init zsh post` with `autocomplete.zshHook` on, so
-//! the shell sources `fig.zsh` exactly as a user's would and no pty binary is involved. On the
-//! other end of `<TMPDIR>/figrun/hook.sock` is a [`Daemon`]: the desktop's own server code with a
-//! handler that records what reached it, or a bare stub for the failure cases.
+//! build's integration through `init zsh pre` / `init zsh post`, so the shell sources `fig.zsh`
+//! exactly as a user's would and no pty binary is involved. On the other end of
+//! `<TMPDIR>/figrun/hook.sock` is a [`Daemon`]: the desktop's own server code with a handler that
+//! records what reached it, or a bare stub for the failure cases.
 
 use std::io::{
     Read as _,
@@ -25,7 +25,6 @@ use anyhow::{
     Result,
     bail,
 };
-use fig_integrations::shell::ZSH_HOOK_SETTING;
 use fig_proto::local::{
     EditBufferHook,
     InterceptedKeyHook,
@@ -183,39 +182,18 @@ pub struct HookShell {
     raw_writers: Arc<tokio::sync::Mutex<Vec<tokio::net::unix::OwnedWriteHalf>>>,
 }
 
-/// `settings.json` for `home`, where `fig_settings` looks for it.
-fn write_settings(home: &Path, zsh_hook: bool) -> Result<()> {
-    let dir = home
-        .join("Library/Application Support")
-        .join(fig_util::consts::DATA_DIR_NAME);
-    std::fs::create_dir_all(&dir)?;
-    std::fs::write(
-        dir.join("settings.json"),
-        serde_json::json!({ ZSH_HOOK_SETTING: zsh_hook }).to_string(),
-    )?;
-    Ok(())
-}
-
 impl HookShell {
     pub async fn spawn(rc: Rc<'_>, daemon: Daemon) -> Result<HookShell> {
-        Self::spawn_with(rc, daemon, true).await
+        Self::spawn_zsh(golden::ZSH, rc, daemon).await
     }
 
-    /// `zsh_hook: false` loads the same rc file with the setting off: the shell the hook must not
-    /// change. It then execs the pty binary unless nothing is on `PATH` under that name, which is
-    /// the case here, so it is a plain zsh with the integration's `post` markers.
-    pub async fn spawn_with(rc: Rc<'_>, daemon: Daemon, zsh_hook: bool) -> Result<HookShell> {
-        Self::spawn_zsh(golden::ZSH, rc, daemon, zsh_hook).await
-    }
-
-    /// With another zsh than `/bin/zsh`, e.g. the one on `PATH` that `Shell::spawn` runs.
-    pub async fn spawn_zsh(zsh: &str, rc: Rc<'_>, daemon: Daemon, zsh_hook: bool) -> Result<HookShell> {
+    /// With another zsh than `/bin/zsh`, e.g. the one on `PATH`.
+    pub async fn spawn_zsh(zsh: &str, rc: Rc<'_>, daemon: Daemon) -> Result<HookShell> {
         let tempdir = TempDir::new()?;
         let home = tempdir.path().join("home");
         let zdotdir = tempdir.path().join("zdotdir");
         let runtime_dir = tempdir.path().join(RUNTIME_DIR_NAME);
         std::fs::create_dir_all(&home)?;
-        write_settings(&home, zsh_hook)?;
         let cli = crate::cli_binary()?;
         let (columns, rows) = match rc {
             Rc::Golden(case) => {
@@ -322,7 +300,7 @@ impl HookShell {
         // Up means the first prompt is drawn and, with a daemon, its line-init report arrived.
         let deadline = Instant::now() + Duration::from_secs(20);
         match daemon {
-            Daemon::Real | Daemon::Raw if zsh_hook => {
+            Daemon::Real | Daemon::Raw => {
                 shell
                     .wait_for_event(deadline, |event| {
                         matches!(event, HookEvent::EditBuffer { .. })

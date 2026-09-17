@@ -47,6 +47,19 @@ const receivedMessage = (response: ServerOriginatedMessage): void => {
   }
 };
 
+// The request never produced a response: settle its handler with an error so the promise
+// wrapped around it rejects instead of waiting forever, and forget the handler.
+const failRequest = (id: string, err: unknown) => {
+  const handler = handlers[id];
+  delete handlers[id];
+  const message = err instanceof Error ? err.message : String(err);
+  if (handler) {
+    handler({ case: "error", value: message });
+  } else {
+    console.error(`[fig] request ${id} failed: ${message}`);
+  }
+};
+
 export function sendMessage(
   submessage: ClientOriginatedMessage["submessage"],
   handler?: APIResponseHandler,
@@ -71,17 +84,26 @@ export function sendMessage(
       url.pathname = "/unknown";
     }
 
+    const id = String(request.id);
     fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/fig-api",
       },
       body: buffer,
-    }).then(async (res) => {
-      const body = new Uint8Array(await res.arrayBuffer());
-      const message = fromBinary(ServerOriginatedMessageSchema, body);
-      receivedMessage(message);
-    });
+    })
+      .then(async (res) => {
+        // A 405/415 body is plain text; decoding it would yield garbage or throw.
+        if (!res.ok) {
+          throw new Error(
+            `${url.pathname.slice(1)} failed: HTTP ${res.status} ${res.statusText}`.trimEnd(),
+          );
+        }
+        return fromBinary(ServerOriginatedMessageSchema, new Uint8Array(await res.arrayBuffer()));
+      })
+      // Two-argument `then`: a throw inside a handler is the handler's bug and must not be
+      // reported to that same handler as a transport failure.
+      .then(receivedMessage, (err: unknown) => failRequest(id, err));
     return;
   }
 

@@ -19,6 +19,7 @@ export default defineConfig({
       { test: { name: "shell-parser", root: "packages/shell-parser" } },
       { test: { name: "spec-generators", root: "packages/spec-generators" } },
       { test: { name: "spec-helpers", root: "packages/spec-helpers" } },
+      { test: { name: "api-bindings", root: "packages/api-bindings", environment: "jsdom" } },
       {
         test: {
           name: "autocomplete-parser",

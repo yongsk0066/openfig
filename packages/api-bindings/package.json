@@ -10,6 +10,7 @@
     "./wrappers/*": "./src/wrappers/*.ts"
   },
   "scripts": {
+    "test": "vitest",
     "typecheck": "tsc --noEmit",
     "codegen": "node codegen/generate-requests.ts && oxfmt src/requests.ts"
   },
@@ -23,8 +24,10 @@
     "@fig/config": "workspace:^",
     "@fig/spec-types": "workspace:^",
     "@types/node": "catalog:",
+    "jsdom": "catalog:",
     "ts-morph": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=26"

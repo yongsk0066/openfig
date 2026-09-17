@@ -945,8 +945,12 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                             master.write_all(&write_buffer).await?;
                             trace!(target: latency::TARGET, t_us = latency::now_us(), n = write_buffer.len(), "pty_write");
                         }
-                        Err(err) => {
-                            warn!("Failed recv: {err}");
+                        Err(flume::RecvError::Disconnected) => {
+                            // The input task only ends at end of file on the terminal (it hung
+                            // up) or after a read error it already sent. This arm used to log and
+                            // come straight back to a channel that stays disconnected.
+                            info!("Terminal input closed, shutting down");
+                            break 'select_loop Ok(());
                         }
                     };
                     input_res
@@ -1059,6 +1063,17 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         // binds, so without this every session that ended left a dead socket in the runtime dir.
         if let Err(err) = tokio::fs::remove_file(&figterm_socket_path).await {
             debug!(%err, path = ?figterm_socket_path, "Failed to remove the session socket");
+        }
+
+        // On an error `main` execs a plain shell in place of this process, and `execvp` keeps the
+        // working directory. figterm used to follow every `cd` of the shell with `set_current_dir`,
+        // which is how that shell started where the user was; this is the one moment the process
+        // directory matters, so it is set once, here, last.
+        if result.is_err()
+            && let Some(cwd) = &term.shell_state().get_context().current_working_directory
+            && let Err(err) = std::env::set_current_dir(cwd)
+        {
+            debug!(%err, ?cwd, "Failed to enter the shell's directory for the fallback shell");
         }
 
         result

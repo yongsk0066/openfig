@@ -54,12 +54,6 @@ impl EventListener for EventHandler {
         debug!(?event, ?shell_state, "Handling event");
         match event {
             Event::Prompt => {
-                if let Some(cwd) = &shell_state.local_context.current_working_directory
-                    && cwd.exists()
-                {
-                    std::env::set_current_dir(cwd).ok();
-                }
-
                 if let Err(err) = self.main_loop_sender.send(MainLoopEvent::SetImmediateMode(false)) {
                     error!(%err, "Sender error");
                 }
@@ -162,6 +156,26 @@ mod tests {
             history_rx,
             main_loop_rx,
         )
+    }
+
+    /// figterm used to `set_current_dir` to the shell's directory at every prompt. Nothing reads
+    /// the process directory for that any more (the history `cwd` and the directory generators
+    /// run in come from the shell context), so the prompt must leave it alone.
+    #[test]
+    fn prompt_does_not_move_the_process() {
+        let (handler, _socket_rx, _history_rx, _main_loop_rx) = handler();
+        let before = std::env::current_dir().unwrap();
+        assert_ne!(
+            before,
+            std::path::Path::new("/"),
+            "precondition: the test must not start in /"
+        );
+
+        let mut shell_state = ShellState::default();
+        shell_state.get_mut_context().current_working_directory = Some("/".into());
+        handler.send_event(Event::Prompt, &shell_state);
+
+        assert_eq!(std::env::current_dir().unwrap(), before);
     }
 
     /// While the desktop app is away nothing drains the outgoing channel and everything queued is

@@ -1769,7 +1769,13 @@ impl<T: EventListener> Handler for Term<T> {
             shell: context.shell.clone(),
             pid: context.pid,
             session_id: context.session_id.clone(),
-            cwd: env::current_dir().ok().and_then(|p| p.to_str().map(|s| s.to_owned())),
+            // The directory the shell last reported, not figterm's own: `dir` no longer moves the
+            // process along with the shell, and it was the only reason this read was right.
+            cwd: context
+                .current_working_directory
+                .as_deref()
+                .and_then(|p| p.to_str())
+                .map(str::to_owned),
             start_time: Some(std::time::SystemTime::now()),
             username: context.username.clone(),
             exit_code: None,
@@ -1783,11 +1789,10 @@ impl<T: EventListener> Handler for Term<T> {
             return;
         }
         trace!("Fig dir: {:?}", directory.display());
+        // Only recorded. This used to `set_current_dir` too, on every prompt: a process-wide side
+        // effect, and a failing one (a directory figterm may not enter) logged at error level.
+        // Readers of the shell's directory take it from the context.
         self.shell_state.get_mut_context().current_working_directory = Some(directory.to_path_buf());
-        match env::set_current_dir(directory) {
-            Ok(_) => {},
-            Err(err) => tracing::error!("Failed to set current dir ({}): {}", directory.display(), err),
-        }
     }
 
     #[inline]
@@ -2085,6 +2090,35 @@ mod tests {
         Column,
         Point,
     };
+
+    /// A `Dir=` report is the shell's directory, not figterm's: the process stays where it is
+    /// and the command's `cwd` still comes out as the reported one.
+    #[test]
+    fn dir_report_is_recorded_without_moving_the_process() {
+        let before = std::env::current_dir().unwrap();
+        assert_ne!(
+            before,
+            std::path::Path::new("/"),
+            "precondition: the test must not start in /"
+        );
+
+        let mut term = Term::new_test(SizeInfo::new(10, 20), VoidListener, 10);
+        term.dir(std::path::Path::new("/"));
+        term.pre_exec();
+
+        assert_eq!(std::env::current_dir().unwrap(), before);
+        assert_eq!(
+            term.shell_state().get_context().current_working_directory.as_deref(),
+            Some(std::path::Path::new("/"))
+        );
+        assert_eq!(
+            term.shell_state()
+                .command_info
+                .as_ref()
+                .and_then(|info| info.cwd.as_deref()),
+            Some("/")
+        );
+    }
 
     #[test]
     fn scroll_display_page_up() {

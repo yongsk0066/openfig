@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -104,7 +105,12 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
             }
 
             let (non_blocking, guard) = tracing_appender::non_blocking(file);
-            let file_layer = fmt::layer().with_line_number(true).with_writer(non_blocking);
+            // `fmt::layer` colours its output unless `NO_COLOR` is set, whatever it writes to, so
+            // every log file was full of escape sequences that `grep` and editors show raw.
+            let file_layer = fmt::layer()
+                .with_line_number(true)
+                .with_ansi(false)
+                .with_writer(non_blocking);
 
             (Some(file_layer), Some(guard))
         },
@@ -115,6 +121,12 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
     let (stdout_layer, _stdout_guard) = if args.log_to_stdout {
         let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
         let stdout_layer = fmt::layer().with_line_number(true).with_writer(non_blocking);
+        // Colour for a terminal (still subject to `NO_COLOR`), none when stdout is redirected.
+        let stdout_layer = if std::io::stdout().is_terminal() {
+            stdout_layer
+        } else {
+            stdout_layer.with_ansi(false)
+        };
         (Some(stdout_layer), Some(guard))
     } else {
         (None, None)
@@ -261,5 +273,6 @@ mod tests {
         ] {
             assert!(logs.contains(i));
         }
+        assert!(!logs.contains('\x1b'), "the log file has ANSI escapes:\n{logs:?}");
     }
 }

@@ -57,4 +57,16 @@ describe("store: settings", () => {
     expect(useAutocompleteStore.getState().suggestions.map((s) => s.type)).toEqual(["subcommand"]);
     expect(names()).toEqual([["build"]]);
   });
+
+  it("the recompute reads the settings being written, not the previous ones", () => {
+    expect(names()).toEqual([["build"], ["build"]]);
+
+    // `beta.history.mode` is read from the store's settings. No history is loaded, so
+    // `history_only` must empty the list in the same update.
+    useAutocompleteStore.getState().setSettings({ [SETTINGS.HISTORY_MODE]: "history_only" });
+    expect(names()).toEqual([]);
+
+    useAutocompleteStore.getState().setSettings({ [SETTINGS.HISTORY_MODE]: "off" });
+    expect(names()).toEqual([["build"], ["build"]]);
+  });
 });

@@ -195,8 +195,7 @@ const updateSuggestions =
 
         // Recompute suggestions if we change visibility state or will be visible and
         // suggestions might change.
-        const { settings } = state;
-        const suggestions = computeSuggestions(updatedState, settings);
+        const suggestions = computeSuggestions(updatedState, updatedState.settings);
         logger.info("Recomputed suggestions", { suggestions });
 
         // If old state is visible, and user has changed the selected item try to

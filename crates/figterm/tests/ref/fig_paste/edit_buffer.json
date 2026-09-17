@@ -1,0 +1,11 @@
+[
+  {"after":null,"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"\u001b[200~echo one\necho two\u001b[201~"},"edit_buffer":{"cursor":17,"text":"echo one\necho two"}},
+  {"after":{"input":" "},"edit_buffer":{"cursor":18,"text":"echo one\necho two "}},
+  {"after":{"input":"t"},"edit_buffer":{"cursor":19,"text":"echo one\necho two t"}},
+  {"after":{"input":"h"},"edit_buffer":{"cursor":20,"text":"echo one\necho two th"}},
+  {"after":{"input":"r"},"edit_buffer":{"cursor":21,"text":"echo one\necho two thr"}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":22,"text":"echo one\necho two thre"}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":23,"text":"echo one\necho two three"}},
+  {"after":{"input":"\u0001"},"edit_buffer":{"cursor":9,"text":"echo one\necho two three"}}
+]

@@ -1,0 +1,20 @@
+[
+  {"after":null,"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":1,"text":"e"}},
+  {"after":{"input":"c"},"edit_buffer":{"cursor":2,"text":"ec"}},
+  {"after":{"input":"h"},"edit_buffer":{"cursor":3,"text":"ech"}},
+  {"after":{"input":"o"},"edit_buffer":{"cursor":4,"text":"echo"}},
+  {"after":{"input":" "},"edit_buffer":{"cursor":5,"text":"echo "}},
+  {"after":{"input":"\""},"edit_buffer":{"cursor":6,"text":"echo \""}},
+  {"after":{"input":"a"},"edit_buffer":{"cursor":7,"text":"echo \"a"}},
+  {"after":{"input":"b"},"edit_buffer":{"cursor":8,"text":"echo \"ab"}},
+  {"after":{"input":"c"},"edit_buffer":{"cursor":9,"text":"echo \"abc"}},
+  {"after":{"input":"\r"},"edit_buffer":{"cursor":10,"text":"echo \"abc\n"}},
+  {"after":{"input":"d"},"edit_buffer":{"cursor":11,"text":"echo \"abc\nd"}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":12,"text":"echo \"abc\nde"}},
+  {"after":{"input":"f"},"edit_buffer":{"cursor":13,"text":"echo \"abc\ndef"}},
+  {"after":{"input":"\""},"edit_buffer":{"cursor":14,"text":"echo \"abc\ndef\""}},
+  {"after":{"input":"\r"},"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"o"},"edit_buffer":{"cursor":1,"text":"o"}},
+  {"after":{"input":"k"},"edit_buffer":{"cursor":2,"text":"ok"}}
+]

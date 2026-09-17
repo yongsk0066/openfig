@@ -1,0 +1,16 @@
+[
+  {"after":null,"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":1,"text":"e"}},
+  {"after":{"input":"c"},"edit_buffer":{"cursor":2,"text":"ec"}},
+  {"after":{"input":"h"},"edit_buffer":{"cursor":3,"text":"ech"}},
+  {"after":{"input":"o"},"edit_buffer":{"cursor":4,"text":"echo"}},
+  {"after":{"input":" "},"edit_buffer":{"cursor":5,"text":"echo "}},
+  {"after":{"input":"h"},"edit_buffer":{"cursor":6,"text":"echo h"}},
+  {"after":{"input":"\u0002"},"edit_buffer":{"cursor":5,"text":"echo h"}},
+  {"after":{"input":"\u0005"},"edit_buffer":{"cursor":6,"text":"echo h"}},
+  {"after":{"input":"i"},"edit_buffer":{"cursor":7,"text":"echo hi"}},
+  {"after":{"input":"\u0015"},"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"g"},"edit_buffer":{"cursor":1,"text":"g"}},
+  {"after":{"input":"i"},"edit_buffer":{"cursor":2,"text":"gi"}},
+  {"after":{"input":"t"},"edit_buffer":{"cursor":3,"text":"git"}}
+]

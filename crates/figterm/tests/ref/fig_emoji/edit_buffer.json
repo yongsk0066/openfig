@@ -1,0 +1,18 @@
+[
+  {"after":null,"edit_buffer":{"cursor":0,"text":""}},
+  {"after":{"input":"e"},"edit_buffer":{"cursor":1,"text":"e"}},
+  {"after":{"input":"c"},"edit_buffer":{"cursor":2,"text":"ec"}},
+  {"after":{"input":"h"},"edit_buffer":{"cursor":3,"text":"ech"}},
+  {"after":{"input":"o"},"edit_buffer":{"cursor":4,"text":"echo"}},
+  {"after":{"input":" "},"edit_buffer":{"cursor":5,"text":"echo "}},
+  {"after":{"input":"😀"},"edit_buffer":{"cursor":9,"text":"echo 😀"}},
+  {"after":{"input":" "},"edit_buffer":{"cursor":10,"text":"echo 😀 "}},
+  {"after":{"input":"o"},"edit_buffer":{"cursor":11,"text":"echo 😀 o"}},
+  {"after":{"input":"k"},"edit_buffer":{"cursor":12,"text":"echo 😀 ok"}},
+  {"after":{"input":"\u0002"},"edit_buffer":{"cursor":11,"text":"echo 😀 ok"}},
+  {"after":{"input":"\u0002"},"edit_buffer":{"cursor":10,"text":"echo 😀 ok"}},
+  {"after":{"input":"\u0002"},"edit_buffer":{"cursor":9,"text":"echo 😀 ok"}},
+  {"after":{"input":"\u0002"},"edit_buffer":{"cursor":5,"text":"echo 😀 ok"}},
+  {"after":{"input":"é"},"edit_buffer":{"cursor":7,"text":"echo é😀 ok"}},
+  {"after":{"input":"\u0005"},"edit_buffer":{"cursor":14,"text":"echo é😀 ok"}}
+]

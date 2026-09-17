@@ -119,6 +119,13 @@ fn grandparent_status(parent_pid: fig_os_shim::process_info::Pid) -> Status {
         None => return Status::DontLaunch("No grandparent name".into()),
     };
 
+    // The real nesting shape is figterm -> shell -> `q _ should-figterm-launch`: the shell is
+    // the parent, figterm is the *grandparent*. Refuse here, whatever the environment says
+    // (a stale copy speaking older variable names started figterm inside figterm on 2026-09-11).
+    if grandparent_name == PTY_BINARY_NAME || grandparent_name.ends_with(&format!("({PTY_BINARY_NAME})")) {
+        return Status::DontLaunch(format!("Grandparent {grandparent_name:?} is {PTY_BINARY_NAME}").into());
+    }
+
     let grandparent_cmdline_name = if let Some(cmdline) = grandparent_pid.cmdline() {
         cmdline
             .split(' ')

@@ -156,12 +156,7 @@ fn nesting_guard_grandparent_is_pty_binary_not_launch() {
 }
 
 /// The real nesting shape must be refused outright, not left to `FIG_TERM`.
-///
-/// Fails today with exit 2: the guard only checks the direct parent. Un-ignore together with the
-/// grandparent check in `crates/fig_cli/src/cli/internal/should_figterm_launch.rs`
-/// (docs/15-architecture-study.md §2.6 #10).
 #[test]
-#[ignore = "needs the grandparent check in should_figterm_launch.rs (§2.6 #10); exits 2 today"]
 fn nesting_guard_grandparent_is_pty_binary_refused() {
     let copy = format!("zsh ({PTY_BINARY_NAME})");
     assert_status(Ancestry::Grandparent(&copy), |s| s == DONT_LAUNCH, "1");

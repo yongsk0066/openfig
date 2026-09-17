@@ -37,6 +37,10 @@ pub const LAUNCH_AGENT_PREFIX: &str = concat!(env!("FIG_BRAND_BUNDLE_ID"), ".");
 /// any change to the wire format that an older script or desktop would misread.
 pub const HOOK_PROTOCOL_VERSION: u32 = 1;
 
+/// The one line anyone may send `hook.sock` instead of `HELLO` to learn whether the desktop is
+/// there: it answers `PONG <HOOK_PROTOCOL_VERSION>` and hangs up, and no session is created.
+pub const HOOK_PING: &str = "PING";
+
 /// Build time env vars
 pub mod build {
     /// A git full sha hash of the current build

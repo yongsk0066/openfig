@@ -105,6 +105,17 @@ impl FigtermState {
     }
 }
 
+/// How a session reaches the desktop.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub enum SessionKind {
+    /// The pty binary over `remote.sock` (`crate::remote`): the edit buffer is read off the screen
+    /// and commands are carried out inside the pty binary.
+    Figterm,
+    /// `fig.zsh` over `hook.sock` (`crate::hook`): zsh reports its own edit buffer, and commands
+    /// the shell cannot carry out — running a process — are carried out by the desktop.
+    ZshHook,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub enum InterceptMode {
     Locked,
@@ -133,6 +144,7 @@ impl From<InterceptMode> for bool {
 #[derive(Debug, Serialize)]
 pub struct FigtermSession {
     pub id: Uuid,
+    pub kind: SessionKind,
     #[serde(skip)]
     pub sender: flume::Sender<FigtermCommand>,
     #[serde(skip)]

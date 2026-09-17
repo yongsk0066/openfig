@@ -60,6 +60,7 @@ use crate::figterm::{
     FigtermSession,
     FigtermState,
     InterceptMode,
+    SessionKind,
 };
 
 /// Peer protocol versions a refusal has already been logged for.
@@ -174,6 +175,7 @@ async fn handle_remote_ipc(
                                 debug!("Client auth for {} accepted", handshake.id);
                                 figterm_state.insert(FigtermSession {
                                     id: session_id,
+                                    kind: SessionKind::Figterm,
                                     sender: command_tx,
                                     writer: Some(clientbound_tx.clone()),
                                     edit_buffer: EditBuffer {
@@ -201,56 +203,7 @@ async fn handle_remote_ipc(
                                 debug!("Client tried to send remote hook without auth");
                                 Some(handshake_response(false, RejectReason::Unspecified))
                             } else {
-                                /*
-                                    WARNING, when adding new remote requests you must sanitize the context,
-                                    otherwise the client can forge a message from another session
-                                */
-                                let res = match request {
-                                    hostbound::request::Request::EditBuffer(mut edit_buffer) => {
-                                        sanitize_fn(&mut edit_buffer.context, session_id);
-                                        if let Some(shell_context) = &edit_buffer.context {
-                                            hook.shell_context(shell_context, session_id).await;
-                                        }
-                                        hook.edit_buffer(
-                                            &edit_buffer,
-                                            session_id,
-                                            &figterm_state,
-                                        )
-                                        .await
-                                    },
-                                    hostbound::request::Request::Prompt(mut prompt) => {
-                                        sanitize_fn(&mut prompt.context, session_id);
-                                        if let Some(shell_context) = &prompt.context {
-                                            hook.shell_context(shell_context, session_id).await;
-                                        }
-                                        hook.prompt(&prompt, session_id, &figterm_state).await
-                                    },
-                                    hostbound::request::Request::PreExec(mut pre_exec) => {
-                                        sanitize_fn(&mut pre_exec.context, session_id);
-                                        if let Some(shell_context) = &pre_exec.context {
-                                            hook.shell_context(shell_context, session_id).await;
-                                        }
-                                        hook.pre_exec(&pre_exec, session_id, &figterm_state).await
-                                    },
-                                    hostbound::request::Request::PostExec(mut post_exec) => {
-                                        sanitize_fn(&mut post_exec.context, session_id);
-                                        if let Some(shell_context) = &post_exec.context {
-                                            hook.shell_context(shell_context, session_id).await;
-                                        }
-                                        hook.post_exec(&post_exec, session_id, &figterm_state).await
-                                    },
-                                    hostbound::request::Request::InterceptedKey(mut intercepted_key) => {
-                                        sanitize_fn(&mut intercepted_key.context, session_id);
-                                        if let Some(shell_context) = &intercepted_key.context {
-                                            hook.shell_context(shell_context, session_id).await;
-                                        }
-                                        hook.intercepted_key(intercepted_key, session_id).await
-                                    },
-                                } ;
-
-                                if let Err(err) = res {
-                                    error!(%err, "Failed processing hook");
-                                }
+                                dispatch_hook(request, session_id, &figterm_state, &mut hook).await;
                                 None
                             }
                         },
@@ -310,6 +263,60 @@ async fn handle_remote_ipc(
     }
 
     info!("Disconnect from {session_id:?}");
+}
+
+/// What a shell session's hook does on the desktop, whichever transport carried it: the pty
+/// binary's protobuf here, or `fig.zsh`'s lines in [`crate::hook`], which builds the same requests.
+///
+/// WARNING, when adding new remote requests you must sanitize the context, otherwise the client
+/// can forge a message from another session.
+pub(crate) async fn dispatch_hook(
+    request: hostbound::request::Request,
+    session_id: Uuid,
+    figterm_state: &Arc<FigtermState>,
+    hook: &mut (impl RemoteHookHandler + Send),
+) {
+    let res = match request {
+        hostbound::request::Request::EditBuffer(mut edit_buffer) => {
+            sanitize_fn(&mut edit_buffer.context, session_id);
+            if let Some(shell_context) = &edit_buffer.context {
+                hook.shell_context(shell_context, session_id).await;
+            }
+            hook.edit_buffer(&edit_buffer, session_id, figterm_state).await
+        },
+        hostbound::request::Request::Prompt(mut prompt) => {
+            sanitize_fn(&mut prompt.context, session_id);
+            if let Some(shell_context) = &prompt.context {
+                hook.shell_context(shell_context, session_id).await;
+            }
+            hook.prompt(&prompt, session_id, figterm_state).await
+        },
+        hostbound::request::Request::PreExec(mut pre_exec) => {
+            sanitize_fn(&mut pre_exec.context, session_id);
+            if let Some(shell_context) = &pre_exec.context {
+                hook.shell_context(shell_context, session_id).await;
+            }
+            hook.pre_exec(&pre_exec, session_id, figterm_state).await
+        },
+        hostbound::request::Request::PostExec(mut post_exec) => {
+            sanitize_fn(&mut post_exec.context, session_id);
+            if let Some(shell_context) = &post_exec.context {
+                hook.shell_context(shell_context, session_id).await;
+            }
+            hook.post_exec(&post_exec, session_id, figterm_state).await
+        },
+        hostbound::request::Request::InterceptedKey(mut intercepted_key) => {
+            sanitize_fn(&mut intercepted_key.context, session_id);
+            if let Some(shell_context) = &intercepted_key.context {
+                hook.shell_context(shell_context, session_id).await;
+            }
+            hook.intercepted_key(intercepted_key, session_id).await
+        },
+    };
+
+    if let Err(err) = res {
+        error!(%err, "Failed processing hook");
+    }
 }
 
 async fn handle_outgoing(

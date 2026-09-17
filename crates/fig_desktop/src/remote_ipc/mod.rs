@@ -362,6 +362,16 @@ impl fig_remote_ipc::RemoteHookHandler for RemoteHook {
         Ok(())
     }
 
+    async fn command_finished(&mut self, command: fig_settings::history::CommandInfo) {
+        // sqlite blocks, and the hook session's next line (the prompt's first edit buffer) should
+        // not wait for it; the pty binary writes its history from a thread of its own too.
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = fig_settings::history::History::new().insert_command_history(&command) {
+                error!(%err, "Failed to insert command into history");
+            }
+        });
+    }
+
     async fn intercepted_key(
         &mut self,
         InterceptedKeyHook { action, context, .. }: InterceptedKeyHook,

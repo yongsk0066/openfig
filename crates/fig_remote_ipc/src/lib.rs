@@ -12,6 +12,7 @@ use figterm::FigtermState;
 use uuid::Uuid;
 
 pub mod figterm;
+pub mod hook;
 pub mod remote;
 
 /// Handlers for the hooks figterm pushes over the remote socket.
@@ -61,4 +62,8 @@ pub trait RemoteHookHandler {
     /// This is not technically a hook, it is triggers by many other hooks and does not allow for a
     /// response, mostly used for diagnostics and testing
     async fn shell_context(&mut self, _context: &ShellContext, _session_id: Uuid) {}
+
+    /// A command finished in a [`hook`] session. The pty binary records its sessions' history
+    /// itself; a shell hook has no process to do that in, so the desktop does.
+    async fn command_finished(&mut self, _command: fig_settings::history::CommandInfo) {}
 }

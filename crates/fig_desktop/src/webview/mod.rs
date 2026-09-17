@@ -272,15 +272,32 @@ impl WebviewManager {
             });
         }
 
+        let remote_hook = RemoteHook {
+            notifications_state: self.notifications_state.clone(),
+            proxy: self.event_loop.create_proxy(),
+            last_sent: Default::default(),
+        };
+
         tokio::spawn(fig_remote_ipc::remote::start_remote_ipc(
             fig_util::directories::local_remote_socket_path().unwrap(),
             self.figterm_state.clone(),
-            RemoteHook {
-                notifications_state: self.notifications_state.clone(),
-                proxy: self.event_loop.create_proxy(),
-                last_sent: Default::default(),
-            },
+            remote_hook.clone(),
         ));
+
+        // zsh shells that report through `fig.zsh` (`autocomplete.zshHook`). Listening costs nothing
+        // when no shell uses it, and `doctor` can tell whether it answers.
+        {
+            let figterm_state = self.figterm_state.clone();
+            tokio::spawn(async move {
+                let result = match fig_util::directories::hook_socket_path() {
+                    Ok(path) => fig_remote_ipc::hook::start_hook_ipc(path, figterm_state, remote_hook).await,
+                    Err(err) => Err(err.into()),
+                };
+                if let Err(err) = result {
+                    error!(%err, "Unable to start the zsh hook socket");
+                }
+            });
+        }
 
         file_watcher::setup_listeners(self.notifications_state.clone(), self.event_loop.create_proxy()).await;
 

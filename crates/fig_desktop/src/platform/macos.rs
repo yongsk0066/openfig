@@ -385,6 +385,24 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::EditBufferChanged => {
+                // Tracking for the terminal in use can have failed at activation time
+                // (`macos_utils::window_server::register`: the 0.25 s AX messaging timeout
+                // while the terminal was busy) and nothing else retried it, so the autocomplete
+                // window neither followed nor hid (docs/11-machine-state.md #4). An edit-buffer
+                // update proves the terminal is responsive right now; retry here. When the app
+                // is already tracked this is one `frontmostApplication` call and a map lookup.
+                if let Some(window_server) = self.window_server.lock().unwrap().as_mut() {
+                    // SAFETY:
+                    // Operation: `WindowServer::ensure_frontmost_tracked`, an unsafe fn.
+                    // Contract (see its `# Safety`): must run on the thread owning the run loop
+                    // the AX sources are attached to.
+                    // Evidence: `PlatformBoundEvent`s are dispatched from `webview/mod.rs`,
+                    // inside `event_loop.run`, i.e. the tao main thread — the same thread
+                    // `WindowServer::new` was called on during `Initialize` (as for
+                    // `reregister_all` in `AccessibilityUpdated` below).
+                    unsafe { window_server.ensure_frontmost_tracked() };
+                }
+
                 // `debug!`, to match `CaretPositionUpdateRequested` below, which calls the exact
                 // same function. Without accessibility permission this fires once per keystroke,
                 // and at `error!` it drowned out every real error in the log.

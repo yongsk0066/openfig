@@ -15,6 +15,15 @@ use accessibility_sys::{
     AXUIElementRef,
     kAXApplicationActivatedNotification,
     kAXApplicationShownNotification,
+    kAXErrorAPIDisabled,
+    kAXErrorCannotComplete,
+    kAXErrorFailure,
+    kAXErrorIllegalArgument,
+    kAXErrorInvalidUIElement,
+    kAXErrorInvalidUIElementObserver,
+    kAXErrorNotImplemented,
+    kAXErrorNotificationAlreadyRegistered,
+    kAXErrorNotificationUnsupported,
     kAXFocusedWindowChangedNotification,
     kAXMainWindowChangedNotification,
     kAXUIElementDestroyedNotification,
@@ -133,6 +142,23 @@ pub struct AccessibilityCallbackData {
 /// `unsafe`, and `Retained<NSString>` keeps the string alive across `to_string`). It used to be
 /// declared `unsafe fn` with no `# Safety` section, i.e. an unsafe contract with no content;
 /// per the review skill that is a defect, not a precaution. See docs/13-unsafe-review.md #9.
+/// `AXError` is a bare `i32`; name the ones HIServices documents so a log line is readable.
+fn ax_error_name(err: AXError) -> String {
+    let name = match err {
+        e if e == kAXErrorFailure => "kAXErrorFailure",
+        e if e == kAXErrorIllegalArgument => "kAXErrorIllegalArgument",
+        e if e == kAXErrorInvalidUIElement => "kAXErrorInvalidUIElement",
+        e if e == kAXErrorInvalidUIElementObserver => "kAXErrorInvalidUIElementObserver",
+        e if e == kAXErrorCannotComplete => "kAXErrorCannotComplete",
+        e if e == kAXErrorNotificationUnsupported => "kAXErrorNotificationUnsupported",
+        e if e == kAXErrorNotImplemented => "kAXErrorNotImplemented",
+        e if e == kAXErrorNotificationAlreadyRegistered => "kAXErrorNotificationAlreadyRegistered",
+        e if e == kAXErrorAPIDisabled => "kAXErrorAPIDisabled",
+        _ => "AXError",
+    };
+    format!("{name}({err})")
+}
+
 fn app_bundle_id(app: &NSRunningApplication) -> Option<String> {
     app.bundleIdentifier().map(|s| s.to_string())
 }
@@ -276,6 +302,22 @@ impl WindowServer {
         // SAFETY: the caller has discharged the run-loop affinity clause; the callback argument
         // is fixed inside `register` itself.
         unsafe { self._inner.as_mut().get_unchecked_mut() }.register_all();
+    }
+
+    /// Register the frontmost application if it is not tracked yet and, when that succeeds,
+    /// publish its focused window. This is the retry path for a registration that failed at
+    /// activation time (see `register`): the caller runs it on every edit-buffer update, i.e.
+    /// at exactly the moments the terminal the user is typing in is known to be responsive.
+    /// Costs one `frontmostApplication` call and a map lookup when the app is already tracked.
+    ///
+    /// # Safety
+    ///
+    /// Same as [`Self::reregister_all`]: must run on the thread owning the run loop the AX
+    /// sources are attached to.
+    pub unsafe fn ensure_frontmost_tracked(&mut self) {
+        // SAFETY: the caller has discharged the run-loop affinity clause; the callback argument
+        // is fixed inside `register` itself.
+        unsafe { self._inner.as_mut().get_unchecked_mut() }.ensure_frontmost_tracked();
     }
 }
 
@@ -730,7 +772,7 @@ impl WindowServerInner {
         //   `accessibility_sys`.
         // Postcondition: on success the observer is stored in `self.observers`, which owns it
         // until `deregister`/`deregister_all` drops it — on this same thread, by clause 1.
-        if let Ok(mut observer) = AXObserver::create(
+        let mut observer = match AXObserver::create(
             key.pid,
             ax_ref,
             AccessibilityCallbackData {
@@ -739,20 +781,109 @@ impl WindowServerInner {
             },
             application_ax_callback,
         ) {
-            let result: Result<Vec<_>, AXError> = TRACKED_NOTIFICATIONS
-                .iter()
-                .map(|notification| observer.subscribe(notification))
-                .collect();
-
-            if result.is_ok() {
-                debug!("Began tracking {bundle_id:?}");
-
-                self.observers.insert(key, observer);
+            Ok(observer) => observer,
+            Err(err) => {
+                warn!(
+                    bundle_id,
+                    err = %ax_error_name(err),
+                    "AXObserverCreate failed; tracking is retried on the next edit-buffer update"
+                );
                 return;
+            },
+        };
+
+        // One failed subscription used to discard the whole observer, silently (the warning
+        // carried no error code), and nothing tried again except the next
+        // `didActivateApplication`. With the process-wide 0.25 s messaging timeout set in
+        // `fig_desktop`'s `Initialize`, a terminal busy repainting for a quarter second at the
+        // moment it was activated answered `kAXErrorCannotComplete` and then stayed untracked
+        // for the rest of the session: no `WindowDestroyed`, no focused window for the frame
+        // watch (2026-09-17, Terminal.app under heavy output, docs/11-machine-state.md #4).
+        // Now a notification the target does not support is skipped, any other failure is
+        // logged with its code, and the app is left unregistered so `ensure_frontmost_tracked`
+        // retries it on use.
+        let mut failed: Vec<(&'static str, String)> = Vec::new();
+        for notification in TRACKED_NOTIFICATIONS {
+            match observer.subscribe(notification) {
+                Ok(()) => {},
+                Err(err) if err == kAXErrorNotificationUnsupported => {
+                    debug!(
+                        bundle_id,
+                        notification = *notification,
+                        "notification unsupported by the target; skipped"
+                    );
+                },
+                Err(err) => failed.push((*notification, ax_error_name(err))),
             }
         }
 
-        warn!("Error setting up tracking for '{bundle_id:?}'");
+        if failed.is_empty() {
+            debug!("Began tracking {bundle_id:?}");
+            self.observers.insert(key, observer);
+            return;
+        }
+
+        warn!(
+            bundle_id,
+            ?failed,
+            "Error setting up tracking; retried on the next edit-buffer update"
+        );
+    }
+
+    /// See [`WindowServer::ensure_frontmost_tracked`].
+    ///
+    /// # Safety
+    ///
+    /// As for `register`.
+    unsafe fn ensure_frontmost_tracked(&mut self) {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let Some(app) = workspace.frontmostApplication() else {
+            return;
+        };
+        let Some(bundle_id) = app_bundle_id(&app) else {
+            return;
+        };
+        let key = ApplicationSpecifier {
+            pid: app.processIdentifier(),
+            bundle_id,
+        };
+        if key.bundle_id == self.own_bundle_id || self.observers.contains_key(&key) {
+            return;
+        }
+
+        // SAFETY:
+        // Operation: `Self::register`, an unsafe fn.
+        // Contract (see its `# Safety`): run-loop affinity, and `application_ax_callback` as the
+        // registered callback.
+        // Evidence: affinity is this function's own `# Safety` clause, discharged by the caller;
+        // the callback argument is fixed inside `register` itself.
+        unsafe { self.register(&app, false) };
+        if !self.observers.contains_key(&key) {
+            // `register` filtered the app out or failed again; it said why at its own level.
+            return;
+        }
+        info!(bundle_id = key.bundle_id, "tracking recovered on an edit-buffer update");
+
+        // `register(_, false)` does not publish the focused window, and the activation-time
+        // lookup failed for the same reason the registration did, so do it here: without it
+        // `focused_window` stays `None` and the frame watch has nothing to follow.
+        //
+        // SAFETY:
+        // Operation: the `AXUIElementCreateApplication` FFI call.
+        // Contract (HIServices): takes a `pid_t`, returns a `+1` `AXUIElementRef` (Create rule),
+        // no pointer preconditions.
+        // Postcondition: `owned` releases that `+1` at the end of this scope; `UIElement::from`
+        // follows the Get rule and retains independently, so `elem` outlives `owned` safely.
+        let owned = OwnedAxRef(unsafe { AXUIElementCreateApplication(key.pid) });
+        let elem = UIElement::from(owned.0);
+        match elem.focused_window() {
+            Ok(window) => {
+                if let Err(e) = self.sender.send(WindowServerEvent::FocusChanged { window, app: key }) {
+                    warn!("Error sending focus changed event: {e:?}");
+                }
+            },
+            Err(err) => debug!(err = %ax_error_name(err), "focused window still unavailable after recovery"),
+        }
     }
 
     /// Drop the observer for exactly one `(pid, bundle_id)`.

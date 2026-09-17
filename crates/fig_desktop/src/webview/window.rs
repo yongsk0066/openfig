@@ -76,8 +76,46 @@ pub struct WindowState {
     pub context: WebContext,
     pub window_id: WindowId,
     pub window_geometry_state: Mutex<WindowGeometryState>,
+    /// What this window's frame was last set to, or `None` when nothing is known.
+    ///
+    /// Compared against instead of reading the frame back with `outer_position()` /
+    /// `inner_size()`: tao hands `setFrameTopLeftPoint:` and `setContentSize:` to the main dispatch
+    /// queue, while it handles every user event already queued in one pass of the run loop. A
+    /// read-back in the second of two geometry events handled together can therefore still see the
+    /// frame from before the first, and a move back to that stale frame would be skipped, leaving
+    /// the window where the first event put it.
+    applied_geometry: Mutex<Option<AppliedGeometry>>,
     pub enabled: AtomicBool,
     pub url: Mutex<Url>,
+}
+
+/// A window frame as it was last requested from Cocoa.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct AppliedGeometry {
+    position: Position,
+    size: LogicalSize<f64>,
+}
+
+/// The tao calls needed to take a window from `applied` to `target`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GeometryCalls {
+    /// `set_inner_size`, issued first.
+    resize: bool,
+    /// `set_outer_position`, issued after the resize.
+    reposition: bool,
+}
+
+fn geometry_calls(applied: Option<AppliedGeometry>, target: AppliedGeometry) -> GeometryCalls {
+    let resize = applied.is_none_or(|applied| applied.size != target.size);
+    GeometryCalls {
+        resize,
+        // Cocoa's origin is the bottom-left, so `setContentSize:` keeps the bottom edge and moves
+        // the top edge — the edge this window is anchored by. A resize therefore always needs the
+        // position applied after it, even when the position itself did not change. Positioning
+        // *before* the resize as well, as this used to, set a frame that the resize and the second
+        // positioning replaced within the same main-queue drain.
+        reposition: resize || applied.is_none_or(|applied| applied.position != target.position),
+    }
 }
 
 /// One monitor, as `solve_geometry` needs it.
@@ -274,6 +312,7 @@ impl WindowState {
                 size,
                 anchor: LogicalSize::<f64>::default(),
             }),
+            applied_geometry: Mutex::new(None),
             enabled: enabled.into(),
             url: Mutex::new(url),
         }
@@ -341,25 +380,20 @@ impl WindowState {
         };
 
         if !dry_run {
-            // The position is applied before *and* after the resize on purpose: Cocoa's origin is
-            // the bottom-left, so `setContentSize:` keeps the bottom edge fixed and moves the top
-            // edge, which is the one this window is anchored by. What is new is the change
-            // checks — a keystroke that moves neither the caret nor the suggestion list used to
-            // cost four to six `setFrameOrigin:` and two `setContentSize:` window-server round
-            // trips regardless.
-            let size_changed = self.window.inner_size() != size.to_physical(self.window.scale_factor());
-            let position_changed =
-                self.window.outer_position().ok() != Some(position.to_physical(self.window.scale_factor()));
+            // A keystroke that moves neither the caret nor the suggestion list costs no
+            // `setFrameTopLeftPoint:` / `setContentSize:` at all; see `geometry_calls` for the order.
+            let target = AppliedGeometry { position, size };
+            let mut applied = self.applied_geometry.lock();
+            let calls = geometry_calls(*applied, target);
 
-            if position_changed {
-                self.set_position(platform_state, position, "first set");
-            }
-
-            if size_changed {
+            if calls.resize {
                 self.window.set_inner_size(size);
-                // Re-anchor the top edge after Cocoa moved it.
-                self.set_position(platform_state, position, "second set");
             }
+            if calls.reposition {
+                let which = if calls.resize { "after resize" } else { "move" };
+                self.set_position(platform_state, position, which);
+            }
+            *applied = Some(target);
         }
 
         (result.is_above, result.is_clipped)
@@ -406,10 +440,18 @@ impl WindowState {
                             .send(FigtermCommand::InterceptFigJSVisible { visible: false });
                     }
 
-                    // TODO: why are we setting then unsetting resizable?
-                    self.window.set_resizable(true);
+                    // This used to toggle `set_resizable(true)` then `set_resizable(false)` on
+                    // every hide, under a "why?" TODO. The window is built non-resizable and
+                    // nothing makes it resizable, so the pair was two `setStyleMask:` calls that
+                    // ended where they started. Only a window that did become resizable changes.
+                    if self.window.is_resizable() {
+                        self.window.set_resizable(false);
+                    }
 
-                    self.window.set_resizable(false);
+                    // Forget the frame while hidden: the next placement then applies in full, so
+                    // anything that moved the window behind our back (a display going away) is
+                    // corrected by the time it is shown again.
+                    *self.applied_geometry.lock() = None;
                 }
 
                 if self.window_id == DASHBOARD_ID {
@@ -606,6 +648,46 @@ mod tests {
     use tao::dpi::PhysicalPosition;
 
     use super::*;
+
+    fn geometry(x: f64, y: f64, width: f64, height: f64) -> AppliedGeometry {
+        AppliedGeometry {
+            position: Position::Logical(LogicalPosition::new(x, y)),
+            size: LogicalSize::new(width, height),
+        }
+    }
+
+    #[test]
+    fn geometry_calls_only_for_what_changed() {
+        let applied = geometry(100.0, 200.0, 300.0, 140.0);
+        let calls = |target| geometry_calls(Some(applied), target);
+
+        // Nothing known yet: everything, the resize first.
+        assert_eq!(geometry_calls(None, applied), GeometryCalls {
+            resize: true,
+            reposition: true,
+        });
+        // The same frame again: nothing.
+        assert_eq!(calls(applied), GeometryCalls {
+            resize: false,
+            reposition: false,
+        });
+        // Moved only: one positioning, no resize.
+        assert_eq!(calls(geometry(101.5, 200.0, 300.0, 140.0)), GeometryCalls {
+            resize: false,
+            reposition: true,
+        });
+        // Resized in place: the position still has to be re-applied, because the resize moved the
+        // top edge.
+        assert_eq!(calls(geometry(100.0, 200.0, 300.0, 80.0)), GeometryCalls {
+            resize: true,
+            reposition: true,
+        });
+        // Both: still one positioning.
+        assert_eq!(calls(geometry(0.0, 0.0, 300.0, 80.0)), GeometryCalls {
+            resize: true,
+            reposition: true,
+        });
+    }
 
     /// A 1920x1080 monitor at the origin, scale 1, so logical == physical.
     fn monitor() -> MonitorFrame {

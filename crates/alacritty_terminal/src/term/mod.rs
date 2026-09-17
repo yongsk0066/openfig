@@ -244,12 +244,11 @@ pub struct TextBuffer {
 
 /// `FIG_PROMPT_OFFSET_WORKAROUND`, parsed once.
 ///
-/// This was read and re-parsed on every new prompt, and each read built a fresh
-/// `fig_os_shim::Env` (a full snapshot of the process environment). The variable is set by the
-/// shell integration before figterm starts and cannot change afterwards.
+/// A manual override: nothing in this repository sets it. figterm inherits it from the environment
+/// it was started in and never writes it, so re-reading and re-parsing it on every new prompt, as
+/// this used to, could not observe a different value.
 static PROMPT_OFFSET_WORKAROUND: LazyLock<Option<i32>> = LazyLock::new(|| {
-    fig_os_shim::Env::new()
-        .fig_prompt_offset_workaround()
+    env::var("FIG_PROMPT_OFFSET_WORKAROUND")
         .ok()
         .and_then(|offset| offset.parse::<i32>().ok())
 });

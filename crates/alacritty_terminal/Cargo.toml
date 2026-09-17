@@ -40,7 +40,6 @@ workspace = true
 
 [dependencies]
 bitflags.workspace = true
-fig_os_shim.workspace = true
 serde.workspace = true
 serde_yaml = "0.9"
 shell_color.workspace = true

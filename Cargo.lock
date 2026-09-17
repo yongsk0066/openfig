@@ -51,7 +51,6 @@ name = "alacritty_terminal"
 version = "1.19.7"
 dependencies = [
  "bitflags 2.13.2",
- "fig_os_shim",
  "serde",
  "serde_json",
  "serde_yaml",

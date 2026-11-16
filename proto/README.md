@@ -1,53 +1,12 @@
-# Proto
+# IPC schemas
 
-We use [protocol buffers](https://developers.google.com/protocol-buffers/) as a
-message format for inter process communication.
+| Schema | Boundary |
+| --- | --- |
+| `local.proto` | CLI/local processes → desktop, including shell hook events |
+| `fig.proto` | WebView ↔ desktop API requests/responses and notifications |
+| `shell.proto` | Desktop → shell operations; the zsh hook receives a versioned text encoding rather than raw protobuf |
+| `fig_common.proto` | Shared message definitions |
 
-This folder defines:
+Install `protoc` before building. After changing schemas, run `pnpm exec turbo codegen` and commit generated TypeScript under `src/`. Rust bindings are generated during compilation. The gate verifies regeneration leaves the tree unchanged.
 
-1. `local.proto` - Protocol for communication from local processes like the
-   `fig` CLI to the desktop app, and the hooks shell sessions report
-2. `fig.proto` - Protocol for communication between client Fig.js apps like
-   autocomplete and the desktop app
-3. `shell.proto` - What the desktop asks of a shell session; `fig.zsh` receives
-   it as lines of text from `fig_shell_ipc::hook`, not as protobuf
-4. `fig_common.proto` - Definitions shared by the others
-
-## Setup
-
-For any client, you must install the protobuf compiler:
-
-```shell
-brew install protobuf
-```
-
-**Client Installations**
-
-| Client     | Command        |
-| ---------- | -------------- |
-| typescript | `pnpm install` |
-| rust       | N/A\*          |
-
-\* The rust build process handles the installation of the proto toolchain.
-
-## Installation/Usage
-
-The generated TypeScript lives in `src/` and is committed. To regenerate it
-after editing a `.proto`, run:
-
-```shell
-pnpm exec turbo codegen
-```
-
-## Deprecating an API
-
-1. Edit `fig.proto` and add the `[deprecated=true]` annotation to the relevant
-   fields
-2. Add an inline comment specifying the version when this was changed applies
-   using the following format: `//deprecated: 1.2.3`
-
-## Contributing
-
-**Adding to protos**
-
-Just edit the appropriate proto file.
+Preserve field numbers and wire compatibility. Update native and TypeScript handlers together, including snapshots/round trips. A schema edit alone does not update the zsh text protocol: inspect `crates/fig_shell_ipc/src/hook/` and `crates/fig_integrations/src/shell/scripts/fig.zsh` when changing shell operations. Page epochs, input revisions and acknowledgements are different guards; see [architecture](../docs/architecture.md).

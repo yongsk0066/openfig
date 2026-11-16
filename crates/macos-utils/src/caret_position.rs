@@ -51,7 +51,7 @@ const INVALID_CARET_POSITION: CaretPosition = CaretPosition {
 /// The caller must ensure that:
 ///
 /// 1. the AX API may be used from the calling thread (see the `Sync` discussion on
-///    [`crate::window_server::UIElement`] and docs/13-unsafe-review.md #8); and
+///    [`crate::window_server::UIElement`] and docs/architecture.md (native thread ownership)); and
 /// 2. the private-SPI and documentation premises listed below are acceptable, namely that
 ///    `AXValueGetValue` writes `*value` exactly when it returns `true`, and that
 ///    `kAXValueTypeCFRange` / `kAXValueTypeCGRect` really select `CFRange` / `CGRect` out-parameter

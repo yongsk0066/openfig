@@ -11,9 +11,6 @@ use std::sync::{
 
 use accessibility_sys::{
     AXError,
-    AXIsProcessTrusted,
-    AXUIElementCreateSystemWide,
-    AXUIElementSetMessagingTimeout,
     pid_t,
 };
 use anyhow::Context;
@@ -152,7 +149,7 @@ impl PlatformWindowImpl {
         // Evidence: `ui_element` is an owned `UIElement`, whose type invariant is that it holds
         // a live `+1` on its `AXUIElementRef`; it was just moved in from a
         // `WindowServerEvent::FocusChanged`. The SPI premise is inherited and recorded in
-        // docs/13-unsafe-review.md #11.
+        // docs/architecture.md (native thread ownership).
         let window_id = unsafe { ui_element.get_window_id()? };
         Ok(Self {
             window_id,
@@ -256,27 +253,8 @@ impl PlatformState {
         debug!("Handling platform event: {:?}", event);
         match event {
             PlatformBoundEvent::Initialize => {
-                // SAFETY:
-                // Operations: `AXIsProcessTrusted`, `AXUIElementCreateSystemWide`, and
-                // `AXUIElementSetMessagingTimeout`.
-                // Contracts (HIServices):
-                // - `AXIsProcessTrusted()` takes no arguments and has no preconditions.
-                // - `AXUIElementCreateSystemWide()` takes no arguments and returns a `+1`
-                //   `AXUIElementRef` (Create rule); it never returns NULL.
-                // - `AXUIElementSetMessagingTimeout(element, seconds)` requires a live element and
-                //   a non-negative timeout; it borrows the element.
-                // Evidence: the element argument is the POSTCONDITION of the call nested
-                // directly inside it, so it is live for the whole call; `0.25` is a positive
-                // `f32`.
-                // Leak note: the `+1` is never released. It is one system-wide element per
-                // process, created at most twice (here and in `AccessibilityUpdateRequested`),
-                // so the leak is bounded and harmless. See docs/13-unsafe-review.md #6.
-                unsafe {
-                    if AXIsProcessTrusted() {
-                        // This prevents Fig from becoming unresponsive if one of the applications
-                        // we are tracking becomes unresponsive.
-                        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25);
-                    }
+                if accessibility_is_enabled() {
+                    UIElement::set_global_messaging_timeout(0.25);
                 }
 
                 let (tx, rx) = flume::unbounded::<WindowServerEvent>();
@@ -402,9 +380,10 @@ impl PlatformState {
                 // Tracking for the terminal in use can have failed at activation time
                 // (`macos_utils::window_server::register`: the 0.25 s AX messaging timeout
                 // while the terminal was busy) and nothing else retried it, so the autocomplete
-                // window neither followed nor hid (docs/11-machine-state.md #4). An edit-buffer
-                // update proves the terminal is responsive right now; retry here. When the app
-                // is already tracked this is one `frontmostApplication` call and a map lookup.
+                // window neither followed nor hid (the terminal focus recovery path). An
+                // edit-buffer update proves the terminal is responsive right now; retry here. When
+                // the app is already tracked this is one `frontmostApplication` call and a map
+                // lookup.
                 if let Some(window_server) = self.window_server.lock().unwrap().as_mut() {
                     // SAFETY:
                     // Operation: `WindowServer::ensure_frontmost_tracked`, an unsafe fn.
@@ -558,22 +537,8 @@ impl PlatformState {
                         }))
                         .ok();
                     if enabled {
-                        // SAFETY:
-                        // Operations and contracts: identical to the `Initialize` arm above —
-                        // `AXUIElementCreateSystemWide()` returns a live `+1` element with no
-                        // preconditions, and `AXUIElementSetMessagingTimeout` borrows it.
-                        // Evidence: the argument is the postcondition of the nested call.
-                        // Thread note: unlike the `Initialize` arm, this runs on a tokio worker
-                        // thread, not the main thread. That is fine for these two calls (they
-                        // touch no run loop and no per-thread AX state) but it is the same
-                        // untested "AX from a worker thread" premise recorded in
-                        // docs/13-unsafe-review.md #8.
-                        // Leak note: one more system-wide element per accessibility toggle.
-                        unsafe {
-                            // This prevents Fig from becoming unresponsive if one of the
-                            // applications we are tracking becomes unresponsive.
-                            AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25);
-                        }
+                        // Bounds unresponsive applications; the temporary AX reference is owned.
+                        UIElement::set_global_messaging_timeout(0.25);
                     }
                 });
 
@@ -746,7 +711,7 @@ impl PlatformState {
         // Evidence: `get_cursor_position` is reached from `refresh_window_position`, which runs
         // on the tao event loop (main thread) for `EditBufferChanged` and
         // `CaretPositionUpdateRequested`. The layout premises are recorded in
-        // docs/13-unsafe-review.md #11 and are inherited from the vendored
+        // docs/architecture.md (native thread ownership) and are inherited from the vendored
         // `accessibility-sys` bindings.
         let caret: CaretPosition = unsafe { get_caret_position(true) };
 
@@ -773,7 +738,7 @@ impl PlatformState {
     }
 
     pub async fn icon_lookup(asset: &AssetSpecifier<'_>) -> Option<ProcessedAsset> {
-        // SAFETY: UNPROVEN — see docs/13-unsafe-review.md #16.
+        // SAFETY: UNPROVEN — see docs/architecture.md (native thread ownership).
         // Operations: the five calls to `macos_utils::image::png_for_name` /
         // `png_for_path`, all unsafe fns.
         // Contract (see their `# Safety`): AppKit must be usable from the calling thread.

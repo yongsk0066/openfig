@@ -18,13 +18,13 @@ export const defaultSpecLoader = createSpecLoader({
 export const {
   importString,
   importSpecFromFile,
-  importFromPublicCDN,
+  importBundledSpec,
   importFromLocalhost,
   getCachedCLIVersion,
   getVersionFromFullFile,
   clearSpecIndex,
   parseSpecIndex,
-  publicSpecExists,
+  bundledSpecExists,
   isDiffVersionedSpec,
   preloadSpecs,
 } = defaultSpecLoader;

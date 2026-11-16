@@ -1,64 +1,37 @@
-# Fig
+# OpenFig
 
-A personal fork of the terminal autocomplete engine that started life as
-[Fig](https://github.com/withfig) and was later maintained by Amazon as the
-autocomplete half of the Amazon Q Developer CLI. It draws an IDE-style
-completion dropdown over your terminal as you type.
+A personal macOS terminal-autocomplete fork of [Amazon Q Developer CLI Autocomplete](https://github.com/aws/amazon-q-developer-cli-autocomplete), originally built by Fig. It shows completion suggestions beside the terminal cursor and inserts the selected text into zsh.
 
-This fork strips the project back to that one feature. There is no AI, no chat,
-no telemetry, no account, and no auto-update: the app never talks to the
-network. It targets macOS on Apple silicon only, is built and installed
-locally, and is not published anywhere.
+Targets Apple silicon and zsh. The installed app remains **Fig.app**, with CLI **q**, to preserve existing shell integration and macOS permissions; names are defined in `branding.env`.
 
-## What is in here
+AI/chat, account sign-in, product telemetry and automatic updates are removed. Completion specs are bundled locally. Specs and their generators execute commands with your user permissions; those commands may access the network. This is not a network sandbox. Developer mode can load specs from a local HTTP server.
 
-| Piece | Path |
+## Build and run
+
+Install Xcode Command Line Tools, Rust/rustup, Node (see `.node-version`), pnpm (see `package.json`), `just`, `jq` and `protoc` >= 3.12. Rust is pinned in `rust-toolchain.toml`. Full validation also needs
+`cargo-nextest` and nightly rustfmt; see the development guide below.
+
+```sh
+just all       # build and sign build/Fig.app
+just install   # install app, CLI link and zsh hooks
+```
+
+Grant Fig Accessibility access in System Settings → Privacy & Security → Accessibility. Open a new terminal tab and type `git `. Use `q doctor --all` to diagnose setup problems. Installation updates your shell startup files and registers the app's login launcher. See [development](docs/development.md) for signing, tests and installation details.
+
+## Code map
+
+| Area | Owner |
 | --- | --- |
-| Desktop app (WebView host, tray, window positioning) | `crates/fig_desktop/` |
-| CLI (`fig`) | `crates/fig_cli/` |
-| Shell integration (zsh) | `crates/fig_integrations/src/shell/` |
-| Autocomplete UI (React) | `packages/autocomplete-app/` |
-| Settings dashboard (React) | `packages/dashboard-app/` |
-| Parsers, API bindings, shared utilities | `packages/*/` |
-| IPC protocol | `proto/` |
+| Native event loop, WebViews, window positioning | `crates/fig_desktop/` |
+| CLI and zsh hook | `crates/fig_cli/`, `crates/fig_integrations/` |
+| Completion model and React UI | `packages/autocomplete-app/` |
+| Dependency-injected parser/spec loading | `packages/autocomplete-parser/` |
+| Settings UI | `packages/dashboard-app/` |
+| API transport and schemas | `packages/api-bindings/`, `proto/` |
+| Bundled completion specs | `specs/` |
 
-Every product name — the bundle, the binaries, the URL scheme, the data
-directory — is derived from `branding.env`, which is the single source of truth
-for the Rust constants, the `Info.plist` and the `just` recipes alike.
+Read [architecture](docs/architecture.md), [development](docs/development.md), or [latency diagnostics](docs/latency.md). There is no packaged release or automatic update channel; build locally.
 
-## Building
+## License
 
-Requirements: macOS on Apple silicon, Xcode command line tools, Rust (the
-channel is pinned by `rust-toolchain.toml`), Node >= 26, pnpm (the version
-pinned by `package.json`), `protoc` >= 3.12, and `just`.
-
-```sh
-just deps       # verify the toolchain
-just all        # specs + web + rust + bundle + sign  ->  build/Fig.app
-just install    # copy to /Applications, link ~/.local/bin, install shell hooks
-```
-
-Then grant Accessibility permission to `/Applications/Fig.app` in System
-Settings → Privacy & Security → Accessibility, open a new terminal window, and
-start typing a command.
-
-Other useful recipes:
-
-```sh
-just lint       # clippy, rustfmt, oxlint, oxfmt
-just test       # cargo nextest, turbo typecheck, vitest
-just dev-web    # vite dev servers for the two web apps
-just dev        # run the desktop binary against those dev servers
-just clean
-```
-
-## Credits and license
-
-This is a fork of
-[aws/amazon-q-developer-cli-autocomplete](https://github.com/aws/amazon-q-developer-cli-autocomplete),
-which is itself derived from the autocomplete engine originally built by Fig.
-All of the original work is theirs; the changes here are subtractive.
-
-Licensed under either of [Apache License, Version 2.0](LICENSE.APACHE) or
-[MIT license](LICENSE.MIT) at your option. See [NOTICE](NOTICE) for the
-attribution and for the licenses of the vendored third-party code.
+Project code is available under [MIT](LICENSE.MIT) or [Apache-2.0](LICENSE.APACHE). Original upstream notices and vendored component licenses are retained; see [NOTICE](NOTICE). This is an independent fork, not an Amazon or Fig supported product.

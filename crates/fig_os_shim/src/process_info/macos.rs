@@ -75,7 +75,7 @@ pub(crate) fn exe(_: Weak<Context>, pid: &RawPid) -> Option<PathBuf> {
     // Robustness note (not a safety defect): the `match` below treats every non-zero
     // `ret` as a length. If `proc_pidpath` ever returned a negative value, `len as usize`
     // would be huge and the slice index would *panic* — a bounds check, not UB. See
-    // docs/13-unsafe-review.md, adjacent smells.
+    // docs/architecture.md (native thread ownership), adjacent smells.
     let ret = unsafe { nix::libc::proc_pidpath(pid, buffer_ptr, buffer_size) };
     match ret {
         0 => None,

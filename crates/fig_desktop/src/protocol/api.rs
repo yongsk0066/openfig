@@ -248,7 +248,7 @@ mod tests {
     }
 
     // What the desktop answers for the requests only it can handle, recorded before the dispatch
-    // was flattened (docs/15-architecture-study.md §2.3 B); each must stay byte identical.
+    // was flattened; each must stay byte identical.
     // `tests/fig-api/fig-api-mock/tests/dispatch.rs` records every variant through the shared
     // handlers with a sandboxed `HOME`. Only requests that cannot change the machine are sent
     // here: no session exists, so nothing reaches a shell, and `NoEventLoop` refuses every

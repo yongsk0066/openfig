@@ -1,9 +1,8 @@
 //! Every `ClientOriginatedMessage` request variant through `fig-api-mock`, recorded byte for byte.
 //!
-//! This is the safety net for reshaping the request dispatch (docs/15-architecture-study.md §2.3
-//! B): the snapshots were recorded before the refactor, and the refactor is only correct if every
-//! one of them still matches. Each transcript line pairs the base64 of the encoded
-//! `ServerOriginatedMessage` (the bytes the webview receives) with its decoded form for reading.
+//! Request dispatch must preserve these wire snapshots. Each transcript line pairs the base64 of
+//! the encoded `ServerOriginatedMessage` (the bytes the webview receives) with its decoded form for
+//! reading.
 //!
 //! The mock binary is run as a child process rather than called in process, so that each case can
 //! get its own `HOME`: the settings file, the state database and the history database all live

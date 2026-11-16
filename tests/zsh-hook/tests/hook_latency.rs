@@ -1,4 +1,4 @@
-//! Stage 0 latency benchmark, zsh hook path (docs/16-latency.md): `key→hook` from the write to the
+//! Shell latency benchmark (docs/latency.md): `key→hook` from the write to the
 //! pty master until the edit buffer is decoded by the desktop's server (`fig_shell_ipc::hook`,
 //! handler entry), `key→echo` until the first output. The terminal talks to zsh directly, and
 //! `fig.zsh` reports from `zle-line-pre-redraw` over `hook.sock`. `bare echo` is the same keys into

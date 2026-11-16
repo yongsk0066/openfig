@@ -1,5 +1,4 @@
-//! The zsh hook path (`fig.zsh` + `fig_shell_ipc::hook`), docs/15-architecture-study.md §4 stage
-//! 3.
+//! Real-shell coverage for `fig.zsh` and `fig_shell_ipc::hook`.
 //!
 //! Every test runs `/bin/zsh -i` in a real pty, through `init zsh pre`/`post` as a user's rc file
 //! would, against a daemon on `hook.sock` (`zsh_hook_tests::hook`).

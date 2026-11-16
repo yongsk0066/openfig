@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// All supported shells. zsh is the only one since bash support ended with the pty binary
-/// (docs/15-architecture-study.md §4 stage 4): the shell integration is `fig.zsh`.
+/// : the shell integration is `fig.zsh`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "camelCase")]
 pub enum Shell {

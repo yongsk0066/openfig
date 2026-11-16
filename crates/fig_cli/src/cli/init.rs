@@ -28,9 +28,7 @@ const SHELL_INTEGRATIONS_ENABLED_STATE_KEY: &str = "shell-integrations.enabled";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum InitShell {
     Zsh,
-    /// Prints nothing. bash support ended with the pty binary (docs/15-architecture-study.md §4
-    /// stage 4), but the blocks it put in `~/.bashrc` and `~/.profile` still run `init bash` in
-    /// every new bash until an uninstall removes them, so this has to stay a silent success.
+    /// Silent compatibility entry for legacy bash startup blocks; uninstall removes them.
     #[value(hide = true)]
     Bash,
 }

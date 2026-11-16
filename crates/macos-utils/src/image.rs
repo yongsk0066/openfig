@@ -32,8 +32,8 @@ use objc2_foundation::{
 /// will interpret and objects it will message. This function always passes `None`, so that
 /// obligation is discharged internally — see the proof below.
 ///
-/// See docs/13-unsafe-review.md #16 for the thread question, which is *not* discharged here:
-/// `fig_desktop`'s `icon_lookup` calls into this from a tokio worker thread.
+/// See docs/architecture.md (native thread ownership) for the thread question, which is *not*
+/// discharged here: `fig_desktop`'s `icon_lookup` calls into this from a tokio worker thread.
 unsafe fn resize_image(image: &NSImage, size: NSSize) -> Option<Retained<NSImage>> {
     let rect = NSRect {
         origin: NSPoint { x: 0.0, y: 0.0 },
@@ -65,8 +65,9 @@ unsafe fn resize_image(image: &NSImage, size: NSSize) -> Option<Retained<NSImage
 /// # Safety
 ///
 /// The caller must ensure that AppKit may be used from the calling thread — see the `# Safety`
-/// section of [`resize_image`] and docs/13-unsafe-review.md #16. There is no pointer, aliasing
-/// or ownership obligation: every other operation in this function is a safe objc2 binding.
+/// section of [`resize_image`] and docs/architecture.md (native thread ownership). There is no
+/// pointer, aliasing or ownership obligation: every other operation in this function is a safe
+/// objc2 binding.
 pub unsafe fn png_for_name(name: &str) -> Option<Vec<u8>> {
     let shared = NSWorkspace::sharedWorkspace();
 
@@ -81,7 +82,7 @@ pub unsafe fn png_for_name(name: &str) -> Option<Vec<u8>> {
 /// # Safety
 ///
 /// The caller must ensure that AppKit may be used from the calling thread — see the `# Safety`
-/// section of [`resize_image`] and docs/13-unsafe-review.md #16.
+/// section of [`resize_image`] and docs/architecture.md (native thread ownership).
 ///
 /// Note the inverted branch below: the `path.exists()` arm uses `iconForFile`, and the *else*
 /// arm (path does not exist) calls `std::fs::metadata`, which will also fail. That is a logic
@@ -106,15 +107,10 @@ pub unsafe fn png_for_path(path: &Path) -> Option<Vec<u8>> {
     convert_image(&image)
 }
 
-fn convert_image(image: &NSImage) -> Option<Vec<u8>> {
-    // SAFETY:
-    // Operation: `resize_image`, an unsafe fn.
-    // Contract (see its `# Safety`): AppKit usable from this thread.
-    // Evidence: UNPROVEN — see docs/13-unsafe-review.md #16. `convert_image` is a *safe* fn, so
-    // it cannot place the thread obligation on its own callers; it silently inherits whatever
-    // thread `png_for_name` / `png_for_path` were called on. Those are `unsafe fn` and do carry
-    // the obligation, and they are the only callers, so the contract is not actually lost — but
-    // this frame is where it stops being expressible in the type system.
+/// # Safety
+/// AppKit must be usable on this thread, as required by `resize_image`.
+unsafe fn convert_image(image: &NSImage) -> Option<Vec<u8>> {
+    // SAFETY: This function forwards resize_image's thread contract to its callers.
     let image = unsafe {
         resize_image(image, NSSize {
             width: 32.0,

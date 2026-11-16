@@ -1,9 +1,4 @@
 //! The macOS platform layer.
-//!
-//! `PlatformState` used to be an `Arc<PlatformStateImpl>` newtype whose six methods forwarded to
-//! `self.0` verbatim, with a `Native`/`Platform` naming split that only `PlatformBoundEvent`
-//! still used. There is one platform; the impl *is* the state.
-
 use macos_utils::window_server::ApplicationSpecifier;
 
 use crate::webview::WindowId;

@@ -44,7 +44,7 @@ export type SpecLoaderPorts = {
 export function createSpecCatalogCaches() {
   return {
     stringImportCache: new LruCache<string, SpecFileImport>(64),
-    publicSpecsRequest: undefined as
+    specIndexRequest: undefined as
       | Promise<{ completions: Set<string>; diffVersionedSpecs: Set<string> }>
       | undefined,
   };
@@ -81,10 +81,7 @@ export function createSpecLoader(
     return result;
   };
 
-  /*
-   * Deprecated: eventually will just use importLocalSpec above
-   * Load a spec import("{path}/{name}")
-   */
+  // Local specs support both name.js and name/index.js layouts.
   async function importSpecFromFile(
     name: string,
     path: string,
@@ -111,11 +108,11 @@ export function createSpecLoader(
   }
 
   // TODO: this is a problem for diff-versioned specs
-  async function importFromPublicCDN<T = SpecFileImport>(name: string): Promise<T> {
+  async function importBundledSpec<T = SpecFileImport>(name: string): Promise<T> {
     return withTimeout(20000, importModule(`spec://localhost/${name}.js`) as Promise<T>);
   }
 
-  async function jsonFromPublicCDN(path: string): Promise<unknown> {
+  async function readBundledJson(path: string): Promise<unknown> {
     return readJson(`spec://localhost/${path}.json`);
   }
 
@@ -162,46 +159,44 @@ export function createSpecLoader(
     }
   }
 
-  // TODO: cache this request using SWR strategy
   function clearSpecIndex() {
-    catalog.publicSpecsRequest = undefined;
+    catalog.specIndexRequest = undefined;
   }
 
-  const createPublicSpecsRequest = async () => {
-    if (catalog.publicSpecsRequest === undefined) {
-      catalog.publicSpecsRequest = jsonFromPublicCDN("index")
+  const loadSpecIndex = async () => {
+    if (catalog.specIndexRequest === undefined) {
+      catalog.specIndexRequest = readBundledJson("index")
         .then(parseSpecIndex)
         .then((index) => ({
           completions: new Set(index.completions),
           diffVersionedSpecs: new Set(index.diffVersionedCompletions),
         }))
         .catch(() => {
-          catalog.publicSpecsRequest = undefined;
+          catalog.specIndexRequest = undefined;
           return { completions: new Set(), diffVersionedSpecs: new Set() };
         });
     }
-    return catalog.publicSpecsRequest;
+    return catalog.specIndexRequest;
   };
 
-  async function publicSpecExists(name: string): Promise<boolean> {
-    const { completions } = await createPublicSpecsRequest();
+  async function bundledSpecExists(name: string): Promise<boolean> {
+    const { completions } = await loadSpecIndex();
     return completions.has(name);
   }
 
   async function isDiffVersionedSpec(name: string): Promise<boolean> {
-    const { diffVersionedSpecs } = await createPublicSpecsRequest();
+    const { diffVersionedSpecs } = await loadSpecIndex();
     return diffVersionedSpecs.has(name);
   }
 
   async function preloadSpecs(): Promise<SpecFileImport[]> {
     return Promise.all(
       MOST_USED_SPECS.map(async (name) => {
-        // TODO: refactor everything to allow the correct diff-versioned specs to be loaded
-        // too, now we are only loading the index
+        // Diff-versioned specs preload their index; version selection happens on demand.
         if (await isDiffVersionedSpec(name)) {
-          return importFromPublicCDN(`${name}/index`);
+          return importBundledSpec(`${name}/index`);
         }
-        return importFromPublicCDN(name);
+        return importBundledSpec(name);
       }).map((promise) => promise.catch((e) => e)),
     );
   }
@@ -209,18 +204,18 @@ export function createSpecLoader(
   return {
     importString,
     importSpecFromFile,
-    importFromPublicCDN,
+    importBundledSpec,
     importFromLocalhost,
     getCachedCLIVersion,
     getVersionFromFullFile,
     clearSpecIndex,
     parseSpecIndex,
-    publicSpecExists,
+    bundledSpecExists,
     isDiffVersionedSpec,
     preloadSpecs,
     clear() {
       stringImportCache.clear();
-      catalog.publicSpecsRequest = undefined;
+      catalog.specIndexRequest = undefined;
       cachedCLIVersions.clear();
       versionRequests.clear();
     },

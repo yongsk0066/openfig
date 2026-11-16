@@ -17,7 +17,10 @@ stage names, numeric timing/counts and session/revision identifiers, not command
 text or environment values. WebView batches are capped at 512 samples/128 KiB and
 validated by the native receiver; in-memory snapshots are bounded. Timing logs
 use the application's existing logger, which rotates oversized files at startup.
-Use short diagnostic sessions; restart without the flag to stop.
+There is no continuous file-size cap. Use short diagnostic sessions; restart without the flag to stop.
+
+Use `just latency-report CAPTURE.log REPORT_DIRECTORY` or the Python command above.
+The previous order-based `latency-trace` tool has been retired.
 
 Correlate by session and input revision. `input-to-current-suggestions-dom` requires
 current parsed input, visible UI state and a nonempty list. A first DOM commit may

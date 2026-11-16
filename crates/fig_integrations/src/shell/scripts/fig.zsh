@@ -1,4 +1,4 @@
-# {{PRODUCT_NAME}} zsh hook (docs/15-architecture-study.md §3.3): zsh reports its own edit buffer over a
+# {{PRODUCT_NAME}} zsh hook: zsh reports its own edit buffer over a
 # unix socket. No process is spawned, every hook returns 0, and a socket failure disarms the hook,
 # leaving a plain shell. Wire format and the reasons
 # behind it: crates/fig_shell_ipc/src/hook/wire.rs.

@@ -1,4 +1,4 @@
-//! The zsh hook path in a real pty (docs/15-architecture-study.md §3.3, stage 3).
+//! The zsh hook path in a real pty.
 //!
 //! [`HookShell`] runs `/bin/zsh -i` with a throwaway `HOME` and `ZDOTDIR` whose `.zshrc` loads this
 //! build's integration through `init zsh pre` / `init zsh post`, so the shell sources `fig.zsh`

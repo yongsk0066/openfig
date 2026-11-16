@@ -1,5 +1,5 @@
 //! `hook.sock`: sessions of zsh shells that report through `fig.zsh`
-//! (docs/15-architecture-study.md §3.3).
+//! .
 //!
 //! Each connection becomes a [`ShellSession`] in [`ShellSessions`], and its lines become
 //! [`HookRequest`]s handed to [`dispatch_hook`]. What the desktop sends a session

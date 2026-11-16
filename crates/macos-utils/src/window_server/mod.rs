@@ -86,8 +86,7 @@ use crate::util::notification_center::get_app_from_notification;
 
 /// System processes that never host a shell. Our own bundle id is *not* here: it is
 /// injected through [`WindowServer::new`] so this crate stays independent of `fig_util` and the
-/// list stays testable. (The old comment claimed a dependency cycle — `fig_util` does not
-/// depend on `macos-utils`, on macOS or anywhere else.)
+/// list stays testable.
 const BLOCKED_BUNDLE_IDS: &[&str] = &[
     "com.apple.ViewBridgeAuxiliary",
     "com.apple.notificationcenterui",
@@ -132,14 +131,7 @@ pub struct AccessibilityCallbackData {
     sender: Sender<WindowServerEvent>,
 }
 
-/// The bundle id of a running application, or `None` when it has no `Info.plist`.
-///
-/// This function is safe: `NSRunningApplication::bundleIdentifier` and `NSString::to_string`
-/// are both safe in objc2-app-kit 0.3 / objc2-foundation 0.3 (the generated binding carries no
-/// `unsafe`, and `Retained<NSString>` keeps the string alive across `to_string`). It used to be
-/// declared `unsafe fn` with no `# Safety` section, i.e. an unsafe contract with no content;
-/// per the review skill that is a defect, not a precaution. See docs/13-unsafe-review.md #9.
-/// `AXError` is a bare `i32`; name the ones HIServices documents so a log line is readable.
+/// Name known HIServices errors while retaining the numeric value for unknown errors.
 fn ax_error_name(err: AXError) -> String {
     let name = match err {
         e if e == kAXErrorFailure => "kAXErrorFailure",
@@ -156,6 +148,7 @@ fn ax_error_name(err: AXError) -> String {
     format!("{name}({err})")
 }
 
+/// The bundle identifier, or `None` when the application has no Info.plist.
 fn app_bundle_id(app: &NSRunningApplication) -> Option<String> {
     app.bundleIdentifier().map(|s| s.to_string())
 }
@@ -165,31 +158,11 @@ pub struct WindowServer {
     observer: Retained<ObserverClass>,
 }
 
-// SAFETY: UNPROVEN — see docs/13-unsafe-review.md #3.
-//
-// Proposition asserted: `WindowServer` may be moved between threads.
-//
-// This is still load-bearing, but much less so than it was: the value now lives in
-// `fig_desktop::platform::macos::PlatformStateImpl::window_server`, which is reached through an
-// `Arc<PlatformState>` that crosses task boundaries, so `Send` is required. `Sync` is no longer
-// asserted — it was only needed while the value sat in a `static`.
-//
-// What actually has to hold, field by field:
-// - `observer: Retained<ObserverClass>`. `Retained<T>` is `Send` iff `T` is; the
-//   `define_class!`-generated `ObserverClass` is not, because its `Ivars` hold a `*mut c_void`.
-//   Moving the `Retained` across threads only performs `objc_retain`/`objc_release`, which Apple
-//   documents as atomic, so the *refcount* is race-free.
-// - `_inner: Pin<Box<WindowServerInner>>`. Its `DashMap<_, AXObserver<_>>` is `Send` only through
-//   `AXObserver`'s own `unsafe impl`. Dropping the map off the run-loop thread is a use-after-free;
-//   see docs/13-unsafe-review.md #2.
-// - The `ObserverClass` selectors reconstruct `&mut WindowServerInner` from the raw `handler` ivar.
-//   `_inner` is private and never read through a `&WindowServer`, so no aliasing `&mut` can be
-//   formed.
-//
-// Missing premise: nothing constrains `WindowServer` to the thread whose run loop the AX
-// sources were attached to. Today every construction, mutation and destruction happens on the
-// tao main thread (the `PlatformBoundEvent` handler runs there), so no off-thread access is
-// reachable. That is a project invariant nothing enforces, not a proof.
+// SAFETY: Requires creation, mutation and drop on the owning main run loop. PlatformState
+// stores this behind a mutex, but only main-loop event handlers access it. The mutex alone
+// does not enforce thread affinity: off-thread drop could race a callback using the inner
+// state. Move ownership into main-loop-only state to encode this invariant in the type system.
+// See docs/architecture.md (native thread ownership).
 unsafe impl Send for WindowServer {}
 
 impl std::fmt::Debug for WindowServer {
@@ -403,32 +376,17 @@ define_class!(
             let this = this.set_ivars(Ivars {
                 handler
             });
-            // AXUIElementCreateApplication returns an owned reference; OwnedAxRef balances it.
-        // Notification objects are checked before using NSWorkspace methods.
-        unsafe { msg_send![super(this), init] }
+            // SAFETY: NSObject initialization consumes this fresh allocated receiver.
+            unsafe { msg_send![super(this), init] }
         }
 
         #[unsafe(method(didActivateApplication:))]
         fn did_activate_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler.cast::<WindowServerInner>();
-            // SAFETY:
-            // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
-            // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
-            // Contract (Rust Reference, "validity" and reference creation): the pointer must be
-            // non-null, aligned for `WindowServerInner`, point to an initialized value inside a
-            // live allocation, be derived from a mutable-capable provenance, and no other
-            // reference to that value may be live for the lifetime of the `&mut`.
-            // Evidence:
-            // - Non-nullness, alignment, initialization, liveness and write provenance are the
-            //   `Ivars::handler` safety invariant, established by
-            //   `WindowServerInner::new_with_observer` and preserved because `WindowServer`
-            //   unregisters this observer before dropping `_inner`.
-            // - Exclusivity is the MODULE INVARIANT (single-borrow) on
-            //   `WindowServerInner::new_with_observer`: `WindowServer::_inner` is private and
-            //   never borrowed after `WindowServer::new` returns, and the four selectors run
-            //   serially on the main run loop, so at most one `&mut` exists at a time.
-            // Postcondition: the `&mut` is dropped at the end of this method, before returning
-            // to AppKit, so it cannot overlap the next selector invocation.
+            // SAFETY: new_with_observer pins the live handler allocation with mutable
+            // provenance. Main-run-loop selectors are serialized with owner access and drop,
+            // so this borrow is exclusive and ends before returning to AppKit. The observer
+            // is unregistered before its handler is dropped (Ivars::handler invariant).
             let inner = unsafe { &mut *inner };
             inner.did_activate_application(notif);
         }
@@ -436,24 +394,10 @@ define_class!(
         #[unsafe(method(activeSpaceChanged:))]
         fn active_space_changed(&self, notif: &NSNotification) {
             let inner = self.ivars().handler.cast::<WindowServerInner>();
-            // SAFETY:
-            // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
-            // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
-            // Contract (Rust Reference, "validity" and reference creation): the pointer must be
-            // non-null, aligned for `WindowServerInner`, point to an initialized value inside a
-            // live allocation, be derived from a mutable-capable provenance, and no other
-            // reference to that value may be live for the lifetime of the `&mut`.
-            // Evidence:
-            // - Non-nullness, alignment, initialization, liveness and write provenance are the
-            //   `Ivars::handler` safety invariant, established by
-            //   `WindowServerInner::new_with_observer` and preserved because `WindowServer`
-            //   unregisters this observer before dropping `_inner`.
-            // - Exclusivity is the MODULE INVARIANT (single-borrow) on
-            //   `WindowServerInner::new_with_observer`: `WindowServer::_inner` is private and
-            //   never borrowed after `WindowServer::new` returns, and the four selectors run
-            //   serially on the main run loop, so at most one `&mut` exists at a time.
-            // Postcondition: the `&mut` is dropped at the end of this method, before returning
-            // to AppKit, so it cannot overlap the next selector invocation.
+            // SAFETY: new_with_observer pins the live handler allocation with mutable
+            // provenance. Main-run-loop selectors are serialized with owner access and drop,
+            // so this borrow is exclusive and ends before returning to AppKit. The observer
+            // is unregistered before its handler is dropped (Ivars::handler invariant).
             let inner = unsafe { &mut *inner };
             inner.active_space_changed(notif);
         }
@@ -461,24 +405,10 @@ define_class!(
         #[unsafe(method(didTerminateApplication:))]
         fn did_terminate_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler.cast::<WindowServerInner>();
-            // SAFETY:
-            // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
-            // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
-            // Contract (Rust Reference, "validity" and reference creation): the pointer must be
-            // non-null, aligned for `WindowServerInner`, point to an initialized value inside a
-            // live allocation, be derived from a mutable-capable provenance, and no other
-            // reference to that value may be live for the lifetime of the `&mut`.
-            // Evidence:
-            // - Non-nullness, alignment, initialization, liveness and write provenance are the
-            //   `Ivars::handler` safety invariant, established by
-            //   `WindowServerInner::new_with_observer` and preserved because `WindowServer`
-            //   unregisters this observer before dropping `_inner`.
-            // - Exclusivity is the MODULE INVARIANT (single-borrow) on
-            //   `WindowServerInner::new_with_observer`: `WindowServer::_inner` is private and
-            //   never borrowed after `WindowServer::new` returns, and the four selectors run
-            //   serially on the main run loop, so at most one `&mut` exists at a time.
-            // Postcondition: the `&mut` is dropped at the end of this method, before returning
-            // to AppKit, so it cannot overlap the next selector invocation.
+            // SAFETY: new_with_observer pins the live handler allocation with mutable
+            // provenance. Main-run-loop selectors are serialized with owner access and drop,
+            // so this borrow is exclusive and ends before returning to AppKit. The observer
+            // is unregistered before its handler is dropped (Ivars::handler invariant).
             let inner = unsafe { &mut *inner };
             inner.did_terminate_application(notif);
         }
@@ -486,24 +416,10 @@ define_class!(
         #[unsafe(method(didLaunchApplication:))]
         fn did_launch_application(&self, notif: &NSNotification) {
             let inner = self.ivars().handler.cast::<WindowServerInner>();
-            // SAFETY:
-            // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
-            // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
-            // Contract (Rust Reference, "validity" and reference creation): the pointer must be
-            // non-null, aligned for `WindowServerInner`, point to an initialized value inside a
-            // live allocation, be derived from a mutable-capable provenance, and no other
-            // reference to that value may be live for the lifetime of the `&mut`.
-            // Evidence:
-            // - Non-nullness, alignment, initialization, liveness and write provenance are the
-            //   `Ivars::handler` safety invariant, established by
-            //   `WindowServerInner::new_with_observer` and preserved because `WindowServer`
-            //   unregisters this observer before dropping `_inner`.
-            // - Exclusivity is the MODULE INVARIANT (single-borrow) on
-            //   `WindowServerInner::new_with_observer`: `WindowServer::_inner` is private and
-            //   never borrowed after `WindowServer::new` returns, and the four selectors run
-            //   serially on the main run loop, so at most one `&mut` exists at a time.
-            // Postcondition: the `&mut` is dropped at the end of this method, before returning
-            // to AppKit, so it cannot overlap the next selector invocation.
+            // SAFETY: new_with_observer pins the live handler allocation with mutable
+            // provenance. Main-run-loop selectors are serialized with owner access and drop,
+            // so this borrow is exclusive and ends before returning to AppKit. The observer
+            // is unregistered before its handler is dropped (Ivars::handler invariant).
             let inner = unsafe { &mut *inner };
             inner.did_launch_application(notif);
         }
@@ -513,17 +429,10 @@ define_class!(
 );
 
 impl ObserverClass {
-    /// Allocate an observer whose `handler` ivar is `handler`.
-    ///
-    /// # Invariants
-    ///
-    /// This is a *safe* constructor that stores an unchecked raw pointer, so it silently
-    /// requires callers to satisfy the `Ivars::handler` safety invariant. It should not be
-    /// `pub`: the only caller that can establish that invariant is
-    /// `WindowServerInner::new_with_observer`. Narrowing the visibility is left to the
-    /// visibility pass so this review touches no `pub` markers.
-    /// See docs/13-unsafe-review.md #10.
-    fn new(handler: *mut c_void) -> Retained<Self> {
+    /// # Safety
+    /// `handler` must satisfy the pinned lifetime and exclusive callback access invariants
+    /// on `Ivars::handler`; keep it alive until the observer is unregistered and dropped.
+    unsafe fn new(handler: *mut c_void) -> Retained<Self> {
         // SAFETY:
         // Operation: `msg_send![Self::alloc(), initWithHandler:handler]`.
         // Contract (objc2 0.6 `msg_send!`): the selector must exist on the receiver's class,
@@ -624,10 +533,11 @@ impl WindowServerInner {
         // selectors reconstruct this pointer as `&mut WindowServerInner`. The Rust Reference's
         // aliasing rules forbid writing through a pointer whose provenance was derived from a
         // shared reference, so the mutable borrow has to happen here, at the derivation point.
-        // See docs/13-unsafe-review.md #4.
+        // See docs/architecture.md (native thread ownership).
         // Postcondition: `handler` satisfies the `Ivars::handler` safety invariant.
         let handler = std::ptr::from_mut(unsafe { Pin::get_unchecked_mut(pin.as_mut()) }).cast::<c_void>();
-        let r = ObserverClass::new(handler);
+        // SAFETY: handler points into pin, whose owner unregisters the observer before drop.
+        let r = unsafe { ObserverClass::new(handler) };
         (pin, r)
     }
 
@@ -641,7 +551,7 @@ impl WindowServerInner {
     ///    attached to, and on which they will later be dropped — in this crate, the tao main
     ///    thread. `AXObserver::create` attaches the source to `CFRunLoopGetCurrent()` and
     ///    `AXObserver::drop` removes it from `CFRunLoopGetCurrent()`; a mismatch is a
-    ///    use-after-free (see docs/13-unsafe-review.md #2);
+    ///    use-after-free (see docs/architecture.md (native thread ownership));
     /// 2. `application_ax_callback` remains the callback registered for the observers created here,
     ///    since it reinterprets the `refcon` as `*mut AccessibilityCallbackData`.
     ///
@@ -685,11 +595,7 @@ impl WindowServerInner {
             return;
         }
 
-        // Re-registering an already-tracked app is pure waste: an `AXObserverCreate`, eight
-        // `AXObserverAddNotification`s and two run-loop source swaps per app activation, and
-        // since `AXObserver::drop` releases neither the observer nor its subscriptions
-        // (docs/13-unsafe-review.md #2) every one of those leaked. The activation branch below
-        // still runs, because that is what the notification is actually for.
+        // Reuse existing subscriptions, but still refresh focus for activation events.
         let already_registered = self.observers.contains_key(&key);
         if already_registered && !from_activation {
             debug!("app {} is already registered", key.bundle_id);
@@ -703,19 +609,14 @@ impl WindowServerInner {
         // AX calls reject with `kAXErrorInvalidUIElement`.
         // Postcondition: `ax_ref` is a live element that this frame owns one reference to.
         //
-        // That `+1` used to be leaked on every path, deliberately: it was the only thing
-        // keeping `AXObserver`'s unretained `ax_ref` field alive ("soundness by leak",
-        // docs/13-unsafe-review.md #6). `AXObserver::create` now takes its own reference, so
-        // the guard below can balance this one on every exit. The `UIElement::from` conversions
-        // follow the *Get* rule and retain independently.
-        // `owned_ax_ref` must stay in scope until the end of this function: it is what releases
-        // the reference, and `ax_ref` below is a plain copy of the pointer.
+        // Keep the Create-rule reference alive through registration. AXObserver::create and
+        // UIElement::from_borrowed retain independently; this guard releases the original.
         let owned_ax_ref = OwnedAxRef(AXUIElementCreateApplication(pid));
         let ax_ref = owned_ax_ref.0;
 
         if from_activation {
-            // In Swift had 0.25s delay before this...?
-            let elem = UIElement::from(ax_ref);
+            // Preserve the activation grace period before querying the application window.
+            let elem = UIElement::from_borrowed(ax_ref);
             let sender = self.sender.clone();
             let app = key.clone();
             // A stored `Handle`, not `tokio::spawn`: this runs inside an `objc2 define_class!`
@@ -738,28 +639,15 @@ impl WindowServerInner {
         }
 
         if self.xterm_bundle_ids.contains(&key.bundle_id.as_str()) {
-            UIElement::from(ax_ref).enable_screen_reader_accessibility().ok();
+            UIElement::from_borrowed(ax_ref)
+                .enable_screen_reader_accessibility()
+                .ok();
         }
 
         let bundle_id = key.bundle_id.as_str();
-        // SAFETY:
-        // Operations: `AXObserver::create` and, in the loop below, `AXObserver::subscribe`.
-        // Contract of `create` (see its `# Safety` section): (1) `ax_ref` outlives the
-        // observer; (2) the callback reinterprets `refcon` as `*mut T`; (3) create/callback/
-        // drop share one run loop; (4) no AX-trust precondition.
-        // Evidence:
-        // - (1) holds by the leak note above: the `+1` from `AXUIElementCreateApplication` is never
-        //   released, so `ax_ref` outlives every observer.
-        // - (2) `T` is instantiated at `AccessibilityCallbackData` and the callback is
-        //   `application_ax_callback`, whose first act is `&mut *(refcon as *mut
-        //   AccessibilityCallbackData)`. The two match by construction; this pairing is the whole
-        //   reason `create` is unsafe.
-        // - (3) is this function's own `# Safety` clause 1, discharged by its callers.
-        // - Contract of `subscribe`: `ax_event` must be a HIServices notification name.
-        //   `TRACKED_NOTIFICATIONS` contains only `kAX*Notification` constants re-exported by
-        //   `accessibility_sys`.
-        // Postcondition: on success the observer is stored in `self.observers`, which owns it
-        // until `deregister`/`deregister_all` drops it — on this same thread, by clause 1.
+        // SAFETY: owned_ax_ref keeps the AX element live during create, which retains it.
+        // Callback data has exactly the type application_ax_callback expects. Registration,
+        // callbacks and teardown share the owning run loop; subscribe receives live elements.
         let mut observer = match AXObserver::create(
             key.pid,
             ax_ref,
@@ -786,7 +674,7 @@ impl WindowServerInner {
         // `fig_desktop`'s `Initialize`, a terminal busy repainting for a quarter second at the
         // moment it was activated answered `kAXErrorCannotComplete` and then stayed untracked
         // for the rest of the session: no `WindowDestroyed`, no focused window for the frame
-        // watch (2026-09-17, Terminal.app under heavy output, docs/11-machine-state.md #4).
+        // watch (2026-09-17, Terminal.app under heavy output, the terminal focus recovery path).
         // Now a notification the target does not support is skipped, any other failure is
         // logged with its code, and the app is left unregistered so `ensure_frontmost_tracked`
         // retries it on use.
@@ -860,10 +748,11 @@ impl WindowServerInner {
         // Operation: the `AXUIElementCreateApplication` FFI call.
         // Contract (HIServices): takes a `pid_t`, returns a `+1` `AXUIElementRef` (Create rule),
         // no pointer preconditions.
-        // Postcondition: `owned` releases that `+1` at the end of this scope; `UIElement::from`
-        // follows the Get rule and retains independently, so `elem` outlives `owned` safely.
+        // Postcondition: `owned` releases that `+1` at the end of this scope;
+        // `UIElement::from_borrowed` follows the Get rule and retains independently, so `elem`
+        // outlives `owned` safely.
         let owned = OwnedAxRef(unsafe { AXUIElementCreateApplication(key.pid) });
-        let elem = UIElement::from(owned.0);
+        let elem = UIElement::from_borrowed(owned.0);
         match elem.focused_window() {
             Ok(window) => {
                 if let Err(e) = self.sender.send(WindowServerEvent::FocusChanged { window, app: key }) {
@@ -935,28 +824,9 @@ impl WindowServerHandler for WindowServerInner {
     }
 
     fn active_space_changed(&mut self, notif: &NSNotification) {
-        // SAFETY:
-        // Operations, in order: (1) `Retained::<AnyObject>::cast` to `Retained<NSWorkspace>`;
-        // (2) `AXUIElementCreateApplication`; (3) `UIElement::from(AXUIElementRef)`.
-        //
-        // (1) Contract (objc2 0.6 `Retained::cast`, deprecated alias of `cast_unchecked`):
-        // "you must ensure that the object can be reinterpreted as the given type" — i.e. the
-        // receiver must actually be an instance of `NSWorkspace` (or a subclass).
-        // Evidence: AppKit documents the `object` of
-        // `NSWorkspaceActiveSpaceDidChangeNotification` as the shared `NSWorkspace`, and this
-        // selector is only registered for that notification name in `WindowServer::new`.
-        // UNPROVEN-BUT-LIKELY: the premise is an Apple documentation lemma about a value that
-        // crosses an FFI boundary, not something the type system or a runtime check
-        // establishes. objc2 0.6 offers the checked `Retained::downcast` for exactly this; the
-        // crate-level `#![allow(deprecated)]` is what hides the deprecation warning steering us
-        // there. See docs/13-unsafe-review.md #5.
-        //
-        // (2) Contract of `AXUIElementCreateApplication`: none beyond taking a `pid_t`;
-        // returns `+1` (Create rule). Leak note: that `+1` is never released here either.
-        //
-        // (3) Contract of `UIElement::from`: a live, non-null `AXUIElementRef`.
-        // Evidence: POSTCONDITION of (2) — `AXUIElementCreateApplication` never returns NULL
-        // for a well-formed pid, and `wrap_under_get_rule` asserts non-null in any case.
+        // SAFETY: The notification object is checked with downcast. OwnedAxRef owns the
+        // Create-rule AX application reference while from_borrowed takes a separate retain;
+        // both references are released after the query.
         unsafe {
             let Some(object) = notif.object() else { return };
             let Ok(workspace) = object.downcast::<NSWorkspace>() else {
@@ -967,7 +837,7 @@ impl WindowServerHandler for WindowServerInner {
             };
             let pid = app.processIdentifier();
             let ax_app = OwnedAxRef(AXUIElementCreateApplication(pid));
-            let app_elem: UIElement = ax_app.0.into();
+            let app_elem = UIElement::from_borrowed(ax_app.0);
             if let Ok(window) = app_elem.focused_window() {
                 let fullscreen = window.is_fullscreen();
                 if let Ok(is_fullscreen) = fullscreen
@@ -1036,11 +906,6 @@ impl WindowServerHandler for WindowServerInner {
 ///    AccessibilityCallbackData` derived from the same `refcon` is live.
 /// 5. This function must not unwind into Objective-C. `extern "C"` functions abort on unwind since
 ///    Rust 1.81, so a panic here terminates the process rather than causing UB.
-///
-/// The `#[unsafe(no_mangle)]` is *not* required by any of the above: the address is passed to
-/// `AXObserverCreate` as a function pointer, never resolved by symbol name. Exporting an
-/// unmangled global symbol only risks a link-time collision. See docs/13-unsafe-review.md #7.
-#[unsafe(no_mangle)]
 unsafe extern "C" fn application_ax_callback(
     _observer: AXObserverRef,
     element: AXUIElementRef,
@@ -1073,7 +938,7 @@ unsafe extern "C" fn application_ax_callback(
     let cb_data: &mut AccessibilityCallbackData = &mut *(refcon.cast::<AccessibilityCallbackData>());
 
     // SAFETY:
-    // Operation: `UIElement::from(AXUIElementRef)`, which performs
+    // Operation: `UIElement::from_borrowed(AXUIElementRef)`, which performs
     // `AXUIElement::wrap_under_get_rule(element)`.
     // Contract (core-foundation 0.10 `TCFType::wrap_under_get_rule`): the reference must be
     // non-null (it is `assert!`ed, so a null would panic rather than be UB) and live; the call
@@ -1081,7 +946,7 @@ unsafe extern "C" fn application_ax_callback(
     // Evidence: `# Safety` clause 2 — HIServices passes a live element it still owns. Applying
     // the Get rule is therefore correct here: it adds our own reference for the duration of
     // this callback and gives it back on drop, without consuming the caller's.
-    let element = UIElement::from(element);
+    let element = UIElement::from_borrowed(element);
 
     // SAFETY:
     // Operation: `CFString::wrap_under_get_rule(notification_name)`.

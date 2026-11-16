@@ -1,4 +1,4 @@
-//! Edit-buffer goldens (`zsh_hook_tests::golden`, docs/15-architecture-study.md §4 stage 2).
+//! Edit-buffer goldens from `zsh_hook_tests::golden`.
 //!
 //! `golden_record` regenerates `tests/zsh-hook/ref/fig_*/edit_buffer.json` and is what
 //! `just golden-record` runs; the zsh hook replays every case in `hook.rs`.

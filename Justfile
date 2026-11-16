@@ -44,7 +44,7 @@ specs:
     test -f specs/dist/index.json
 
 # The filters keep turbo away from the packages the bundle does not need. They are
-# paths, not package names, so the 6단계 npm scope rename cannot silently empty them.
+# paths, not package names, so package renames cannot silently empty them.
 # Web: proto -> api-bindings -> autocomplete-app, dashboard-app
 web:
     pnpm install --frozen-lockfile --ignore-scripts
@@ -89,13 +89,8 @@ sign:
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
     codesign --verify --deep --strict --verbose=2 "{{app}}"
 
-# app_bundle_path() falls back to /Applications, not ~/Applications, so the bundle goes there.
-# The first `open` registers it with LaunchServices; the app then re-creates the ~/.local/bin
-# link itself (crates/fig_desktop/src/install.rs). It also writes a LaunchAgent labelled
-# "$BUNDLE_ID.launcher" (fig_util::LAUNCH_AGENT_LABEL); making it conditional on
-# app.launchOnStartup is 8단계. A pre-existing regular file at the ~/.local/bin target (another
-# vendor's CLI, not one of our symlinks) is moved aside instead of being clobbered.
-# Install into /Applications and run for the first time.
+# Install at the path used by app_bundle_path(), register with LaunchServices, and set up zsh.
+# Preserve regular files at the CLI link target. See docs/development.md for signing/rollback.
 install:
     -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
     for _ in $(seq 1 50); do pgrep -x "$DESKTOP_BIN" >/dev/null || break; sleep 0.1; done
@@ -109,8 +104,7 @@ install:
         mv -n "$link" "$backup"; \
     fi; \
     ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" "$link"
-    # Leftovers of the pty binary (deleted 2026-09-18): the per-shell copies and the link that
-    # earlier installs put next to the CLI. Nothing reads them any more.
+    # Remove obsolete CLI links left by the old PTY integration.
     rm -f "$HOME/.local/bin/figterm" "$HOME/.local/bin/zsh (figterm)" "$HOME/.local/bin/bash (figterm)"
     open "/Applications/$APP_NAME.app" --args --no-dashboard
     "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" setup --dotfiles --no-confirm
@@ -137,8 +131,7 @@ test:
     pnpm exec vitest run
 
 # Format, lint (clippy --all-targets, oxlint type-aware), turbo boundaries, codegen zero-diff,
-# typecheck, vitest, every nextest test including the real-pty zsh hook suite. There is no CI;
-# this is it, and it must also pass as `CI=1 just gate`.
+# typecheck, vitest, real-pty zsh tests and WKWebView smoke. Also works with CI=1.
 # Local merge gate (scripts/gate.sh)
 gate:
     scripts/gate.sh
@@ -164,8 +157,8 @@ hooks:
     fi
 
 # Keystroke -> edit buffer hook at a stub desktop, release build; prints median/p90 for zsh through
-# the shell hook on hook.sock and for a bare zsh (docs/16-latency.md).
-# Stage 0 latency, zsh hook path
+# the shell hook on hook.sock and for a bare zsh (docs/latency.md).
+# Measure the zsh hook path in a real PTY.
 latency:
     cargo build --locked --release -p fig_cli
     cargo nextest run --locked --cargo-profile release -p zsh-hook-tests --run-ignored only --no-capture -- latency_
@@ -174,16 +167,15 @@ latency:
 # into a zsh running the hook. The expected edit buffers are zsh's own $PREBUFFER$BUFFER/$CURSOR,
 # so a diff in edit_buffer.json means zsh changed, not the hook. Pass a comma-separated subset to
 # record only those (`just golden-record fig_plain,fig_ps2`).
-# Edit-buffer goldens (docs/15-architecture-study.md §4 stage 2)
+# Record and replay edit-buffer goldens
 golden-record cases="":
     cargo build --locked -p fig_cli
     FIG_GOLDEN_RECORD=1 FIG_GOLDEN_CASES='{{cases}}' cargo nextest run --locked -p zsh-hook-tests --run-ignored only --no-capture -- golden_record
     cargo nextest run --locked -p zsh-hook-tests -- hook_golden_
 
-# Per-hop median/p90 from a desktop log written with FIG_LOG_LEVEL=trace (docs/16-latency.md).
-# Stage 0 latency, desktop half
-latency-trace log=(env("TMPDIR", "/tmp") / "figlog" / "fig_desktop.log"):
-    scripts/latency-trace.sh "{{log}}"
+# Correlate opt-in latency samples by session and input revision (docs/latency.md).
+latency-report log output:
+    python3 scripts/latency-report.py "{{log}}" --output "{{output}}"
 
 # Run only to refresh them.
 # ~/oss/fig/themes -> resources/themes (committed)

@@ -57,27 +57,11 @@ pub struct AXObserver<T> {
     callback_data: Pin<Box<T>>,
 }
 
-// SAFETY: PARTIAL — see docs/13-unsafe-review.md #2.
-//
-// Proposition asserted: `AXObserver<T>` may be moved to another thread when `T` can.
-//
-// What is proved:
-// - `AXObserverRef` and `AXUIElementRef` are CFTypes. `CFRetain`/`CFRelease` are documented as
-//   thread-safe (Apple, "Memory Management Programming Guide for Core Foundation"), so transferring
-//   the pointers between threads is not itself a data race, and this value owns a reference on each
-//   of them, so neither can be freed underneath it.
-// - `T: Send` is now required, so the impl no longer promotes an arbitrary `!Send` payload.
-// - `Drop` removes the run-loop source from the *captured* `run_loop`, not from
-//   `CFRunLoopGetCurrent()`, so an off-thread drop detaches the source that was actually attached.
-//   It also unregisters every notification before `callback_data` is deallocated.
-//
-// What remains unproved: `CFRunLoopRemoveSource` from a thread other than the run loop's owner
-// is thread-safe per CFRunLoop's documented thread-safety, but a notification already *in
-// flight* on the run-loop thread could still be executing `application_ax_callback` with the
-// old `refcon` while the drop proceeds. Today every create/drop pair runs on the tao main thread
-// (`PlatformBoundEvent::Initialize`, `reregister_all`, and the `NSWorkspace` notification
-// selectors), which serialises them against the callbacks; that is a project invariant nothing
-// enforces. `Sync` is no longer asserted — nothing shares an `&AXObserver` across threads.
+// SAFETY: CF references are retained and T must be Send. Drop unregisters notifications and
+// removes the source from the captured run loop. Creation/drop must still occur on its owner
+// thread: removing a source off-thread does not wait for an in-flight callback to stop using
+// callback_data. Current main-loop call sites uphold this, but the type does not enforce it.
+// See docs/architecture.md (native thread ownership).
 unsafe impl<T: Send> Send for AXObserver<T> {}
 
 impl<T> AXObserver<T> {
@@ -151,10 +135,7 @@ impl<T> AXObserver<T> {
         // `CFRetain(cf)` requires a live, non-null CFType and returns it with the count raised
         // by one; it is documented thread-safe.
         // Evidence: `ax_ref`'s liveness at this point is this function's `# Safety` clause 1.
-        // Postcondition: this value owns one reference on `ax_ref`, balanced in `Drop`. That is
-        // what makes the unretained-looking `ax_ref` field sound on its own, instead of relying
-        // on `WindowServerInner::register` leaking the element forever
-        // ("soundness by leak", docs/13-unsafe-review.md #6).
+        // Postcondition: this observer owns a reference on ax_ref, balanced in Drop.
         CFRetain(ax_ref.cast());
 
         Ok(Self {
@@ -220,7 +201,7 @@ impl<T> AXObserver<T> {
         // code instantiated it at `V = c_void`, but `AXObserverAddNotification` has no
         // out-parameter and never writes through the pointer, so `assume_init` produced an
         // uninitialized `c_void` — an invalid value, which the Rust Reference lists as undefined
-        // behavior. See docs/13-unsafe-review.md #1.
+        // behavior. See docs/architecture.md (native thread ownership).
         let err = unsafe {
             AXObserverAddNotification(
                 self.inner,
@@ -272,10 +253,10 @@ impl<T> Drop for AXObserver<T> {
         // foreign code from dereferencing the `refcon` after `self.callback_data` is deallocated
         // immediately after this body.
         //
-        // Residual risk — see docs/13-unsafe-review.md #2: a notification already in flight on
-        // the run-loop thread can still be inside `application_ax_callback` while an off-thread
-        // drop runs. Every create/drop pair in this crate happens on the tao main thread, which
-        // serialises them; that is a project invariant nothing enforces.
+        // Residual risk — see docs/architecture.md (native thread ownership): a notification
+        // already in flight on the run-loop thread can still be inside `application_ax_callback`
+        // while an off-thread drop runs. Every create/drop pair in this crate happens on the tao
+        // main thread, which serialises them; that is a project invariant nothing enforces.
         unsafe {
             for notification in &self.subscriptions {
                 AXObserverRemoveNotification(self.inner, self.ax_ref, notification.as_concrete_TypeRef());

@@ -1,4 +1,4 @@
-//! Edit-buffer golden recordings (docs/15-architecture-study.md §4 stage 2).
+//! Edit-buffer golden recordings.
 //!
 //! Each [`Case`] drives a real `/bin/zsh -i` in a pty with a throwaway `ZDOTDIR` that loads this
 //! build's shell integration, types the case's steps, and records zsh's own edit buffer after every
@@ -241,7 +241,7 @@ pub const CASES: &[Case] = &[
             Step::Type(CTRL_E),
         ],
     },
-    // Not one of the ten in docs/15-architecture-study.md §4: a line taller than the screen. zsh
+    // A line taller than the screen: zsh
     // then draws only a window of the buffer, marked `>....` at the top and `<....` at the
     // bottom; the edit buffer is still the whole line.
     Case {

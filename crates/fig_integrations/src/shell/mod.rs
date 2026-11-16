@@ -38,7 +38,7 @@ use crate::{
 pub const ZSH_HOOK_MIN_VERSION: &str = "5.3";
 
 /// `scripts/fig.zsh` ready to be `eval`ed: socket path and protocol version filled in. It is the
-/// whole of zsh's `post` integration (docs/15-architecture-study.md §3.3).
+/// whole of zsh's `post` integration.
 fn zsh_hook_source() -> Result<String> {
     let socket = directories::hook_socket_path()?;
     // The path goes between single quotes.
@@ -158,9 +158,8 @@ impl Blocks {
     }
 }
 
-/// The rc files bash support wrote its blocks into, until it ended with the pty binary
-/// (docs/15-architecture-study.md §4 stage 4). Nothing writes them any more and `init bash`, which
-/// they call, prints nothing, so they are harmless; uninstalling still removes them.
+/// Legacy bash startup files are still cleaned during uninstall. New installs do not write
+/// these blocks; `init bash` remains a silent success for existing ones.
 const LEGACY_BASH_DOTFILES: [&str; 4] = [".bashrc", ".bash_profile", ".bash_login", ".profile"];
 
 /// Removes bash support's blocks from `env`'s rc files, each file copied into `backup_dir` first,

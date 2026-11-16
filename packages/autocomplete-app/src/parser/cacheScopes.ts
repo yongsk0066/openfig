@@ -58,7 +58,7 @@ export function createCompletionCaches() {
       facts.clear();
       parsed.clear();
       catalog.stringImportCache.clear();
-      catalog.publicSpecsRequest = undefined;
+      catalog.specIndexRequest = undefined;
     },
   };
 }

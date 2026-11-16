@@ -26,7 +26,7 @@ use crate::cli::doctor::{
     Platform,
 };
 
-/// Whether a new zsh gets autocomplete (docs/15-architecture-study.md §3.3): `fig.zsh` loads only
+/// Whether a new zsh gets autocomplete: `fig.zsh` loads only
 /// in a zsh new enough for its hooks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ZshPath {

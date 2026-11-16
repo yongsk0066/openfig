@@ -9,8 +9,10 @@ use accessibility_sys::{
     _AXUIElementGetWindow,
     AXError,
     AXUIElement,
+    AXUIElementCreateSystemWide,
     AXUIElementRef,
     AXUIElementSetAttributeValue,
+    AXUIElementSetMessagingTimeout,
     AXValue,
     kAXApplicationRole,
     kAXBrowserRole,
@@ -63,7 +65,8 @@ pub struct UIElement(AXUIElement);
 
 impl Clone for UIElement {
     fn clone(&self) -> Self {
-        UIElement::from(self.get_ref())
+        // SAFETY: self owns a live AX element for the duration of this retain.
+        unsafe { UIElement::from_borrowed(self.get_ref()) }
     }
 }
 
@@ -85,30 +88,13 @@ impl fmt::Debug for UIElement {
     }
 }
 
-// SAFETY: partially proven — see docs/13-unsafe-review.md #8.
-//
-// Proposition asserted: a `UIElement` may be moved between threads (`Send`) and shared by `&`
-// across threads (`Sync`). Both are load-bearing: `WindowServerEvent::FocusChanged` carries a
-// `UIElement` over a `flume` channel into a tokio task, and `PlatformWindowImpl` (which owns
-// several) is moved through the tao `EventLoopProxy`.
-//
-// `Send` is proved: the only field is an `AXUIElement`, a newtype over a `CFTypeRef`, and its
-// `Drop` is `CFRelease`. Apple's "Memory Management Programming Guide for Core Foundation"
-// documents `CFRetain`/`CFRelease` as thread-safe, so moving ownership to another thread and
-// releasing there cannot race with the retain that created it.
-//
-// `Sync` is UNPROVEN. `&UIElement` gives shared access to `get_attr_ref`, `frame`, `role`,
-// `focused_window`, `window_info`, … which call `AXUIElementCopyAttributeValue` and friends.
-// Apple's HIServices documentation makes no thread-safety statement about those functions, and
-// the API is a synchronous IPC to the observed application; the only guarantee we can cite is
-// that the AX API is *not* documented as main-thread-only. Missing premise: an authoritative
-// statement that concurrent AX calls on one element are permitted.
-//
-// Not part of the proof, but worth recording: the `CFRelease` on drop and the AX calls happen
-// on whichever thread holds the value, so soundness here does not depend on the run-loop
-// affinity that `AXObserver` needs — a `UIElement` holds no run-loop source.
+// SAFETY: Owns a retained AXUIElement; CF retain/release permit ownership transfer.
+// Focus events carry it to the desktop event loop. It owns no observer/run-loop source.
 unsafe impl Send for UIElement {}
-// SAFETY: UNPROVEN — see the comment on the `Send` impl above and docs/13-unsafe-review.md #8.
+// SAFETY: The current shared PlatformWindow requires Sync, but concurrent AX attribute calls
+// are not established safe merely by CF reference-counting guarantees. This remains an
+// unresolved contract; prefer identity-based messages and worker-owned AX handles. See
+// docs/architecture.md (native thread ownership).
 unsafe impl Sync for UIElement {}
 
 impl From<AXUIElement> for UIElement {
@@ -117,36 +103,29 @@ impl From<AXUIElement> for UIElement {
     }
 }
 
-/// # Invariants
-///
-/// This conversion applies Core Foundation's **Get rule**: it retains `ax_ref` and releases the
-/// retain when the `UIElement` drops. It therefore does *not* consume a `+1` produced by a
-/// Create-rule function such as `AXUIElementCreateApplication`; passing one leaks that `+1`.
-///
-/// It is a *safe* `From` impl that dereferences a raw pointer, so it silently places an
-/// unchecked memory-safety obligation on safe callers — `ax_ref` must be a live
-/// `AXUIElementRef`. The review skill rejects that shape; it is kept here only because the
-/// blast radius of changing the trait impl exceeds this review's remit.
-/// See docs/13-unsafe-review.md #10.
-impl From<AXUIElementRef> for UIElement {
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    fn from(ax_ref: AXUIElementRef) -> Self {
-        // SAFETY:
-        // Operation: `AXUIElement::wrap_under_get_rule(ax_ref)`.
-        // Contract (core-foundation 0.10 `TCFType::wrap_under_get_rule`): `reference` must be
-        // non-null and point at a live CF object of the concrete type; the call performs
-        // `CFRetain` and hands the resulting `+1` to a wrapper that `CFRelease`s on drop.
-        // Evidence:
-        // - Non-nullness is not proved here — it is checked: the generated `wrap_under_get_rule`
-        //   starts with `assert!(!reference.is_null())`, so a null input panics rather than causing
-        //   UB.
-        // - Liveness and concrete type are the caller obligation described in the `# Invariants`
-        //   section above. Every in-crate caller passes either an element that HIServices just
-        //   handed to `application_ax_callback` (owned by HIServices for the duration of the call),
-        //   the result of `AXUIElementCreateApplication` (live by the Create rule), or an element
-        //   read out of a `CFArray`/attribute that is still alive.
-        // Postcondition: the returned `UIElement` owns one reference, independent of the
-        // caller's.
+impl UIElement {
+    /// Set the process-wide AX timeout without leaking the temporary Create-rule reference.
+    pub fn set_global_messaging_timeout(seconds: f32) {
+        // SAFETY: Create returns an owned AX element. The wrapper keeps it live during the
+        // borrowing timeout call and releases it on return. AX rejects invalid timeout values.
+        unsafe {
+            let element = AXUIElement::wrap_under_create_rule(AXUIElementCreateSystemWide());
+            AXUIElementSetMessagingTimeout(element.as_concrete_TypeRef(), seconds);
+        }
+    }
+
+    /// Retain a borrowed AX element using the Get rule.
+    ///
+    /// # Safety
+    /// `ax_ref` must point to a live, non-null AXUIElement for the duration of this call.
+    /// This takes its own reference; it does not consume a caller's Create-rule reference.
+    ///
+    /// ```compile_fail,E0133
+    /// macos_utils::window_server::UIElement::from_borrowed(std::ptr::null());
+    /// ```
+    pub unsafe fn from_borrowed(ax_ref: AXUIElementRef) -> Self {
+        // SAFETY: The caller guarantees the concrete type and liveness; Get-rule wrapping retains
+        // it.
         UIElement(unsafe { AXUIElement::wrap_under_get_rule(ax_ref) })
     }
 }
@@ -223,7 +202,7 @@ impl UIElement {
     /// has not been broken by unsafe code elsewhere. `_AXUIElementGetWindow` is a private
     /// HIServices SPI with no published contract, so this function additionally rests on the
     /// TCB premise that it writes a `CGWindowID` through the out-parameter exactly when it
-    /// returns `kAXErrorSuccess`. See docs/13-unsafe-review.md #11.
+    /// returns `kAXErrorSuccess`. See docs/architecture.md (native thread ownership).
     ///
     /// Given a safe `&self`, no caller can actually violate the first clause, so the `unsafe`
     /// marker really only fences the SPI premise.
@@ -243,12 +222,8 @@ impl UIElement {
 
     /// Read an accessibility attribute, delegating to the vendored `AXUIElement::attribute`.
     ///
-    /// This crate used to reimplement `AXUIElementCopyAttributeValue` and wrap the result with
-    /// `wrap_under_get_rule`, retaining a value that already arrived at `+1` — one leaked
-    /// reference per attribute read, three of them per caret update, i.e. per keystroke
-    /// (docs/13-unsafe-review.md #12). The vendored implementation applies the Create rule the
-    /// API actually documents, so delegating both removes the duplicate FFI and closes the leak
-    /// without this crate calling `CFRelease` itself.
+    /// The vendored attribute accessor owns Copy-rule results; keep that ownership rather
+    /// than retaining the same result again. The typed getter below checks the CF type ID.
     fn get_attr_ref(&self, attr: &'static str) -> Result<CFType> {
         let attribute = cached_attribute(attr);
 
@@ -368,19 +343,19 @@ impl UIElement {
                 // SAFETY:
                 // Operations: `AXUIElementRef::from_void_ptr(*child)` (core-foundation 0.10
                 // `TCFTypeRef::from_void_ptr`, an unsafe pointer reinterpretation) and
-                // `UIElement::from`.
+                // `UIElement::from_borrowed`.
                 // Contract of `from_void_ptr`: the pointer must be a valid reference of the
-                // target CF type. Contract of `UIElement::from`: live, non-null element.
+                // target CF type. Contract of `UIElement::from_borrowed`: live, non-null element.
                 // Evidence: `kAXChildrenAttribute` is documented by HIServices to be a
                 // `CFArray` of `AXUIElementRef`, and the `CFArray<*const c_void>` returned by
                 // `get_attr` is alive for the whole `map`, so each element pointer is live at
-                // the moment `UIElement::from` retains it (Get rule) — which is what keeps the
-                // child alive after the array is dropped.
-                // UNPROVEN-BUT-LIKELY: the element type is an Apple documentation lemma, not a
+                // the moment `UIElement::from_borrowed` retains it (Get rule) — which is what keeps
+                // the child alive after the array is dropped.
+                // FFI contract: the element type is an Apple documentation lemma, not a
                 // checked fact; a non-`AXUIElement` entry would be retained as one and later
                 // passed to AX functions. `CFArray::iter` yields raw `*const c_void` here
                 // precisely because the element type is erased.
-                UIElement::from(unsafe { AXUIElementRef::from_void_ptr(*child) })
+                unsafe { UIElement::from_borrowed(AXUIElementRef::from_void_ptr(*child)) }
             })
             .collect();
 
@@ -460,7 +435,7 @@ fn get_value<T: ConcreteCFType>(dict: &CFDictionary, key: CFStringRef) -> Option
     //   (core-foundation 0.10), and CFDictionary values are owned by the dictionary, so the value
     //   is live for as long as `dict` is borrowed here — which covers this call.
     // - The Get rule is the right one: `find` does not transfer ownership, so retaining and later
-    //   releasing is balanced. Unlike `get_attr_ref`, this site does not leak.
+    //   releasing is balanced.
     // Postcondition: `cf_type` owns one reference, independent of the dictionary's; the
     // subsequent `downcast` is a dynamically checked `CFGetTypeID` comparison, so the concrete
     // type is not assumed.

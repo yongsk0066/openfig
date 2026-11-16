@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# The local merge gate. There is no remote and no CI (docs/15-architecture-study.md §2.4), so this
-# is the only thing standing between a commit and `main`: `just gate` runs it, and the pre-push
-# hook (`just hooks`) runs `just gate`.
-#
-# Cheap static checks first so a formatting slip fails in seconds, the test suites last. Stops at
-# the first red step and prints how long each step took.
-#
-# It must pass with `CI=1` exported as well: nothing here may depend on the caller's environment.
+# Complete local validation, also used by the optional pre-push hook.
+# Run with CI=1 to check non-interactive behavior; stop at the first failure.
 
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-# turbo phones home unless told not to; this fork is offline by policy. The TUI needs a terminal a
-# pre-push hook does not have.
+# Disable build-tool telemetry and use output suitable for a non-interactive pre-push hook.
 export TURBO_TELEMETRY_DISABLED=1
 export TURBO_UI=stream
 export DO_NOT_TRACK=1
@@ -80,12 +73,14 @@ step "rustfmt --check" cargo +nightly fmt --check
 step "oxfmt --check" pnpm exec oxfmt --check
 step "oxlint --type-aware (zero warnings)" pnpm exec oxlint --type-aware --max-warnings 0
 step "core architecture boundaries" node scripts/check-architecture.mjs
+step "documentation links" node scripts/check-docs.mjs
 step "turbo boundaries" pnpm exec turbo boundaries
 step "turbo codegen zero-diff" codegen_zero_diff
 step "clippy --all-targets -D warnings" cargo clippy --locked --workspace --all-targets -- -D warnings
 step "turbo typecheck" pnpm exec turbo typecheck
 step "vitest run" pnpm exec vitest run
 step "nextest run --workspace" cargo nextest run --locked --workspace
+step "FFI safety doctests" cargo test --locked -p macos-utils --doc
 step "WKWebView runtime resize smoke" cargo run --locked -p fig_desktop --example webview_runtime_smoke
 
 report

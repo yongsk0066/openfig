@@ -30,8 +30,8 @@ export function createSpecRepository(
   specCache = new LruCache<string, Subcommand>(256),
 ) {
   const {
-    importFromPublicCDN,
-    publicSpecExists,
+    importBundledSpec,
+    bundledSpecExists,
     importSpecFromFile,
     isDiffVersionedSpec,
     importFromLocalhost,
@@ -162,10 +162,10 @@ export function createSpecRepository(
     } else if (!specFile) {
       const { name, diffVersionedFile: versionFileName } = specLocation;
 
-      if (await publicSpecExists(name)) {
+      if (await bundledSpecExists(name)) {
         // If we're here, importing was successful.
         try {
-          const result = await importFromPublicCDN(
+          const result = await importBundledSpec(
             versionFileName ? `${name}/${versionFileName}` : name,
           );
 

@@ -55,7 +55,6 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: "esnext",
-      // TODO: re-enable prod source maps to upload them to sentry (see build CIs)
       sourcemap: false,
       // The suggestion list is one screen of a local `figresource://` page, so a
       // single chunk is what we want; the limit is here to keep the warning

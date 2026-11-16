@@ -6,6 +6,8 @@ if [[ -o interactive && -z ${_fig_sock-} ]] && autoload -Uz is-at-least add-zle-
   && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system zsh/datetime 2>/dev/null; then
 
 typeset -g _fig_sock='{{HOOK_SOCKET}}' _fig_fd= _fig_off= _fig_armed= _fig_isearch= _fig_last= _fig_ctx=
+typeset -gi _fig_revision=0
+typeset -g _fig_v2= _fig_ack_id= _fig_ack_status=
 typeset -gA _fig_fwd _fig_orig _fig_names
 _fig_names=($'\t' tab $'\e[Z' shift+tab $'\e[A' up $'\eOA' up $'\e[B' down $'\eOB' down $'\r' enter $'\e' esc
   $'\n' control+j $'\x0b' control+k $'\x0e' control+n $'\x10' control+p $'\x12' control+r)
@@ -41,6 +43,7 @@ _fig_connect() {
   local fd=$REPLY line tty; _fig_esc "$TTY"; tty=$REPLY; _fig_esc "$USER@$HOST"; setopt localtraps; trap '' PIPE
   if syswrite -o $fd "HELLO {{HOOK_PROTOCOL_VERSION}} $$.$RANDOM zsh $$ $tty $REPLY"$'\n' \
     && read -t 1 -r -u $fd line && [[ $line == 'WELCOME 1 '* ]]; then
+    _fig_v2=; [[ $line == *' edits-v2' ]] && _fig_v2=1
     _fig_fd=$fd; zle -F -w $fd _fig_on_msg; return 0
   fi
   _fig_off=1; exec {fd}>&- 2>/dev/null; return 1
@@ -54,7 +57,12 @@ _fig_report() {
   _fig_esc "$PREBUFFER$BUFFER"; line="${#left} $REPLY"
   [[ $line == "$_fig_last" ]] && return 0
   _fig_last=$line; setopt nomultibyte
-  _fig_send "E ${line%% *} ${#left} ${line#* }"; return 0
+  if [[ -n $_fig_v2 ]]; then
+    (( ++_fig_revision )); _fig_send "E2 $_fig_revision ${line%% *} ${#left} ${line#* }"
+  else
+    _fig_send "E ${line%% *} ${#left} ${line#* }"
+  fi
+  return 0
 }
 # During ^R $BUFFER is a history line, not what was typed: report an empty line until it ends.
 _fig_isearch_on() { [[ -n $_fig_isearch ]] || { _fig_isearch=1 _fig_last=; _fig_send 'E 0 0 ' }; return 0 }
@@ -88,6 +96,22 @@ _fig_key() {
 _fig_line() {
   emulate -L zsh; local -a f=("${(@s: :)1}"); local REPLY n
   case $f[1] in
+    (INSERT2)
+      # Compare at the owner, including unreported edits/cursor movements. Never rebase stale work.
+      if [[ $f[2] == $_fig_ack_id ]]; then _fig_send "ACK $f[2] $_fig_ack_status"; return 0; fi
+      _fig_unesc "$f[5]"
+      local left=$PREBUFFER$LBUFFER expected=$REPLY edit_status=0
+      [[ $KEYMAP == vicmd ]] && left+=${RBUFFER:0:1}
+      if (( EPOCHREALTIME * 1000 > ${f[10]:-0} )) || [[ $f[3] != $_fig_revision || $f[4] != ${#left} || $expected != $PREBUFFER$BUFFER ]]; then
+        edit_status=1
+      elif [[ -n $_fig_isearch || ${f[6]} != <-> ]] || (( f[6] > $#LBUFFER )); then
+        edit_status=2
+      else
+        n=$f[6]; (( n )) && LBUFFER[-n,-1]=
+        _fig_unesc "$f[7]"; LBUFFER+=$REPLY; (( CURSOR -= ${f[8]:-0} )); _fig_report; zle -R
+      fi
+      _fig_ack_id=$f[2] _fig_ack_status=$edit_status; _fig_send "ACK $f[2] $edit_status"
+      [[ $edit_status == 0 && ${f[9]-} == 1 && -n ${2-} ]] && { zle accept-line; return 1 } ;;
     (INSERT) n=$f[2]; (( n > $#LBUFFER )) && n=$#LBUFFER; (( n )) && LBUFFER[-n,-1]=
       _fig_unesc "$f[3]"; LBUFFER+=$REPLY; (( CURSOR -= ${f[4]:-0} )); _fig_report; zle -R
       [[ ${f[5]-} == 1 && -n ${2-} ]] && { zle accept-line; return 1 } ;;
@@ -141,7 +165,7 @@ _fig_precmd() {
   fi
   _fig_esc "$PWD"; _fig_send "P $st $REPLY"; return 0
 }
-_fig_preexec() { emulate -L zsh; _fig_isearch= _fig_last=; local REPLY; _fig_esc "$1"; _fig_send "X $REPLY"; return 0 }
+_fig_preexec() { emulate -L zsh; (( ++_fig_revision )); _fig_isearch= _fig_last=; local REPLY; _fig_esc "$1"; _fig_send "X $REPLY"; return 0 }
 
 zle -N _fig_on_msg
 add-zsh-hook precmd _fig_precmd

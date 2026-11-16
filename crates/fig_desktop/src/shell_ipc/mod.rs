@@ -1,10 +1,6 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use base64::prelude::*;
-use bytes::BytesMut;
-use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     EditBufferChangedNotification,
     HistoryUpdatedNotification,
@@ -14,7 +10,6 @@ use fig_proto::fig::{
     NotificationType,
     Process,
     ProcessChangedNotification,
-    ServerOriginatedMessage,
     ShellPromptReturnedNotification,
 };
 use fig_proto::local::{
@@ -25,9 +20,7 @@ use fig_proto::local::{
     PromptHook,
     ShellContext,
 };
-use fig_proto::prost::Message;
 use fig_shell_ipc::session::ShellSessions;
-use parking_lot::Mutex;
 use tracing::{
     debug,
     error,
@@ -35,11 +28,9 @@ use tracing::{
 use uuid::Uuid;
 
 use crate::event::{
-    EmitEventName,
     Event,
     WindowEvent,
 };
-use crate::platform::PlatformBoundEvent;
 use crate::webview::WindowId;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::{
@@ -51,28 +42,20 @@ use crate::{
 pub struct ShellHook {
     pub notifications_state: Arc<WebviewNotificationsState>,
     pub proxy: EventLoopProxy,
-    /// The shell session whose environment each window was last told about.
-    ///
-    /// A session only ships the environment and aliases after they changed, so the desktop has to
-    /// notice when a *window* starts looking at a different session — switching terminal tabs —
-    /// and re-send them even though that hook carried none. Shared across connections on purpose:
-    /// `start_hook_ipc` clones this handler per connection, and a per-connection map would never
-    /// see the switch back to an already-open session.
-    pub last_sent: Arc<Mutex<HashMap<WindowId, Uuid>>>,
 }
 
 /// Fold an incoming hook context into the session's, keeping the fields the hook omitted.
 ///
-/// An empty `environment_variables` means "unchanged" rather than "no environment": a session
-/// sends `vec![]` / `alias: None` for every edit-buffer hook whose context did not change.
+/// A full snapshot replaces even empty fields; a delta preserves omitted fields.
+/// Legacy senders without a snapshot flag retain the previous merge semantics.
 fn merge_shell_context(session: &mut Option<ShellContext>, mut incoming: Option<ShellContext>) {
     if let Some(incoming) = incoming.as_mut()
         && let Some(existing) = session.as_mut()
     {
-        if incoming.environment_variables.is_empty() {
+        if incoming.context_snapshot != Some(true) && incoming.environment_variables.is_empty() {
             incoming.environment_variables = std::mem::take(&mut existing.environment_variables);
         }
-        if incoming.alias.is_none() {
+        if incoming.context_snapshot != Some(true) && incoming.alias.is_none() {
             incoming.alias = existing.alias.take();
         }
     }
@@ -90,38 +73,35 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         session_id: Uuid,
         shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
+        let received = std::time::Instant::now();
+        if crate::latency::enabled() {
+            crate::latency::record(
+                "hook-received",
+                &session_id.to_string(),
+                hook.context.as_ref().and_then(|context| context.input_revision),
+                None,
+                None,
+            );
+        }
         // Did the session's context change? If so every window has to be re-told, and the hook
         // already carries the full environment.
         let hook_carried_env = hook
             .context
             .as_ref()
-            .is_some_and(|context| !context.environment_variables.is_empty());
+            .is_some_and(|context| context.context_snapshot == Some(true) || !context.environment_variables.is_empty());
 
         // Collect the subscribers before emitting: the loop sends events, and holding DashMap
         // shard guards across that is needless.
-        let subscribers: Vec<(WindowId, i64)> = self
+        let subscribers: Vec<(WindowId, i64, bool, u64)> = self
             .notifications_state
             .subscriptions
             .iter()
             .filter_map(|sub| {
-                sub.get(&NotificationType::NotifyOnEditbuffferChange)
-                    .map(|message_id| (sub.key().clone(), *message_id))
+                sub.edit_buffer_subscription(session_id, hook_carried_env)
+                    .map(|(message_id, full, generation)| (sub.key().clone(), message_id, full, generation))
             })
             .collect();
-
-        // A window needs the whole environment when this hook brought one, or when it is now
-        // looking at a different session than the one it was last told about.
-        let subscribers: Vec<(WindowId, i64, bool)> = {
-            let mut last_sent = self.last_sent.lock();
-            subscribers
-                .into_iter()
-                .map(|(window_id, message_id)| {
-                    let session_changed = last_sent.insert(window_id.clone(), session_id) != Some(session_id);
-                    (window_id, message_id, hook_carried_env || session_changed)
-                })
-                .collect()
-        };
-        let any_full = subscribers.iter().any(|(_, _, needs_full)| *needs_full);
+        let any_full = subscribers.iter().any(|(_, _, needs_full, _)| *needs_full);
 
         // Clone before taking the session lock. `clone_from` inside the closure held the
         // `FairMutex` for the whole copy (13 KB per keystroke before F-01) while
@@ -149,6 +129,7 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         if let Some(context) = lean_context.as_mut() {
             context.environment_variables.clear();
             context.alias = None;
+            context.context_snapshot = Some(false);
         }
 
         // If the session vanished between the hook arriving and the lock, the lean context is
@@ -165,7 +146,8 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         let mut text_payload = hook.text.clone();
         let mut subscribers = subscribers.into_iter().peekable();
 
-        while let Some((window_id, message_id, needs_full)) = subscribers.next() {
+        let mut deliveries = Vec::new();
+        while let Some((window_id, message_id, needs_full, generation)) = subscribers.next() {
             let last = subscribers.peek().is_none();
             let context = match (needs_full, last) {
                 (true, true) => full_context.take(),
@@ -173,61 +155,43 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
                 (false, true) => lean_context.take(),
                 (false, false) => lean_context.clone(),
             };
+            let context = context.map(|mut context| {
+                context.context_snapshot = Some(needs_full);
+                context
+            });
             let buffer = if last {
                 std::mem::take(&mut text_payload)
             } else {
                 text_payload.clone()
             };
 
-            let message = ServerOriginatedMessage {
-                id: Some(message_id),
-                submessage: Some(ServerOriginatedSubMessage::Notification(Notification {
-                    r#type: Some(fig_proto::fig::notification::Type::EditBufferNotification(
-                        EditBufferChangedNotification {
-                            context,
-                            buffer: Some(buffer),
-                            cursor: utf16_cursor_position,
-                            session_id: Some(session_id.into()),
-                        },
-                    )),
-                })),
-            };
-
-            let mut encoded = BytesMut::new();
-            message.encode(&mut encoded)?;
-
-            debug!(%message_id, "Sending edit buffer change notification to webview");
-
-            self.proxy.send_event(Event::WindowEvent {
-                window_id,
-                window_event: WindowEvent::Emit {
-                    event_name: EmitEventName::Notification,
-                    payload: BASE64_STANDARD.encode(encoded).into(),
+            deliveries.push(crate::event_queue::EditDelivery {
+                window: window_id,
+                channel: message_id,
+                generation,
+                notification: EditBufferChangedNotification {
+                    context,
+                    buffer: Some(buffer),
+                    cursor: utf16_cursor_position,
+                    session_id: Some(session_id.to_string()),
                 },
-            })?;
+            });
         }
-
-        let empty_edit_buffer = hook.text.trim().is_empty();
-
-        if !empty_edit_buffer {
-            self.proxy
-                .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::EditBufferChanged))?;
-        }
-
-        self.proxy.send_event(Event::WindowEvent {
-            window_id: AUTOCOMPLETE_ID,
-            // If editbuffer is empty, hide the autocomplete window to avoid flickering
-            window_event: if empty_edit_buffer {
-                WindowEvent::Hide
-            } else {
-                WindowEvent::Show
-            },
+        // One ordered event carries notification, caret tracking and visibility. Only an
+        // adjacent edit for the same session/subscriptions may replace it; keys/commands
+        // and every other proxy event close the merge window.
+        self.proxy.send_edit_buffer(crate::event_queue::EditBufferBatch {
+            received,
+            session: session_id,
+            empty: hook.text.trim().is_empty(),
+            deliveries,
         })?;
 
         Ok(())
     }
 
     async fn prompt(&mut self, hook: &PromptHook, session_id: Uuid, shell_sessions: &Arc<ShellSessions>) -> Result<()> {
+        self.proxy.with_edit_barrier(|| {});
         let mut cwd_changed = false;
         let mut new_cwd = None;
         shell_sessions.with(&session_id, |session| {
@@ -294,6 +258,7 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         session_id: Uuid,
         shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
+        self.proxy.with_edit_barrier(|| {});
         shell_sessions.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
@@ -333,41 +298,51 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         session_id: Uuid,
         shell_sessions: &Arc<ShellSessions>,
     ) -> Result<()> {
+        self.proxy.with_edit_barrier(|| {});
         shell_sessions.with_update(session_id, |session| {
             session.context.clone_from(&hook.context);
         });
-
-        self.notifications_state
-            .broadcast_notification_all(
-                &NotificationType::NotifyOnHistoryUpdated,
-                Notification {
-                    r#type: Some(fig_proto::fig::notification::Type::HistoryUpdatedNotification(
-                        HistoryUpdatedNotification {
-                            command: hook.command.clone(),
-                            process_name: hook.context.as_ref().and_then(|ctx| ctx.process_name.clone()),
-                            current_working_directory: hook
-                                .context
-                                .as_ref()
-                                .and_then(|ctx| ctx.current_working_directory.clone()),
-                            session_id: Some(session_id.to_string()),
-                            hostname: hook.context.as_ref().and_then(|ctx| ctx.hostname.clone()),
-                            exit_code: hook.exit_code,
-                        },
-                    )),
-                },
-                &self.proxy,
-            )
-            .await?;
 
         Ok(())
     }
 
     async fn command_finished(&mut self, command: fig_settings::history::CommandInfo) {
-        // sqlite blocks, and the hook session's next line (the prompt's first edit buffer) should
-        // not wait for it.
-        tokio::task::spawn_blocking(move || {
-            if let Err(err) = fig_settings::history::History::new().insert_command_history(&command) {
-                error!(%err, "Failed to insert command into history");
+        let notifications = self.notifications_state.clone();
+        let proxy = self.proxy.clone();
+        // Publish only after the transaction commits: subscribers can now query new rows.
+        // Neither disk I/O nor notification delivery blocks the next shell prompt.
+        tokio::spawn(async move {
+            let result = tokio::task::spawn_blocking(move || {
+                fig_settings::history::History::new().insert_command_history(&command)?;
+                Ok::<_, anyhow::Error>(command)
+            })
+            .await;
+            match result {
+                Ok(Ok(command)) => {
+                    let notification = HistoryUpdatedNotification {
+                        command: command.command,
+                        process_name: command.shell,
+                        current_working_directory: command.cwd,
+                        session_id: command.session_id,
+                        hostname: command.hostname,
+                        exit_code: command.exit_code,
+                    };
+                    if let Err(err) = notifications
+                        .broadcast_notification_all(
+                            &NotificationType::NotifyOnHistoryUpdated,
+                            Notification {
+                                r#type: Some(fig_proto::fig::notification::Type::HistoryUpdatedNotification(
+                                    notification,
+                                )),
+                            },
+                            &proxy,
+                        )
+                        .await
+                    {
+                        error!(%err, "Failed to publish committed history");
+                    }
+                },
+                result => error!(?result, "Failed to insert command into history"),
             }
         });
     }
@@ -377,6 +352,7 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
         InterceptedKeyHook { action, context, .. }: InterceptedKeyHook,
         _session_id: Uuid,
     ) -> Result<()> {
+        self.proxy.with_edit_barrier(|| {});
         debug!(%action, "Intercepted Key Action");
 
         self.notifications_state
@@ -472,22 +448,14 @@ mod tests {
         merge_shell_context(&mut session, None);
         assert!(session.is_none());
     }
-
-    /// The per-window bookkeeping behind the "session changed" half of the rule: a window is
-    /// told the full environment the first time it sees a session and again whenever the
-    /// session it is looking at changes, but not for repeat hooks of the same session.
     #[test]
-    fn a_window_is_re_sent_the_environment_only_when_its_session_changes() {
-        let window = WindowId("autocomplete".into());
-        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
-        let mut last_sent: HashMap<WindowId, Uuid> = HashMap::new();
-
-        let mut changed = |session| last_sent.insert(window.clone(), session) != Some(session);
-
-        assert!(changed(a), "first hook for this window");
-        assert!(!changed(a), "same session again");
-        assert!(changed(b), "switched to the other tab");
-        assert!(!changed(b));
-        assert!(changed(a), "switched back");
+    fn an_empty_snapshot_clears_environment_and_aliases() {
+        let mut session = context(&["PATH"], Some("gs=git status"));
+        let mut empty = context(&[], Some("")).unwrap();
+        empty.context_snapshot = Some(true);
+        merge_shell_context(&mut session, Some(empty));
+        let session = session.unwrap();
+        assert!(session.environment_variables.is_empty());
+        assert_eq!(session.alias.as_deref(), Some(""));
     }
 }

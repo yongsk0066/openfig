@@ -1,12 +1,13 @@
 import { useCallback, useMemo, type CSSProperties, useRef } from "react";
 import logger from "loglevel";
-import fuzzysort from "@fig/fuzzysort";
+import fuzzyMatcher from "@fig/fuzzysort";
 import type { Suggestion as SuggestionT } from "@fig/shared/internal";
 import { makeArray } from "@fig/shared/utils";
 import { getQueryTermForSuggestion } from "../suggestions/helpers";
 import SuggestionIcon from "./SuggestionIcon";
 
 type SuggestionProps = {
+  ariaAttributes?: import("react").HTMLAttributes<HTMLDivElement>;
   style: CSSProperties;
   suggestion: SuggestionT;
   onClick: (item: SuggestionT) => void;
@@ -55,7 +56,7 @@ const getTitle = (
       // Recompute if there is a displayName, fuzzyMatchData comes from name array.
       const matches =
         item.displayName || !item.fuzzyMatchData
-          ? nameArray.map((name) => fuzzysort.single(queryTerm, name))
+          ? nameArray.map((name) => fuzzyMatcher.single(queryTerm, name))
           : item.fuzzyMatchData;
 
       out = matches.map((result, index) => {
@@ -260,6 +261,7 @@ const getTitle = (
 };
 
 const Suggestion = ({
+  ariaAttributes,
   style,
   suggestion,
   commonPrefix,
@@ -284,42 +286,51 @@ const Suggestion = ({
 
   return (
     <div
+      {...ariaAttributes}
       style={style}
       className={`flex items-center overflow-hidden pl-1.5 ${
         isActive ? "bg-selected-bg brightness-95" : ""
       }`}
-      onClick={onSuggestionClick}
     >
-      <SuggestionIcon
-        style={{
-          height: iconSize,
-          display: "flex",
-          width: iconSize,
-          minWidth: iconSize,
-          marginRight: 5,
-        }}
-        suggestion={suggestion}
-        iconPath={iconPath}
-      />
-      <div className="overflow-hidden" ref={textContainerRef}>
-        <div
-          className="text data-[active-item]:text-selected-text group w-fit whitespace-nowrap"
-          // style={{
-          //   animation:
-          //     isActive &&
-          //     textOverflow &&
-          //     suggestion.name &&
-          //     !suggestion.args?.find((arg) => arg.name)
-          //       ? // We only want to animate if there are no args that will be displayed in the title
-          //         `${animationDuration}s linear infinite marquee`
-          //       : undefined,
-          // }}
-          data-active-item={isActive ? true : undefined}
-          ref={textRef}
-        >
-          {Title}
+      <button
+        type="button"
+        tabIndex={-1}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onSuggestionClick}
+        className="flex h-full w-full items-center border-0 bg-transparent p-0 text-left"
+        style={{ font: "inherit", color: "inherit" }}
+      >
+        <SuggestionIcon
+          style={{
+            height: iconSize,
+            display: "flex",
+            width: iconSize,
+            minWidth: iconSize,
+            marginRight: 5,
+          }}
+          suggestion={suggestion}
+          iconPath={iconPath}
+        />
+        <div className="overflow-hidden" ref={textContainerRef}>
+          <div
+            className="text data-[active-item]:text-selected-text group w-fit whitespace-nowrap"
+            // style={{
+            //   animation:
+            //     isActive &&
+            //     textOverflow &&
+            //     suggestion.name &&
+            //     !suggestion.args?.find((arg) => arg.name)
+            //       ? // We only want to animate if there are no args that will be displayed in the title
+            //         `${animationDuration}s linear infinite marquee`
+            //       : undefined,
+            // }}
+            data-active-item={isActive ? true : undefined}
+            ref={textRef}
+          >
+            {Title}
+          </div>
         </div>
-      </div>
+      </button>
     </div>
   );
 };

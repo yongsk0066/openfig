@@ -128,7 +128,7 @@ lint:
     cargo +nightly fmt --version >/dev/null 2>&1 \
         || { echo ".rustfmt.toml uses unstable options: rustup toolchain install nightly --component rustfmt"; exit 1; }
     cargo +nightly fmt --check
-    pnpm exec oxlint
+    pnpm exec oxlint --type-aware --max-warnings 0
     pnpm exec oxfmt --check
 
 test:

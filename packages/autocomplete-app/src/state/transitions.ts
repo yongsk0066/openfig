@@ -1,15 +1,15 @@
-import type React from "react";
+import type { Update } from "./types";
 import logger from "loglevel";
 import type { Suggestion } from "@fig/shared/internal";
 import { fieldsAreEqual, memoizeOne } from "@fig/shared/utils";
 import { type AliasMap, getCommand } from "@fig/shell-parser";
-import { type ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
+import { type ArgumentParserResult, initialParserState } from "@fig/autocomplete-parser/core";
+import { SETTINGS, type SettingsMap } from "@fig/shared/settings";
 import type { Types } from "@fig/api-bindings";
-import { type FigState, initialFigState } from "../fig/hooks";
+import { type FigState, initialFigState } from "./fig-state";
 import type { GeneratorState } from "../generators/helpers";
 import type { Effect, ShellGlobals } from "./effects";
-import { planGenerators } from "./generators";
+import { planGenerators } from "./generator-plan";
 import { type AutocompleteState, Visibility } from "./types";
 
 /**
@@ -23,6 +23,7 @@ export type Transition = {
 };
 
 export const initialState: Partial<AutocompleteState> = {
+  parsing: false,
   figState: initialFigState,
   parserResult: initialParserState,
   generatorStates: [] as GeneratorState[],
@@ -38,12 +39,11 @@ export const initialState: Partial<AutocompleteState> = {
 
   historyModeEnabled: false,
   fuzzySearchEnabled: false,
-  userFuzzySearchEnabled: getSetting(SETTINGS.FUZZY_SEARCH, false) as boolean,
+  userFuzzySearchEnabled: false,
   settings: {} as SettingsMap,
 };
 
-// Memoized so an unchanged buffer keeps the same `command` object: `useParseArgumentsEffect`
-// re-parses whenever its identity changes.
+// Stable token identity avoids redundant parsing for unchanged input.
 const getCommandMemoized = memoizeOne(getCommand);
 
 const getEnvVarsMemoized = memoizeOne(
@@ -66,6 +66,7 @@ const getAliasMemoized = memoizeOne(
       .reduce((acc, a) => {
         try {
           const [key, ...value] = a.split("=");
+          if (!key || value.length === 0) return acc;
           acc[key] = value.join("=").replace(/^'/, "").replace(/'$/, "");
         } catch (err) {
           logger.error(`Error parsing alias: ${a}`, err);
@@ -84,7 +85,7 @@ const getAliasMemoized = memoizeOne(
  */
 export const figStateTransition = (
   state: AutocompleteState,
-  newFigState: React.SetStateAction<FigState>,
+  newFigState: Update<FigState>,
 ): Transition => {
   const nextFigState =
     typeof newFigState === "function" ? newFigState(state.figState) : newFigState;
@@ -104,12 +105,12 @@ export const figStateTransition = (
     // protobuf-es decodes an absent repeated field as `[]`, which is truthy — so a
     // hook that deliberately omits the environment (a shell session only re-sends it after it
     // changed) would otherwise wipe the vars we already have.
-    if (shellContext.environmentVariables?.length) {
-      figState.environmentVariables = getEnvVarsMemoized(shellContext.environmentVariables);
+    if (shellContext.contextSnapshot || shellContext.environmentVariables?.length) {
+      figState.environmentVariables = getEnvVarsMemoized(shellContext.environmentVariables ?? []);
     }
 
-    if (shellContext.alias) {
-      figState.aliases = getAliasMemoized(shellContext.alias);
+    if (shellContext.contextSnapshot || shellContext.alias !== undefined) {
+      figState.aliases = getAliasMemoized(shellContext.alias ?? "");
     }
   }
 
@@ -176,7 +177,7 @@ const isFuzzySearchEnabled = (
  */
 export const userFuzzySearchTransition = (
   state: AutocompleteState,
-  userFuzzySearchEnabled: React.SetStateAction<boolean>,
+  userFuzzySearchEnabled: Update<boolean>,
 ): Transition => {
   const enabled =
     typeof userFuzzySearchEnabled === "function"

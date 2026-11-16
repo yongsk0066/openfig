@@ -42,26 +42,28 @@ function renderIcon(icon: URL, height: string | number) {
 
   return (
     <div
-      role="img"
-      aria-label={
-        type ? `Icon for ${type}` : isTemplate ? "Template icon" : `Icon for ${icon.pathname}`
-      }
-      className="grid overflow-hidden bg-contain bg-no-repeat"
+      className="relative grid overflow-hidden"
       style={{
         height,
         width: height,
         minWidth: height,
         minHeight: height,
         fontSize: typeof height === "number" ? height * 0.6 : height,
-        backgroundImage: isTemplate
-          ? `url(${transformIconUri(new URL(`fig://template?color=${color}`))})`
-          : `url(${icon})`,
       }}
     >
+      <img
+        alt={type ? `Icon for ${type}` : isTemplate ? "Template icon" : `Icon for ${icon.pathname}`}
+        src={
+          isTemplate
+            ? String(transformIconUri(new URL(`fig://template?color=${color}`)))
+            : String(icon)
+        }
+        className="absolute inset-0 h-full w-full object-contain object-left-top"
+      />
       {badge &&
         (isTemplate ? (
           <span
-            className="place-self-center text-center text-white"
+            className="relative place-self-center text-center text-white"
             style={{
               fontSize: typeof height === "number" ? height * 0.5 : height,
             }}
@@ -70,7 +72,7 @@ function renderIcon(icon: URL, height: string | number) {
           </span>
         ) : (
           <span
-            className="flex h-2.5 w-2.5 place-content-center place-self-end bg-contain bg-no-repeat text-[80%] text-white"
+            className="relative flex h-2.5 w-2.5 place-content-center place-self-end bg-contain bg-no-repeat text-[80%] text-white"
             style={{
               backgroundImage: `url(${transformIconUri(new URL(`fig://template?color=${color}`))})`,
             }}
@@ -127,8 +129,12 @@ const SuggestionIcon = ({ suggestion, iconPath, style }: SuggestionIconProps) =>
 
   if (!img) {
     const srcMap: Partial<Record<SuggestionType | "other", URL>> = {
-      folder: new URL(localProtocol("path", `${iconPath}${name}`)),
-      file: new URL(localProtocol("path", `${iconPath}${name}`)),
+      folder: new URL(
+        localProtocol("path", `${iconPath}${name}`, Boolean(fig.constants?.newUriFormat)),
+      ),
+      file: new URL(
+        localProtocol("path", `${iconPath}${name}`, Boolean(fig.constants?.newUriFormat)),
+      ),
       subcommand: transformIconUri(new URL("fig://icon?type=command")),
       option: transformIconUri(new URL("fig://icon?type=option")),
       shortcut: new URL(localProtocol("template", "?color=3498db&badge=💡")),

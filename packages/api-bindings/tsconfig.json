@@ -1,7 +1,7 @@
 {
   "extends": ["@fig/config/base.json", "@fig/config/dom.json"],
   "compilerOptions": {
-    "types": ["@fig/spec-types", "@fig/config"]
+    "types": ["@fig/spec-types", "@fig/config", "node"]
   },
   "include": ["src/"]
 }

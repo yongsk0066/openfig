@@ -7,13 +7,13 @@ import Preferences from "./pages/settings/preferences";
 import Integrations from "./pages/settings/integrations";
 import Keybindings from "./pages/settings/keybindings";
 import Licenses from "./pages/licenses";
-import { Suspense, useContext, useEffect, useRef } from "react";
+import { Suspense, useContext, useEffect } from "react";
 import Modal from "./components/modal";
 import { Event } from "@fig/api-bindings";
 import InstallModal from "./components/installs/modal";
 import { getIconFromName } from "./lib/icons";
 import { StoreContext } from "./context/zustand";
-import { createStore } from "./lib/store";
+import { createStore, type Store } from "./lib/store";
 import ListenerContext from "./context/input";
 import { useAccessibilityCheck, useDotfilesCheck } from "./hooks/store";
 import { useLocalStateZodDefault } from "./hooks/store/useState";
@@ -24,7 +24,11 @@ import { Platform } from "@fig/api-bindings";
 import { matchesPlatformRestrictions } from "./lib/platform";
 
 function App() {
-  const store = useRef(createStore()).current;
+  const [store] = useState(() => createStore());
+  useEffect(() => {
+    store.start();
+    return () => store.dispose();
+  }, [store]);
   const [listening, setListening] = useState<string | null>(null);
 
   return (
@@ -38,11 +42,25 @@ function App() {
 
 function AppLoading() {
   const store = useContext(StoreContext);
-  if (store === null || store().isLoading()) {
-    return <div className="w-screen h-screen bg-white dark:bg-zinc-800"></div>;
-  } else {
-    return <Router />;
-  }
+  return store ? <LoadedApp store={store} /> : null;
+}
+function LoadedApp({ store }: { store: Store }) {
+  const state = store();
+  return (
+    <>
+      {state.error && (
+        <div role="alert" className="p-4">
+          {state.error}
+          <button onClick={() => store.start()}>Retry</button>
+        </div>
+      )}
+      {state.isLoading() ? (
+        <div className="w-screen h-screen bg-white dark:bg-zinc-800" />
+      ) : (
+        <Router />
+      )}
+    </>
+  );
 }
 
 function ActiveModal() {
@@ -76,16 +94,20 @@ function Router() {
         "path" in request &&
         typeof request.path === "string"
       ) {
-        navigate(request.path);
+        void Promise.resolve(navigate(request.path)).catch((error) =>
+          console.error("Navigation", error),
+        );
       } else {
         console.error("Invalid dashboard.navigate request", request);
       }
 
       return { unsubscribe: false };
-    })?.then((result) => {
-      unsubscribe = result.unsubscribe;
-      if (isStale) unsubscribe();
-    });
+    })
+      ?.then((result) => {
+        unsubscribe = result.unsubscribe;
+        if (isStale) unsubscribe();
+      })
+      .catch((error) => console.error("Dashboard navigation subscription", error));
     return () => {
       if (unsubscribe) unsubscribe();
       isStale = true;

@@ -1,8 +1,8 @@
 import logger from "loglevel";
-import { type Annotation, TokenType } from "@fig/autocomplete-parser";
+import { type Annotation, TokenType } from "@fig/autocomplete-parser/core";
 import { makeArray, findLast } from "@fig/shared/utils";
 import type { GeneratorContext } from "./helpers";
-import { getHistoryArgSuggestions } from "../history";
+import type { GeneratorServices } from "./helpers";
 
 const getHelpSuggestions = (annotations: Annotation[]) => {
   const helpSuggestions: Fig.TemplateSuggestion[] = [];
@@ -49,6 +49,7 @@ const getHelpSuggestions = (annotations: Annotation[]) => {
 export async function getTemplateSuggestions(
   generator: Fig.Generator,
   context: GeneratorContext,
+  history: GeneratorServices["history"],
 ): Promise<Fig.Suggestion[]> {
   const { template, filterTemplateSuggestions } = generator;
   const { currentProcess, annotations } = context;
@@ -61,7 +62,7 @@ export async function getTemplateSuggestions(
 
   if (typesToInclude.has("history")) {
     try {
-      const historySuggestions = getHistoryArgSuggestions(annotations, currentProcess);
+      const historySuggestions = history(annotations, currentProcess);
       suggestions.push(...historySuggestions);
     } catch (_err) {
       logger.error("template suggestion did not work for template: history");

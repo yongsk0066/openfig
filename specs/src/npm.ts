@@ -74,7 +74,7 @@ export const createNpmSearchHandler =
         versions.push(
           ...Object.keys(data.versions)
             .map((version) => ({ name: version }) as Fig.Suggestion)
-            .reverse()
+            .toReversed()
         );
         return versions;
       }

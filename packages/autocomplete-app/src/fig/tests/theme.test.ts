@@ -18,8 +18,8 @@ describe("setTheme", () => {
   afterEach(() => {
     spy.mockReset();
   });
-  it("sets the css variables correctly for the light theme", () => {
-    setTheme("dark", "light");
+  it("sets the css variables correctly for the light theme", async () => {
+    await setTheme("dark", "light");
     expect(spy).toHaveBeenNthCalledWith(
       1,
       "--main-bg-color",
@@ -28,8 +28,8 @@ describe("setTheme", () => {
     spy.mockReset();
   });
 
-  it("sets the css variables correctly for the dark theme", () => {
-    setTheme("light", "dark");
+  it("sets the css variables correctly for the dark theme", async () => {
+    await setTheme("light", "dark");
     expect(spy).toHaveBeenNthCalledWith(
       1,
       "--main-bg-color",

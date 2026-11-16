@@ -67,7 +67,7 @@ export function UserPrefSection({
     <section className={`flex flex-col gap-4 py-4 ${disabled && "opacity-30 select-none"}`}>
       <SectionHeading index={index}>{data.title}</SectionHeading>
 
-      {list?.sort(alphaByTitle).map((p, i) => {
+      {list?.toSorted(alphaByTitle).map((p, i) => {
         if (p.popular) return;
 
         return <Setting data={p} key={i} disabled={disabled} />;

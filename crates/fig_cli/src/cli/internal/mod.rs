@@ -72,7 +72,7 @@ impl InternalSubcommand {
                 Ok(ExitCode::SUCCESS)
             },
             InternalSubcommand::Hostname => {
-                if let Some(hostname) = System::host_name()
+                if let Ok(hostname) = System::host_name()
                     && write!(stdout(), "{hostname}").is_ok()
                 {
                     return Ok(ExitCode::SUCCESS);

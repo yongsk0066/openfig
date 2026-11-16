@@ -44,7 +44,7 @@ const flyOrgsGenerator: Fig.Generator = {
 
     // sort such that "personal" is always first, then alphabetically
     return Object.entries(json)
-      .sort(([id1, name1], [id2, name2]) => {
+      .toSorted(([id1, name1], [id2, name2]) => {
         if (id1 == "personal") {
           return -1;
         } else if (id2 == "personal") {

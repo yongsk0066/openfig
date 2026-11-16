@@ -1,5 +1,4 @@
 import { Process } from "../index.js";
-import { withTimeout } from "@fig/shared/utils";
 import { createErrorInstance } from "@fig/shared/errors";
 import logger from "loglevel";
 import { cleanOutput, executeCommandTimeout } from "./executeCommand.js";
@@ -11,7 +10,11 @@ const DONE_SOURCING_OSC = "\u001b]697;DoneSourcing\u0007";
 
 let etcShells: Promise<string[]> | undefined;
 
-const getShellExecutable = async (shellName: string) => {
+const getShellExecutable = async (
+  shellName: string,
+  context?: { sessionId?: string; cwd?: string; env?: Record<string, string> },
+  signal?: AbortSignal,
+) => {
   if (!etcShells) {
     etcShells = fread("/etc/shells").then((shells) =>
       shells
@@ -25,10 +28,15 @@ const getShellExecutable = async (shellName: string) => {
     return (
       (await etcShells).find((shell) => shell.includes(shellName)) ??
       (
-        await executeCommandTimeout({
-          command: "/usr/bin/which",
-          args: [shellName],
-        })
+        await executeCommandTimeout(
+          {
+            command: "/usr/bin/which",
+            args: [shellName],
+          },
+          5000,
+          signal,
+          context,
+        )
       ).stdout
     );
   } catch (_) {
@@ -41,18 +49,22 @@ export const executeLoginShell = async ({
   executable,
   shell,
   timeout,
+  context,
+  signal,
 }: {
   command: string;
   executable?: string;
   shell?: string;
   timeout?: number;
+  context?: { sessionId?: string; cwd?: string; env?: Record<string, string> };
+  signal?: AbortSignal;
 }): Promise<string> => {
   let exe = executable;
   if (!exe) {
     if (!shell) {
       throw new LoginShellError("Must pass shell or executable");
     }
-    exe = await getShellExecutable(shell);
+    exe = await getShellExecutable(shell, context, signal);
     if (!exe) {
       throw new LoginShellError(`Could not find executable for ${shell}`);
     }
@@ -62,8 +74,11 @@ export const executeLoginShell = async ({
   const process = Process.run({
     executable: exe,
     args: [flags, command],
-    terminalSessionId: window.globalTerminalSessionId,
-    timeout,
+    terminalSessionId: context ? context.sessionId : window.globalTerminalSessionId,
+    workingDirectory: context?.cwd,
+    environment: context?.env,
+    signal,
+    timeout: timeout ?? 5000,
   });
 
   try {
@@ -72,19 +87,16 @@ export const executeLoginShell = async ({
       shell: exe,
     });
     const start = performance.now();
-    const result = await withTimeout(
-      timeout ?? 5000,
-      process.then((output) => {
-        if (output.exitCode !== 0) {
-          logger.warn(
-            `Command ${command} exited with exit code ${output.exitCode}: ${output.stderr}`,
-          );
-        }
-        return cleanOutput(output.stdout);
-      }),
-    );
-    const idx = result.lastIndexOf(DONE_SOURCING_OSC) + DONE_SOURCING_OSC.length;
-    const trimmed = result.slice(idx);
+    const result = await process.then((output) => {
+      if (output.exitCode !== 0) {
+        logger.warn(
+          `Command ${command} exited with exit code ${output.exitCode}: ${output.stderr}`,
+        );
+      }
+      return cleanOutput(output.stdout);
+    });
+    const marker = result.lastIndexOf(DONE_SOURCING_OSC);
+    const trimmed = marker < 0 ? result : result.slice(marker + DONE_SOURCING_OSC.length);
     const end = performance.now();
     logger.info(`Result of login shell command '${command}'`, {
       result: trimmed,

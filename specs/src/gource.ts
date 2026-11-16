@@ -96,7 +96,7 @@ const screenNumbers: Fig.Generator = {
         if (displayAdapter.spdisplays_ndrvs) {
           for (const display of displayAdapter.spdisplays_ndrvs) {
             screens.push({
-              description: display._name,
+              description: display["_name"],
               icon: "🖥️",
             });
           }

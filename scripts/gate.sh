@@ -78,12 +78,14 @@ codegen_zero_diff() {
 step "pnpm install (frozen lockfile)" pnpm install --frozen-lockfile --prefer-offline
 step "rustfmt --check" cargo +nightly fmt --check
 step "oxfmt --check" pnpm exec oxfmt --check
-step "oxlint --type-aware" pnpm exec oxlint --type-aware
+step "oxlint --type-aware (zero warnings)" pnpm exec oxlint --type-aware --max-warnings 0
+step "core architecture boundaries" node scripts/check-architecture.mjs
 step "turbo boundaries" pnpm exec turbo boundaries
 step "turbo codegen zero-diff" codegen_zero_diff
 step "clippy --all-targets -D warnings" cargo clippy --locked --workspace --all-targets -- -D warnings
 step "turbo typecheck" pnpm exec turbo typecheck
 step "vitest run" pnpm exec vitest run
 step "nextest run --workspace" cargo nextest run --locked --workspace
+step "WKWebView runtime resize smoke" cargo run --locked -p fig_desktop --example webview_runtime_smoke
 
 report

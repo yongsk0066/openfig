@@ -1,12 +1,14 @@
 import type { Suggestion } from "@fig/shared/internal";
 import { fieldsAreEqual, makeArray } from "@fig/shared/utils";
 import type { Command } from "@fig/shell-parser";
-import type { ArgumentParserResult } from "@fig/autocomplete-parser";
-import { SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
+import { TokenType, type ArgumentParserResult } from "@fig/autocomplete-parser/core";
+import { SETTINGS, type SettingsMap } from "@fig/shared/settings";
 import type { GeneratorState } from "../generators/helpers";
-import { getFullHistorySuggestions, type HistorySources } from "../history";
+import { getFullHistorySuggestions, type HistorySources } from "../history/repository";
 import { type RecencyIndex, updatePriorities } from "../suggestions/sorting";
 import { deduplicateSuggestions, filterSuggestions, getAllSuggestions } from "../suggestions";
+const sameItems = <T>(a: readonly T[], b: readonly T[]) =>
+  a.length === b.length && a.every((value, i) => value === b[i]);
 
 /**
  * Everything the suggestion list depends on. The store builds it from its own fields plus
@@ -49,7 +51,7 @@ export type SuggestionsOutput = {
   hasChangedIndex: boolean;
 };
 
-const rankSuggestions = (input: SuggestionsInput): Suggestion[] => {
+const rankCandidates = (input: SuggestionsInput): Suggestion[] => {
   const { parserResult, command, settings, history } = input;
   const { annotations } = parserResult;
   const rootCommand = command?.tokens[0]?.text ?? "";
@@ -106,10 +108,15 @@ const rankSuggestions = (input: SuggestionsInput): Suggestion[] => {
     suggestions = getHistorySuggestions();
   }
 
-  suggestions = updatePriorities(suggestions, rootCommand, sortMethod, history.recency).sort(
+  suggestions = updatePriorities(suggestions, rootCommand, sortMethod, history.recency).toSorted(
     (a, b) => (b.priority || 0) - (a.priority || 0),
   );
 
+  return suggestions;
+};
+
+const filterRanked = (input: SuggestionsInput, suggestions: Suggestion[]): Suggestion[] => {
+  const { parserResult, settings } = input;
   const filtered = filterSuggestions(
     suggestions,
     parserResult.searchTerm,
@@ -133,10 +140,16 @@ const rankSuggestions = (input: SuggestionsInput): Suggestion[] => {
  * static spec suggestions are memoized by argument identity, which does not change that.)
  */
 export const computeSuggestions = (input: SuggestionsInput): SuggestionsOutput => {
-  const suggestions = rankSuggestions(input);
+  const suggestions = filterRanked(input, rankCandidates(input));
 
-  // If the list was visible and the user moved the selection, keep the same item selected.
-  const { selection } = input;
+  return selectSuggestions(suggestions, input.selection);
+};
+
+function selectSuggestions(
+  suggestions: Suggestion[],
+  selection: SuggestionsInput["selection"],
+): SuggestionsOutput {
+  // Keep the selected semantic item across generator updates.
   let selectedIndex = 0;
   let hasChangedIndex = false;
   const lastSelected = selection.suggestions[selection.selectedIndex];
@@ -152,4 +165,43 @@ export const computeSuggestions = (input: SuggestionsInput): SuggestionsOutput =
   }
 
   return { suggestions, selectedIndex, hasChangedIndex };
-};
+}
+
+/** Per-engine candidate cache: filtering a longer search term need not rebuild or sort candidates. */
+export function createSuggestionComputer() {
+  let previous: SuggestionsInput | undefined;
+  let ranked: Suggestion[] = [];
+  const historyEnabled = (input: SuggestionsInput) =>
+    input.history.modeEnabled ||
+    ["show", "history_only"].includes(String(input.settings[SETTINGS.HISTORY_MODE]));
+  return (input: SuggestionsInput): SuggestionsOutput => {
+    const a = previous;
+    const p = input.parserResult;
+    const old = a?.parserResult;
+    // Composite option chains transform names using their exact text, so conservatively rebuild.
+    const composite =
+      p.annotations.at(-1)?.type === TokenType.Composite ||
+      old?.annotations.at(-1)?.type === TokenType.Composite;
+    if (
+      !a ||
+      !old ||
+      composite ||
+      old.currentArg !== p.currentArg ||
+      old.completionObj !== p.completionObj ||
+      old.suggestionFlags !== p.suggestionFlags ||
+      !sameItems(old.passedOptions, p.passedOptions) ||
+      !sameItems(a.generatorStates, input.generatorStates) ||
+      a.settings !== input.settings ||
+      a.command?.tokens[0]?.text !== input.command?.tokens[0]?.text ||
+      a.context.currentProcess !== input.context.currentProcess ||
+      a.history.modeEnabled !== input.history.modeEnabled ||
+      a.history.sources !== input.history.sources ||
+      a.history.recency !== input.history.recency ||
+      ((historyEnabled(a) || historyEnabled(input)) && a.buffer !== input.buffer)
+    ) {
+      ranked = rankCandidates(input);
+    }
+    previous = input;
+    return selectSuggestions(filterRanked(input, ranked), input.selection);
+  };
+}

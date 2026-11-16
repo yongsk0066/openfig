@@ -1,7 +1,7 @@
 const processXcodeList = (out: string, tokens: string[]) =>
   out
     .split("\n")
-    .reverse()
+    .toReversed()
     .map((line) => ({
       name: line.slice(0, line.indexOf(" (")),
       icon: line.includes("Selected")

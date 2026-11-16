@@ -1,6 +1,3 @@
-import logger from "loglevel";
-import { Keybindings } from "@fig/api-bindings";
-import { ACTIONS } from "../actions";
 import type { GeneratorState } from "../generators/helpers";
 import { type AutocompleteState, Visibility } from "./types";
 
@@ -17,9 +14,11 @@ export type RunGeneratorEffect = {
 };
 
 /** Globals that specs' `executeShellCommand` and generators read. */
-export type ShellGlobals = Partial<
-  Pick<Window, "globalCWD" | "globalSSHString" | "globalTerminalSessionId">
->;
+export type ShellGlobals = {
+  globalCWD?: string;
+  globalSSHString?: string;
+  globalTerminalSessionId?: string;
+};
 
 export type SetShellGlobalsEffect = { kind: "setShellGlobals"; globals: ShellGlobals };
 
@@ -50,27 +49,10 @@ export const storeEffects = (
 ): InterceptKeystrokesEffect[] => {
   const was = interceptKeystrokesEffect(before);
   const is = interceptKeystrokesEffect(after);
-  return was.intercept !== is.intercept || before.suggestions.length !== after.suggestions.length
+  return was.intercept !== is.intercept ||
+    was.globalIntercept !== is.globalIntercept ||
+    was.sessionId !== is.sessionId ||
+    before.suggestions.length !== after.suggestions.length
     ? [is]
     : [];
-};
-
-/** Runs every effect except `runGenerator`, which needs the store (see `createGeneratorRunner`). */
-export const applyEffect = (effect: SetShellGlobalsEffect | InterceptKeystrokesEffect) => {
-  switch (effect.kind) {
-    case "setShellGlobals":
-      Object.assign(window, effect.globals);
-      break;
-    case "setInterceptKeystrokes":
-      logger.info("Setting intercept keystrokes", effect);
-      Keybindings.setInterceptKeystrokes(
-        ACTIONS,
-        effect.intercept,
-        effect.globalIntercept,
-        effect.sessionId,
-      );
-      break;
-    default:
-      break;
-  }
 };

@@ -4,7 +4,6 @@
  * If it gets bundled in the same file as the functions that call it
  * vitest is not able to mock it (because of esm restrictions).
  */
-import { withTimeout } from "@fig/shared/utils";
 import { Process } from "../index.js";
 import logger from "loglevel";
 
@@ -18,23 +17,23 @@ export const cleanOutput = (output: string) =>
 
 export const executeCommandTimeout = async (
   input: Fig.ExecuteCommandInput,
-  timeout = window.fig.constants?.os === "windows" ? 20000 : 5000,
+  timeout = 5000,
+  signal?: AbortSignal,
+  context?: { sessionId?: string; cwd?: string; env?: Record<string, string> },
 ): Promise<Fig.ExecuteCommandOutput> => {
   const command = [input.command, ...input.args].join(" ");
   try {
     logger.info(`About to run shell command '${command}'`);
     const start = performance.now();
-    const result = await withTimeout(
-      Math.max(timeout, input.timeout ?? 0),
-      Process.run({
-        executable: input.command,
-        args: input.args,
-        environment: input.env,
-        workingDirectory: input.cwd,
-        terminalSessionId: window.globalTerminalSessionId,
-        timeout: input.timeout,
-      }),
-    );
+    const result = await Process.run({
+      executable: input.command,
+      args: input.args,
+      environment: input.env ?? context?.env,
+      workingDirectory: input.cwd ?? context?.cwd,
+      terminalSessionId: context ? context.sessionId : window.globalTerminalSessionId,
+      timeout: Math.max(timeout, input.timeout ?? 0),
+      signal,
+    });
     const end = performance.now();
     logger.info(`Result of shell command '${command}'`, {
       result,
@@ -53,6 +52,7 @@ export const executeCommandTimeout = async (
       stderr: cleanStderr,
     };
   } catch (err) {
+    if (signal?.aborted) throw signal.reason;
     logger.error(`Error running shell command '${command}'`, { err });
     throw err;
   }

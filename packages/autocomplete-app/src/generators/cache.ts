@@ -1,86 +1,80 @@
 import { LruCache } from "@fig/shared/lru";
 
 class CacheEntry<T> {
-  private lastFetch = 0;
+  value: T | undefined;
+  initialized = false;
+  fetchedAt = 0;
+  pending?: { promise: Promise<T>; signal?: AbortSignal };
 
-  private promise: Promise<T> | undefined = undefined;
-
-  value: T | undefined = undefined;
-
-  private isInitialized = false;
-
-  private get isFetching() {
-    return !!this.promise;
-  }
-
-  private async fetchSync(run: () => Promise<T>) {
-    this.lastFetch = Date.now();
-    this.promise = run();
-    this.value = await this.promise;
-    if (!this.isInitialized) this.isInitialized = true;
-    this.promise = undefined;
-    return this.value;
-  }
-
-  private async fetchAsync(run: () => Promise<T>): Promise<T | undefined> {
-    if (this.isFetching) {
-      await this.promise;
-      return this.value;
-    }
-    return this.fetchSync(run);
-  }
-
-  private async maxAgeCache(run: () => Promise<T>, maxAge: number) {
-    if (Date.now() > maxAge + this.lastFetch) {
-      return this.fetchAsync(run);
-    }
-    return this.value;
-  }
-
-  private async swrCache(run: () => Promise<T>, maxAge = 0) {
-    if (!this.isFetching && Date.now() > this.lastFetch + maxAge) {
-      return this.fetchAsync(run);
-    }
-    return this.value as T;
-  }
-
-  async entry(run: () => Promise<T>, cache: Fig.Cache): Promise<T | undefined> {
-    if (!this.isInitialized) return this.fetchAsync(run);
-    switch (cache.strategy || "stale-while-revalidate") {
-      case "max-age":
-        return this.maxAgeCache(run, cache.ttl!);
-      case "stale-while-revalidate":
-        // cache.ttl must be defined when no strategy is specified
-        return this.swrCache(run, cache.ttl!);
-      default:
-        return this.fetchAsync(run);
-    }
+  fetch(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (this.pending) return this.pending.promise;
+    const started = Date.now();
+    const promise = Promise.resolve()
+      .then(run)
+      .then((value) => {
+        if (!signal?.aborted) {
+          this.value = value;
+          this.initialized = true;
+          this.fetchedAt = started;
+        }
+        return value;
+      })
+      .finally(() => {
+        this.pending = undefined;
+      });
+    this.pending = { promise, signal };
+    return promise;
   }
 }
 
 export class Cache {
-  // Keyed by (directory, script or tokens) of every cached generator run; bounded because
-  // `beta.autocomplete.auto-cache` caches every generator and the window lives for days.
   private cache = new LruCache<string, CacheEntry<unknown>>(500);
 
-  async entry<T>(key: string, run: () => Promise<T>, cache: Fig.Cache): Promise<T> {
-    if (!this.cache.has(key)) {
-      this.cache.set(key, new CacheEntry());
+  async entry<T>(
+    key: string,
+    run: () => Promise<T>,
+    cache: Fig.Cache,
+    signal?: AbortSignal,
+    onRefresh?: (value: T) => void,
+  ): Promise<T> {
+    signal?.throwIfAborted();
+    let entry = this.cache.get(key);
+    // In-flight work belongs to its cancellation scope. Carry over only committed data.
+    if (
+      !entry ||
+      (entry.pending && (entry.pending.signal?.aborted || entry.pending.signal !== signal))
+    ) {
+      const replacement = new CacheEntry<unknown>();
+      if (entry?.initialized) {
+        replacement.value = entry.value;
+        replacement.initialized = true;
+        replacement.fetchedAt = entry.fetchedAt;
+      }
+      entry = replacement;
+      this.cache.set(key, entry);
     }
-    return this.cache.get(key)!.entry(run, cache) as Promise<T>;
+    const current = entry;
+    const expired = Date.now() > current.fetchedAt + (cache.ttl ?? 0);
+    if (!current.initialized) return (await current.fetch(run, signal)) as T;
+    if (!expired) return current.value as T;
+    const fresh = current.fetch(run, signal) as Promise<T>;
+    if (cache.strategy === "max-age") return fresh;
+    void fresh
+      .then((value) => {
+        if (!signal?.aborted && this.cache.get(key) === current) onRefresh?.(value);
+      })
+      .catch(() => {
+        /* Keep the committed stale value; retry on the next request. */
+      });
+    return current.value as T;
   }
 
   currentValue<T>(key: string, _cache: Fig.Cache): T | undefined {
-    if (!this.cache.has(key)) {
-      this.cache.set(key, new CacheEntry());
-    }
-    return this.cache.get(key)!.value as T | undefined;
+    return this.cache.get(key)?.value as T | undefined;
   }
-
   get size() {
     return this.cache.size;
   }
-
   clear() {
     this.cache.clear();
   }

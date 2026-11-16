@@ -186,7 +186,8 @@ mod tests {
                 .as_str(),
             "5.9.2"
         );
-        // The old `(\d+\.\d+)` pattern matched the first number anywhere, e.g. in the target triple.
+        // The old `(\d+\.\d+)` pattern matched the first number anywhere, e.g. in the target
+        // triple.
         assert!(ZSH_RE.captures("arm-apple-darwin22.1.0").is_none());
     }
 }

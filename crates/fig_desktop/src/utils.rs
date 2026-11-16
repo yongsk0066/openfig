@@ -48,9 +48,9 @@ pub fn is_cargo_debug_build() -> bool {
 /// Adapt an `async fn(request, window_id)` into a wry asynchronous custom-protocol handler.
 ///
 /// A protocol that needs state captures it in `f`: the asset protocols need none, `api://`
-/// captures its [`crate::webview::ApiState`]. That state used to be a separate `Arc<S>` argument,
-/// and the asset protocols were handed an `Arc<fig_os_shim::Context>` that every one of them
-/// ignored.
+/// captures its [`crate::application::ApplicationServices`]. That state used to be a separate
+/// `Arc<S>` argument, and the asset protocols were handed an `Arc<fig_os_shim::Context>` that every
+/// one of them ignored.
 pub fn wrap_custom_protocol<F, Fut, W>(
     proto_name: &'static str,
     window_id: W,

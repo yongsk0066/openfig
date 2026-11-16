@@ -10,7 +10,7 @@ interface XcodeProjectList {
   };
 }
 
-const _gen: Record<string, Fig.Generator> = {
+const gen: Record<string, Fig.Generator> = {
   npm: {
     script(context) {
       if (context[context.length - 1] === "") return undefined;
@@ -1586,7 +1586,7 @@ const completionSpec: Fig.Spec = {
           name: "--max-workers",
           description: "Maximum number of tasks to allow Metro to spawn",
           args: {
-            generators: _gen[`max-workers`],
+            generators: gen[`max-workers`],
             name: "Number of workers",
           },
           icon: "https://raw.githubusercontent.com/expo/expo-cli/master/assets/fig/number.png",
@@ -2063,7 +2063,7 @@ const completionSpec: Fig.Spec = {
       description: "Install a module or other package to a project",
       priority: 64,
       args: {
-        generators: _gen[`npm`],
+        generators: gen[`npm`],
         isOptional: true,
         isVariadic: true,
         name: "packages",
@@ -2201,7 +2201,7 @@ const completionSpec: Fig.Spec = {
           name: "--max-workers",
           description: "Maximum number of tasks to allow Metro to spawn",
           args: {
-            generators: _gen[`max-workers`],
+            generators: gen[`max-workers`],
             name: "Number of workers",
           },
           icon: "https://raw.githubusercontent.com/expo/expo-cli/master/assets/fig/number.png",
@@ -2811,7 +2811,7 @@ const completionSpec: Fig.Spec = {
           name: ["-d", "--device"],
           description: "Device name or UDID to build the app on",
           args: {
-            generators: _gen[`xcode-devices`],
+            generators: gen[`xcode-devices`],
             name: "device",
           },
           icon: "https://raw.githubusercontent.com/expo/expo-cli/master/assets/fig/devices.png",
@@ -2828,7 +2828,7 @@ const completionSpec: Fig.Spec = {
           name: "--scheme",
           description: "Scheme to build",
           args: {
-            generators: _gen[`xcode-scheme`],
+            generators: gen[`xcode-scheme`],
             name: "scheme",
             isOptional: true,
           },
@@ -2839,7 +2839,7 @@ const completionSpec: Fig.Spec = {
           description:
             "Xcode configuration to use. Debug or Release. Default: Debug",
           args: {
-            generators: _gen[`xcode-configuration`],
+            generators: gen[`xcode-configuration`],
             name: "configuration",
           },
           icon: "https://raw.githubusercontent.com/expo/expo-cli/master/assets/fig/string.png",
@@ -3095,7 +3095,7 @@ const completionSpec: Fig.Spec = {
           name: "--max-workers",
           description: "Maximum number of tasks to allow Metro to spawn",
           args: {
-            generators: _gen[`max-workers`],
+            generators: gen[`max-workers`],
             name: "Number of workers",
           },
           icon: "https://raw.githubusercontent.com/expo/expo-cli/master/assets/fig/number.png",

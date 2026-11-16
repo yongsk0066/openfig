@@ -2,6 +2,6 @@
 source: crates/fig_desktop/src/protocol/api.rs
 expression: transcript(requests).await
 ---
-> ClientOriginatedMessage { id: Some(1), submessage: Some(RunProcessRequest(RunProcessRequest { executable: "true", arguments: [], working_directory: None, env: [], terminal_session_id: Some("not-a-uuid"), timeout: None })) }
+> ClientOriginatedMessage { id: Some(1), submessage: Some(RunProcessRequest(RunProcessRequest { executable: "true", arguments: [], working_directory: None, env: [], terminal_session_id: Some("not-a-uuid"), timeout: None, cancellation_token: None })) }
 < 200 OK CAESSnRlcm1pbmFsX3Nlc3Npb25faWQgaXMgbm90IGEgdmFsaWQgVVVJRDogaW52YWxpZCBjaGFyYWN0ZXI6IGZvdW5kIGBuYCBhdCAw
 < ServerOriginatedMessage { id: Some(1), submessage: Some(Error("terminal_session_id is not a valid UUID: invalid character: found `n` at 0")) }

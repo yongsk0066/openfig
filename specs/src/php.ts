@@ -47,7 +47,7 @@ const completionSpec: Fig.Spec = {
             return suggestions.filter((suggestion) => {
               return (
                 // suggestion.name.endsWith(".php") ||
-                suggestion.name?.indexOf(".") === -1
+                suggestion.name?.includes(".") === false
               );
             });
           },

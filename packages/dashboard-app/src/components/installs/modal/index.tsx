@@ -21,8 +21,8 @@ export default function OnboardingModal() {
   const [_accessibility, setAccessibility] = useState(accessibilityCheck);
 
   useEffect(() => {
-    refreshAccessibility();
-    refreshDotfiles();
+    void refreshAccessibility();
+    void refreshDotfiles();
   }, [refreshAccessibility, refreshDotfiles]);
 
   function nextStep() {
@@ -30,8 +30,8 @@ export default function OnboardingModal() {
   }
 
   function finish() {
-    refreshAccessibility();
-    refreshDotfiles();
+    void refreshAccessibility();
+    void refreshDotfiles();
     Internal.sendOnboardingRequest({
       action: Fig.OnboardingAction.FINISH_ONBOARDING,
     })
@@ -66,6 +66,7 @@ export default function OnboardingModal() {
   if (["dotfiles", "accessibility"].includes(check.id)) {
     return (
       <InstallModal
+        key={check.id}
         check={check}
         skip={skipInstall}
         next={step === onboarding.length - 1 ? finish : nextStep}

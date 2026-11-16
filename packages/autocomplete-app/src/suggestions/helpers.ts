@@ -1,4 +1,4 @@
-import fuzzysort from "@fig/fuzzysort";
+import fuzzySearch from "@fig/fuzzysort";
 import logger from "loglevel";
 import type { Suggestion } from "@fig/shared/internal";
 import { makeArray, longestCommonPrefix, ensureTrailingSlash } from "@fig/shared/utils";
@@ -29,7 +29,7 @@ export const getFuzzyNameMatches = (names: string[], query: string) => {
   if (!query) {
     return names.map((name) => ({ target: name, score: 0, indexes: [] }));
   }
-  return names.map((name) => fuzzysort.single(query, name));
+  return names.map((name) => fuzzySearch.single(query, name));
 };
 
 // IMPORTANT!: Always return scores: -10 < score <= 0
@@ -112,6 +112,8 @@ export const getQueryTermForSuggestion = (suggestion: Suggestion, searchTerm: st
   return searchTerm;
 };
 
+const prefixCache = new WeakMap<readonly Suggestion[], Map<string, string | null>>();
+
 export const getCommonSuggestionPrefix = (
   selectedIndex: number,
   suggestions: Suggestion[],
@@ -139,12 +141,20 @@ export const getCommonSuggestionPrefix = (
         : selectedItem.name,
   };
 
+  // Matching depends only on the effective type and the special parent-directory name.
+  const key = JSON.stringify([itemType, makeArray(typeFilterItem.name ?? [])[0] === "../"]);
+  let prefixes = prefixCache.get(suggestions);
+  if (!prefixes) {
+    prefixes = new Map();
+    prefixCache.set(suggestions, prefixes);
+  }
+  if (prefixes.has(key)) return prefixes.get(key)!;
   const sameTypeSuggestionNames = suggestions
     .filter((suggestion) => isMatchingType(suggestion, typeFilterItem))
     .map((suggestion) => (makeArray(suggestion.name || [])[0] ?? "").toLowerCase());
 
-  if (sameTypeSuggestionNames.length < 2) {
-    return null;
-  }
-  return longestCommonPrefix(sameTypeSuggestionNames);
+  const prefix =
+    sameTypeSuggestionNames.length < 2 ? null : longestCommonPrefix(sameTypeSuggestionNames);
+  prefixes.set(key, prefix);
+  return prefix;
 };

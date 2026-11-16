@@ -5,7 +5,7 @@ expression: transcript(requests).await
 > ClientOriginatedMessage { id: Some(1), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: None, r#type: Some(Text("echo")) })) }
 < 200 OK CAESH3Rlcm1pbmFsX3Nlc3Npb25faWQgaXMgcmVxdWlyZWQ=
 < ServerOriginatedMessage { id: Some(1), submessage: Some(Error("terminal_session_id is required")) }
-> ClientOriginatedMessage { id: Some(2), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: Some("not-a-uuid"), r#type: Some(Update(TextUpdate { insertion: None, deletion: None, offset: None, immediate: None, insertion_buffer: None })) })) }
+> ClientOriginatedMessage { id: Some(2), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: Some("not-a-uuid"), r#type: Some(Update(TextUpdate { insertion: None, deletion: None, offset: None, immediate: None, insertion_buffer: None, input_revision: None, expected_cursor: None })) })) }
 < 200 OK CAISSnRlcm1pbmFsX3Nlc3Npb25faWQgaXMgbm90IGEgdmFsaWQgVVVJRDogaW52YWxpZCBjaGFyYWN0ZXI6IGZvdW5kIGBuYCBhdCAw
 < ServerOriginatedMessage { id: Some(2), submessage: Some(Error("terminal_session_id is not a valid UUID: invalid character: found `n` at 0")) }
 > ClientOriginatedMessage { id: Some(3), submessage: Some(InsertTextRequest(InsertTextRequest { terminal_session_id: Some("00000000-0000-0000-0000-000000000000"), r#type: Some(Text("echo")) })) }

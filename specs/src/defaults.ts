@@ -3,9 +3,9 @@ const domain: Fig.Arg = {
   generators: {
     script: ["defaults", "domains"],
     postProcess: function (out) {
-      return out.split(",").map((domain) => {
+      return out.split(",").map((domainName) => {
         return {
-          name: domain.trim(),
+          name: domainName.trim(),
         };
       });
     },

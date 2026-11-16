@@ -2,6 +2,7 @@
 name = "fig_desktop"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 publish.workspace = true
 version.workspace = true
@@ -22,7 +23,6 @@ base64.workspace = true
 bytes.workspace = true
 camino.workspace = true
 clap.workspace = true
-cocoa.workspace = true
 core-graphics.workspace = true
 dashmap.workspace = true
 fig_desktop_api.workspace = true
@@ -36,38 +36,38 @@ fig_settings.workspace = true
 fig_util.workspace = true
 flume.workspace = true
 fnv = "1.0.7"
-image = "0.25.6"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 infer = "0.22.0"
 libc.workspace = true
 macos-utils = { path = "../macos-utils" }
-mime = "0.3.17"
-muda = { version = "0.19.3", default-features = false }
+mime = "0.3.18"
+muda = { version = "0.21.2", default-features = false }
 nix.workspace = true
-notify = "8.0.0"
-objc.workspace = true
+notify = "8.2.2"
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSEvent", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication"] }
 objc2-foundation.workspace = true
 parking_lot = { workspace = true, features = ["serde"] }
-paste = "1.0.11"
 percent-encoding.workspace = true
 regex.workspace = true
-rfd = "0.17.2"
+rfd = "0.18.0"
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shellexpand.workspace = true
 sysinfo.workspace = true
-tao = { version = "0.37.0", features = ["serde"] }
-tempfile.workspace = true
+tao = { version = "0.37.2", features = ["serde"] }
 tokio.workspace = true
 tracing.workspace = true
-tray-icon = { version = "0.24.2", default-features = false }
+tray-icon = { version = "0.26.1", default-features = false }
 url = { workspace = true, features = ["serde"] }
 uuid.workspace = true
-wry = { version = "0.57.0", default-features = false, features = ["devtools"] }
+wry = { version = "0.57.2", default-features = false, features = ["devtools"] }
 
 [dev-dependencies]
+tempfile.workspace = true
 indoc.workspace = true
 insta.workspace = true
 
 [build-dependencies]
-image = "0.25.6"
+image = { version = "0.25.10", default-features = false, features = ["png"] }

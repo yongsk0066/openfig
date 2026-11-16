@@ -279,8 +279,7 @@ pub trait JsonStore: Sized {
 
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or_default();
+            .map_or_default(|d| d.as_secs());
 
         let mut quarantined = name.to_os_string();
         quarantined.push(format!(".corrupt-{stamp}"));

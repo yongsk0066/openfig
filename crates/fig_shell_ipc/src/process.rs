@@ -5,6 +5,7 @@
 //! directory the shell last reported.
 
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use fig_proto::fig::{
@@ -13,7 +14,33 @@ use fig_proto::fig::{
 };
 use fig_util::env_var::PROCESS_LAUNCHED_BY_FIG;
 use tokio::process::Command;
-use tracing::warn;
+use tokio::sync::Semaphore;
+
+static ADMISSION: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(32));
+static RUNNING: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(4));
+const MAX_OUTPUT: usize = 1024 * 1024;
+
+struct ProcessGroup(i32);
+impl Drop for ProcessGroup {
+    fn drop(&mut self) {
+        // Each child starts its own group; cancel shells and their descendants together.
+        let _ = nix::sys::signal::killpg(nix::unistd::Pid::from_raw(self.0), nix::sys::signal::Signal::SIGKILL);
+    }
+}
+
+async fn read_output(reader: impl tokio::io::AsyncRead + Unpin) -> Result<Vec<u8>, String> {
+    use tokio::io::AsyncReadExt;
+    let mut bytes = Vec::new();
+    reader
+        .take((MAX_OUTPUT + 1) as u64)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|err| err.to_string())?;
+    if bytes.len() > MAX_OUTPUT {
+        return Err("Generator output exceeds 1 MiB per stream".into());
+    }
+    Ok(bytes)
+}
 
 /// The timeout when the request carries none.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
@@ -73,30 +100,41 @@ pub async fn run(request: Request, shell: Shell) -> Result<RunProcessResponse, S
         };
     }
 
+    // Admission bounds waiting work as well as running children. Waiting counts against the
+    // deadline, and dropping this future cancels both queued and running work.
+    let _admission = ADMISSION
+        .try_acquire()
+        .map_err(|_error| "Too many pending generator processes".to_owned())?;
     let timeout = request.timeout.unwrap_or(DEFAULT_TIMEOUT);
-    match tokio::time::timeout(timeout, cmd.output()).await {
-        Ok(Ok(output)) => Ok(RunProcessResponse {
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            exit_code: output.status.code().unwrap_or(0),
-        }),
-        Ok(Err(err)) => {
-            warn!(%err, executable = request.executable, "failed running executable");
-            Err(format!("failed running executable ({}): {err}", request.executable))
-        },
-        Err(_elapsed) => {
-            warn!(
-                executable = request.executable,
-                ?timeout,
-                "timed out running executable"
-            );
-            Err(format!(
-                "timed out after {}ms running executable ({})",
-                timeout.as_millis(),
-                request.executable
-            ))
-        },
-    }
+    tokio::time::timeout(timeout, async {
+        let _slot = RUNNING.acquire().await.map_err(|err| err.to_string())?;
+        use std::os::unix::process::CommandExt;
+        cmd.as_std_mut().process_group(0);
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd
+            .spawn()
+            .map_err(|err| format!("failed running executable ({}): {err}", request.executable))?;
+        let _group = ProcessGroup(child.id().expect("spawned child has a pid") as i32);
+        let stdout = child.stdout.take().expect("piped stdout");
+        let stderr = child.stderr.take().expect("piped stderr");
+        let (stdout, stderr, status) = tokio::try_join!(read_output(stdout), read_output(stderr), async {
+            child.wait().await.map_err(|err| err.to_string())
+        })?;
+        Ok(RunProcessResponse {
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            exit_code: status.code().unwrap_or(1),
+        })
+    })
+    .await
+    .map_err(|_error| {
+        format!(
+            "timed out after {}ms running executable ({})",
+            timeout.as_millis(),
+            request.executable
+        )
+    })?
 }
 
 #[cfg(test)]
@@ -198,5 +236,54 @@ mod tests {
             matches!(&slow, Err(message) if message.contains("timed out")),
             "{slow:?}"
         );
+    }
+    #[tokio::test]
+    async fn dropping_work_kills_shell_descendants() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("leaked");
+        let ready = dir.path().join("ready");
+        let work = tokio::spawn(run(
+            Request {
+                executable: "/bin/sh".into(),
+                arguments: vec![
+                    "-c".into(),
+                    "(sleep 0.5; touch \"$1\") & touch \"$2\"; wait".into(),
+                    "test".into(),
+                    marker.to_string_lossy().into(),
+                    ready.to_string_lossy().into(),
+                ],
+                working_directory: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(5)),
+            },
+            Shell { env: vec![], cwd: None },
+        ));
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while !ready.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        work.abort();
+        assert!(work.await.unwrap_err().is_cancelled());
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        assert!(!marker.exists(), "a cancelled shell left its child running");
+    }
+
+    #[tokio::test]
+    async fn oversized_output_is_rejected_without_waiting_for_the_deadline() {
+        let result = run(
+            Request {
+                executable: "/usr/bin/yes".into(),
+                arguments: vec![],
+                working_directory: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(5)),
+            },
+            Shell { env: vec![], cwd: None },
+        )
+        .await;
+        assert!(result.unwrap_err().contains("exceeds 1 MiB"));
     }
 }

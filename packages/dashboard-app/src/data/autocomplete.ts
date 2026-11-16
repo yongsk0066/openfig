@@ -138,16 +138,11 @@ const autocompleteSettings: PrefSection[] = [
   },
   {
     title: "Appearance",
-    // withPreview: true,
     properties: [
       {
         id: "autocomplete.theme",
         title: "Theme",
         type: "select",
-        // `system`/`dark`/`light` are built into the autocomplete app
-        // (`fig/themes.ts`); the rest are the 28 files the bundle copies into
-        // `<App>.app/Contents/Resources/themes`. The list used to name 14 of
-        // them plus a `cobalt` that has no file.
         options: [
           "system",
           "dark",
@@ -212,23 +207,6 @@ const autocompleteSettings: PrefSection[] = [
         type: "number",
         popular: false,
       },
-      // {
-      //   id: "autocomplete.hidePreviewWindow",
-      //   title: "Hide Preview window",
-      //   description:
-      //     "Hide the Preview window that appears on the side of the Autocomplete window.",
-      //   type: "boolean",
-      //   default: false,
-      //   popular: false,
-      // },
-      // {
-      //   id: "autocomplete.iconTheme",
-      //   title: "Icon theme",
-      //   description: "Change the theme where icons are pulled from.",
-      //   type: "text"
-      //   default: null,
-      //   popular: false
-      // },
     ],
   },
   {

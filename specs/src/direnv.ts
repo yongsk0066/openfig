@@ -1,4 +1,5 @@
 import { filepaths } from "@fig/spec-generators";
+const isEnvrc = (fileName = "") => fileName.includes(".envrc");
 
 const PRIORITY_TOP_THRESHOLD = 76;
 const PRIORITY_BOTTOM_THRESHOLD = 49;
@@ -11,7 +12,6 @@ const envrcFilepathsGenerator = (
 ): Fig.Generator => ({
   template: "filepaths",
   filterTemplateSuggestions: (paths) => {
-    const isEnvrc = (fileName = "") => fileName.includes(".envrc");
     return paths
       .filter((file) => isEnvrc(file.name) || file.name?.endsWith("/"))
       .map((file) => ({

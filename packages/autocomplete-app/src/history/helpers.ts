@@ -5,7 +5,7 @@ import {
   type ArgumentParserResult,
   type BasicAnnotation,
   TokenType,
-} from "@fig/autocomplete-parser";
+} from "@fig/autocomplete-parser/core";
 import { SuggestionNotFoundError } from "./errors";
 
 export type AnnotatedCommand = {

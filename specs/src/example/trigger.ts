@@ -1,16 +1,20 @@
+const sortFnStrings = (a: string, b: string) => {
+  // Use localeCompare.
+  return a.localeCompare(b);
+};
 // To Test:
 
 // Drag this file out of dev/example/ into dev/ and then type "trigger" in the command line
 
-// Known bugs: If you backspace after inserting _prefix_string_for_file_and_folder_suggestions it won't render suggestions
+// Known bugs: If you backspace after inserting prefix_string_for_file_and_folder_suggestions it won't render suggestions
 
-// NOTE: replace _prefix_string_for_file_and_folder_suggestions with whatever prefix you'd like e.g. "s3://"
-const _prefix_string_for_file_and_folder_suggestions = "file://";
+// NOTE: replace prefix_string_for_file_and_folder_suggestions with whatever prefix you'd like e.g. "s3://"
+const prefix_string_for_file_and_folder_suggestions = "file://";
 
 var customArgument: Fig.Arg = {
   name: "FILE/FOLDER",
   description:
-    "must start with " + _prefix_string_for_file_and_folder_suggestions,
+    "must start with " + prefix_string_for_file_and_folder_suggestions,
   generators: {
     script: (tokens) => {
       var baseLsCommand = ["ls", "-1ApL"];
@@ -18,7 +22,7 @@ var customArgument: Fig.Arg = {
 
       if (
         whatHasUserTyped.startsWith(
-          _prefix_string_for_file_and_folder_suggestions
+          prefix_string_for_file_and_folder_suggestions
         )
       ) {
         whatHasUserTyped = whatHasUserTyped.slice(7);
@@ -48,39 +52,16 @@ var customArgument: Fig.Arg = {
       return [...baseLsCommand, folderPath];
     },
     postProcess: (out) => {
-      if (out.trim() === _prefix_string_for_file_and_folder_suggestions) {
+      if (out.trim() === prefix_string_for_file_and_folder_suggestions) {
         return [
           {
-            name: _prefix_string_for_file_and_folder_suggestions,
-            insertValue: _prefix_string_for_file_and_folder_suggestions,
+            name: prefix_string_for_file_and_folder_suggestions,
+            insertValue: prefix_string_for_file_and_folder_suggestions,
           },
         ];
       }
       // Sorting function for files and folders. Just alphabetical
-      const sortFnStrings = (a: string, b: string) => {
-        // Use localeCompare.
-        return a.localeCompare(b);
-      };
-
       // Sort files and folders by putting non dot files first then "../", then dot files
-      const alphabeticalSortFilesAndFolders = (arr: string[]) => {
-        const dots_arr: string[] = [];
-        const other_arr: string[] = [];
-
-        arr.map((elm) => {
-          if (elm.toLowerCase() == ".ds_store") return;
-          if (elm.slice(0, 1) === ".") dots_arr.push(elm);
-          else other_arr.push(elm);
-        });
-
-        // I removed "./" from the centre of this array
-        return [
-          ...other_arr.sort(sortFnStrings),
-          "../",
-          ...dots_arr.sort(sortFnStrings),
-        ];
-      };
-
       // Create array from output
       var temp_array = alphabeticalSortFilesAndFolders(out.split("\n"));
 
@@ -111,13 +92,13 @@ var customArgument: Fig.Arg = {
     trigger: (newToken, oldToken) => {
       // If the token doesn't start with prefix string
       if (
-        !newToken.startsWith(_prefix_string_for_file_and_folder_suggestions)
+        !newToken.startsWith(prefix_string_for_file_and_folder_suggestions)
       ) {
         // If old token doesn't exist, don't trigger
         if (!oldToken) return false;
 
         // If old token does exist and did start with prefix string, retrigger
-        if (oldToken.startsWith(_prefix_string_for_file_and_folder_suggestions))
+        if (oldToken.startsWith(prefix_string_for_file_and_folder_suggestions))
           return true;
         return false;
       }
@@ -130,7 +111,7 @@ var customArgument: Fig.Arg = {
     // Function that is used to determine what part of the user's input to use to filter over all the generated suggestions
     // We use this in cd. e.g if a user types `cd ~/d`, the getQueryTerm function outputs "d" and we use "d" to filter over the list of suggestions
     getQueryTerm: (token) => {
-      if (!token.startsWith(_prefix_string_for_file_and_folder_suggestions))
+      if (!token.startsWith(prefix_string_for_file_and_folder_suggestions))
         return token;
       return token.slice(token.lastIndexOf("/") + 1);
     },
@@ -152,3 +133,20 @@ const completionSpec: Fig.Spec = {
 };
 
 export default completionSpec;
+const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const dots_arr: string[] = [];
+  const other_arr: string[] = [];
+
+  arr.map((elm) => {
+    if (elm.toLowerCase() == ".ds_store") return;
+    if (elm.slice(0, 1) === ".") dots_arr.push(elm);
+    else other_arr.push(elm);
+  });
+
+  // I removed "./" from the centre of this array
+  return [
+    ...other_arr.toSorted(sortFnStrings),
+    "../",
+    ...dots_arr.toSorted(sortFnStrings),
+  ];
+};

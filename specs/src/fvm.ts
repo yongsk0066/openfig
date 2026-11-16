@@ -107,7 +107,7 @@ const completionSpec: Fig.Spec = {
           postProcess: function (out): Fig.Suggestion[] {
             const matches = out.match(semverRegex);
             const matchesSet = [...new Set(matches)];
-            return matchesSet.map((match) => ({ name: match })).reverse();
+            return matchesSet.map((match) => ({ name: match })).toReversed();
           },
         },
       },

@@ -221,7 +221,7 @@ const zCompletionSpec: Fig.Spec = {
       if (status === 0) {
         return zoxideCompletionSpec;
       }
-    } catch (_) {}
+    } catch {}
 
     // Otherwise, use the z.sh completion spec
     return zShCompletionSpec;

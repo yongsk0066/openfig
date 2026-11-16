@@ -1,11 +1,11 @@
 import { NotificationType } from "@fig/proto/fig";
-import { _subscribe, type NotificationResponse } from "./notifications.js";
+import { subscribeNotification, type NotificationResponse } from "./notifications.js";
 
 export function subscribe<T>(
   eventName: string,
   handler: (payload: T) => NotificationResponse | undefined,
 ) {
-  return _subscribe({ type: NotificationType.NOTIFY_ON_EVENT }, (notification) => {
+  return subscribeNotification({ type: NotificationType.NOTIFY_ON_EVENT }, (notification) => {
     switch (notification?.type?.case) {
       case "eventNotification": {
         const { eventName: name, payload } = notification.type.value;

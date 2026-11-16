@@ -26,9 +26,9 @@ pub struct EditBuffer {
 }
 
 #[derive(Debug, Default, Serialize)]
-pub struct InnerShellSessions {
+struct InnerShellSessions {
     /// Every connected shell, by session id.
-    pub linked_sessions: HashMap<Uuid, ShellSession>,
+    linked_sessions: HashMap<Uuid, ShellSession>,
     /// The session that reported last.
     most_recent: Option<Uuid>,
 }
@@ -37,12 +37,30 @@ pub struct InnerShellSessions {
 #[derive(Debug, Default, Serialize)]
 pub struct ShellSessions {
     #[serde(flatten)]
-    pub inner: FairMutex<InnerShellSessions>,
+    inner: FairMutex<InnerShellSessions>,
 }
 
 impl ShellSessions {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Copy only the values a caller needs; no session guard escapes this synchronous scope.
+    pub fn collect<T>(&self, mut select: impl FnMut(&mut ShellSession) -> T) -> Vec<T> {
+        self.inner
+            .lock()
+            .linked_sessions
+            .values_mut()
+            .map(&mut select)
+            .collect()
+    }
+
+    /// Sending happens after releasing the registry lock. A full queue may disconnect a shell.
+    pub fn broadcast(&self, command: impl Fn() -> ShellCommand) {
+        let senders = self.collect(|session| session.sender.clone());
+        for sender in senders {
+            let _ = sender.send(command());
+        }
     }
 
     /// Inserts a new session id
@@ -134,7 +152,7 @@ impl From<InterceptMode> for bool {
 pub struct ShellSession {
     pub id: Uuid,
     #[serde(skip)]
-    pub sender: flume::Sender<ShellCommand>,
+    pub sender: ShellSender,
     #[serde(skip)]
     pub edit_buffer: EditBuffer,
     pub context: Option<ShellContext>,
@@ -147,6 +165,14 @@ pub struct ShellSession {
 /// What the desktop asks of a shell session; [`crate::hook`] carries it out.
 #[derive(Debug)]
 pub enum ShellCommand {
+    ApplyEdit {
+        expires_at: std::time::Instant,
+        revision: u64,
+        cursor_utf16: u64,
+        buffer: String,
+        edit: crate::hook::wire::Insert,
+        response: oneshot::Sender<Result<(), String>>,
+    },
     InterceptFigJs {
         intercept_keystrokes: bool,
         intercept_global_keystrokes: bool,
@@ -195,5 +221,42 @@ impl ShellCommand {
             },
             rx,
         )
+    }
+}
+
+/// A UI thread must never block on a saturated shell. Overflow closes the hook connection,
+/// letting zsh restore its normal widgets instead of silently losing an insertion or key.
+#[derive(Debug, Clone)]
+pub struct ShellSender {
+    sender: flume::Sender<ShellCommand>,
+    disconnect: tokio::sync::watch::Sender<bool>,
+}
+impl ShellSender {
+    pub fn new(sender: flume::Sender<ShellCommand>, disconnect: tokio::sync::watch::Sender<bool>) -> Self {
+        Self { sender, disconnect }
+    }
+
+    pub fn send(&self, command: ShellCommand) -> Result<(), flume::SendError<ShellCommand>> {
+        self.sender.try_send(command).map_err(|error| {
+            self.disconnect.send_replace(true);
+            flume::SendError(error.into_inner())
+        })
+    }
+}
+
+#[cfg(test)]
+mod queue_tests {
+    use super::*;
+    #[test]
+    fn overload_disconnects_instead_of_blocking_or_silently_dropping() {
+        let (tx, rx) = flume::bounded(1);
+        let (close, receiver) = tokio::sync::watch::channel(false);
+        let tx = ShellSender::new(tx, close);
+        tx.send(ShellCommand::InterceptFigJSVisible { visible: true }).unwrap();
+        assert!(tx.send(ShellCommand::InterceptFigJSVisible { visible: false }).is_err());
+        assert!(*receiver.borrow());
+        assert!(matches!(rx.recv().unwrap(), ShellCommand::InterceptFigJSVisible {
+            visible: true
+        }));
     }
 }

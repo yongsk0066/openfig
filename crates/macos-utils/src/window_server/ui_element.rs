@@ -48,10 +48,7 @@ use core_foundation::string::{
     CFString,
     CFStringRef,
 };
-use core_graphics::display::{
-    self,
-    CGRect,
-};
+use core_graphics::display::CGRect;
 use core_graphics::window::{
     self,
     CGWindowID,
@@ -61,8 +58,6 @@ use core_graphics::window::{
     kCGWindowOwnerPID,
 };
 use tracing::warn;
-
-use crate::util::NSStringRef;
 
 pub struct UIElement(AXUIElement);
 
@@ -142,13 +137,14 @@ impl From<AXUIElementRef> for UIElement {
         // non-null and point at a live CF object of the concrete type; the call performs
         // `CFRetain` and hands the resulting `+1` to a wrapper that `CFRelease`s on drop.
         // Evidence:
-        // - Non-nullness is not proved here — it is checked: the generated `wrap_under_get_rule` starts
-        //   with `assert!(!reference.is_null())`, so a null input panics rather than causing UB.
-        // - Liveness and concrete type are the caller obligation described in the `# Invariants` section
-        //   above. Every in-crate caller passes either an element that HIServices just handed to
-        //   `application_ax_callback` (owned by HIServices for the duration of the call), the result of
-        //   `AXUIElementCreateApplication` (live by the Create rule), or an element read out of a
-        //   `CFArray`/attribute that is still alive.
+        // - Non-nullness is not proved here — it is checked: the generated `wrap_under_get_rule`
+        //   starts with `assert!(!reference.is_null())`, so a null input panics rather than causing
+        //   UB.
+        // - Liveness and concrete type are the caller obligation described in the `# Invariants`
+        //   section above. Every in-crate caller passes either an element that HIServices just
+        //   handed to `application_ax_callback` (owned by HIServices for the duration of the call),
+        //   the result of `AXUIElementCreateApplication` (live by the Create rule), or an element
+        //   read out of a `CFArray`/attribute that is still alive.
         // Postcondition: the returned `UIElement` owns one reference, independent of the
         // caller's.
         UIElement(unsafe { AXUIElement::wrap_under_get_rule(ax_ref) })
@@ -207,6 +203,13 @@ fn cached_attribute(attr: &'static str) -> AXAttribute<CFType> {
 }
 
 impl UIElement {
+    /// Own the Create-rule application element without retaining an extra leaked reference.
+    pub fn application(pid: accessibility_sys::pid_t) -> Self {
+        // SAFETY: CreateApplication returns a live +1 application element for a process ID;
+        // the Create-rule wrapper consumes precisely that reference and releases it on drop.
+        Self(unsafe { AXUIElement::wrap_under_create_rule(accessibility_sys::AXUIElementCreateApplication(pid)) })
+    }
+
     fn get_ref(&self) -> AXUIElementRef {
         self.0.as_concrete_TypeRef()
     }
@@ -277,12 +280,12 @@ impl UIElement {
         // three must be live CF objects; the function does not take ownership of any of them.
         // Evidence:
         // - `self.get_ref()` is live for `&self` (TYPE FACT, as in `get_attr_ref`).
-        // - `attribute` owns the `CFString`, and it is a local alive until the end of this function, i.e.
-        //   past the call.
+        // - `attribute` owns the `CFString`, and it is a local alive until the end of this
+        //   function, i.e. past the call.
         // - `value: T::Ref` is a `TCFTypeRef` supplied by the caller. Callers in this file pass
-        //   `kCFBooleanTrue`, an immortal CoreFoundation singleton, so liveness holds. This is the one
-        //   obligation this private helper places on its callers; it is discharged by inspection because
-        //   both call sites are in `enable_screen_reader_accessibility`.
+        //   `kCFBooleanTrue`, an immortal CoreFoundation singleton, so liveness holds. This is the
+        //   one obligation this private helper places on its callers; it is discharged by
+        //   inspection because both call sites are in `enable_screen_reader_accessibility`.
         // Postcondition: no ownership changes; `err == 0` means the attribute was set.
         let attribute = cached_attribute(attr);
         unsafe {
@@ -342,25 +345,15 @@ impl UIElement {
         let class_list = self.get_attr::<CFArray>(kAXDOMClassListAttribute)?;
         let filtered: Vec<_> = class_list
             .iter()
-            .filter_map(|attr| unsafe {
-                // SAFETY:
-                // Operations: the `*const c_void -> *mut objc::runtime::Object` cast and
-                // `NSStringRef::new`, an unsafe fn.
-                // Contract of `NSStringRef::new` (see its `# Safety`): the pointer must be null
-                // or a live `NSString` that stays live for the returned value's lifetime.
-                // Evidence:
-                // - `class_list` is a `CFArray` returned by `get_attr_ref`, alive for this whole expression, and
-                //   `CFArray::iter` yields references into it, so each element is live while the `NSStringRef`
-                //   exists.
-                // - `kAXDOMClassListAttribute` is documented by WebKit's AX implementation to be a `CFArray` of
-                //   `CFString`. `CFString` and `NSString` are toll-free bridged (Apple, "Toll-Free Bridged Types"),
-                //   which is the premise that makes the pointer cast to an ObjC object legitimate.
-                //   UNPROVEN-BUT-LIKELY: there is no runtime check that the array really holds strings; a
-                //   non-string element would send `-UTF8String` to an object that may not respond.
-                // - The borrow ends inside this closure: `to_owned()` copies before the `NSStringRef` and the array
-                //   element go out of scope.
-                let x = NSStringRef::new(*attr as *mut objc::runtime::Object);
-                x.as_str().map(|x| x.to_owned())
+            .filter_map(|attr| {
+                if attr.is_null() {
+                    return None;
+                }
+                // SAFETY: AX owns the live CF objects in class_list for this iteration.
+                // Retain as CFType first, then check the runtime type before treating it as
+                // a string. Conversion returns owned Rust text; no autorelease borrow escapes.
+                let value = unsafe { CFType::wrap_under_get_rule(*attr) };
+                value.downcast::<CFString>().map(|value| value.to_string())
             })
             .collect();
 
@@ -395,7 +388,7 @@ impl UIElement {
     }
 
     pub fn find_x_term_caret_tree(&self) -> Result<Vec<UIElement>> {
-        if self.role().map(|role| role == kAXTextFieldRole).unwrap_or(false)
+        if self.role().is_ok_and(|role| role == kAXTextFieldRole)
             && self.is_focused().unwrap_or(false)
             && let Ok(classes) = self.dom_class_list()
             && classes.iter().any(|cls| cls == "xterm-helper-textarea")
@@ -428,66 +421,30 @@ impl UIElement {
         Ok(tree)
     }
 
-    pub fn window_info(&self, all_windows: bool) -> Option<CGWindowInfo> {
-        // SAFETY:
-        // Operations in this block: (a) `self.get_window_id()`, an unsafe fn; (b) reads of the
-        // extern statics `kCGWindowListOption*`, `kCGNullWindowID`, `kCGWindowNumber`,
-        // `kCGWindowOwnerPID`, `kCGWindowBounds`, `kCGWindowLayer`; (c) the
-        // `CGWindowListCopyWindowInfo` FFI call; (d)
-        // `CFArray::<CFDictionary>::wrap_under_create_rule`.
-        //
-        // (a) Contract: see `get_window_id`'s `# Safety`. Evidence: `self` is a live
-        // `UIElement`, and the SPI premise is inherited.
-        // (b) Contract (Rust Reference, extern statics): initialized and not concurrently
-        // mutated. Evidence: CoreGraphics initializes these before `main` and they are
-        // immortal constants.
-        // (c) Contract (CoreGraphics `CGWindowListCopyWindowInfo(option, relativeToWindow)`):
-        // returns a `+1` `CFArrayRef` of `CFDictionaryRef`, or NULL on failure. No pointer
-        // preconditions.
-        // (d) Contract of `wrap_under_create_rule`: non-null (asserted) and a live `+1` CF
-        // object whose ownership transfers to the wrapper. This is the correct rule here —
-        // unlike `get_attr_ref` above — because `CGWindowListCopyWindowInfo` follows the Copy
-        // rule.
-        // Residual risk: a NULL return from (c) trips the `assert!` inside
-        // `wrap_under_create_rule` and panics. That is a robustness defect (an FFI failure
-        // becomes a crash in an `Option`-returning function), not UB.
-        // See docs/13-unsafe-review.md, adjacent smells.
-        //
-        // The element type of the array is an Apple documentation lemma: the dictionaries are
-        // read only through `CFDictionary::find` + `downcast`, which are dynamically checked,
-        // so a surprise element type yields `None` rather than UB.
+    /// Query the known window directly; never enumerate all windows or make an AX round trip.
+    pub fn window_info_for_id(window_id: CGWindowID) -> Option<CGWindowInfo> {
+        // CGWindowID array entries are pointer-sized integer values, NOT CFNumbers.
+        // Use usize storage: CFArray::from_copyable reads pointer-sized slots, so passing
+        // a &[u32] on a 64-bit host would read beyond the supplied element.
+        let ids = CFArray::from_copyable(&[window_id as usize]);
+        // SAFETY: ids is a live CFArray with one correctly encoded window ID and no object
+        // retain/release callbacks. CoreGraphics returns a Copy-owned array of dictionaries
+        // or NULL; check NULL before taking ownership. The array owns every dictionary while
+        // dynamically typed field reads below retain/check each CF value.
         unsafe {
-            let window_id = self.get_window_id().ok()?;
-            let windows = if all_windows {
-                CFArray::<CFDictionary>::wrap_under_create_rule(display::CGWindowListCopyWindowInfo(
-                    window::kCGWindowListOptionAll,
-                    window::kCGNullWindowID,
-                ))
-            } else {
-                CFArray::<CFDictionary>::wrap_under_create_rule(display::CGWindowListCopyWindowInfo(
-                    window::kCGWindowListOptionOnScreenOnly
-                        | window::kCGWindowListExcludeDesktopElements
-                        | window::kCGWindowListOptionIncludingWindow,
-                    window_id,
-                ))
-            };
-
-            let window = windows.iter().find(|window| {
-                get_num(window, kCGWindowNumber)
-                    .map(|id| id == (window_id as i64))
-                    .unwrap_or(false)
-            })?;
-
-            let owner_pid = get_num(&window, kCGWindowOwnerPID)?;
-            let bounds = get_value::<CFDictionary>(&window, kCGWindowBounds)?;
-            let bounds_rect = CGRect::from_dict_representation(&bounds)?;
-            let level = get_num(&window, kCGWindowLayer)?;
-
+            let raw = window::CGWindowListCreateDescriptionFromArray(ids.as_concrete_TypeRef());
+            if raw.is_null() {
+                return None;
+            }
+            let windows = CFArray::<CFDictionary>::wrap_under_create_rule(raw);
+            let window = windows
+                .iter()
+                .find(|item| get_num(item, kCGWindowNumber) == Some(i64::from(window_id)))?;
             Some(CGWindowInfo {
-                owner_pid: owner_pid as u64,
+                owner_pid: get_num(&window, kCGWindowOwnerPID)? as u64,
                 window_id,
-                bounds: bounds_rect,
-                level,
+                bounds: CGRect::from_dict_representation(&get_value::<CFDictionary>(&window, kCGWindowBounds)?)?,
+                level: get_num(&window, kCGWindowLayer)?,
             })
         }
     }
@@ -500,8 +457,8 @@ fn get_value<T: ConcreteCFType>(dict: &CFDictionary, key: CFStringRef) -> Option
     // Contract: non-null (asserted inside) and live; performs `CFRetain`.
     // Evidence:
     // - `dict.find` returns `Some(&CFTypeRef)` only for a key present in the dictionary
-    //   (core-foundation 0.10), and CFDictionary values are owned by the dictionary, so the value is
-    //   live for as long as `dict` is borrowed here — which covers this call.
+    //   (core-foundation 0.10), and CFDictionary values are owned by the dictionary, so the value
+    //   is live for as long as `dict` is borrowed here — which covers this call.
     // - The Get rule is the right one: `find` does not transfer ownership, so retaining and later
     //   releasing is balanced. Unlike `get_attr_ref`, this site does not leak.
     // Postcondition: `cf_type` owns one reference, independent of the dictionary's; the

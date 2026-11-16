@@ -12,7 +12,7 @@ const versionGenerator: Fig.Generator = {
   postProcess: function (out) {
     return out
       .split("\n")
-      .reverse()
+      .toReversed()
       .map((line) => ({
         name: line.slice(2).split(" ")[0],
         displayName: line.slice(2),
@@ -53,7 +53,7 @@ const remoteVersionGenerator: Fig.Generator = {
   postProcess: function (out) {
     const parsed = out
       .split("\n")
-      .reverse()
+      .toReversed()
       .filter(Boolean)
       .map(parseNodejsVersion);
 

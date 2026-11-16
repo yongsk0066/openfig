@@ -251,6 +251,7 @@ mod tests {
 
         let app_process_name = OsString::from(APP_PROCESS_NAME);
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));
+        let system = system.expect("process inspection should succeed");
         let mut processes = system.processes_by_exact_name(&app_process_name);
         assert!(processes.next().is_some());
     }

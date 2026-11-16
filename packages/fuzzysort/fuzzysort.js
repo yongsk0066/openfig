@@ -8,8 +8,6 @@
  *
  */
 
-var isNode = typeof require !== "undefined" && typeof window === "undefined";
-
 // Bounded memo of prepared strings. Upstream used two plain Maps that were only emptied by
 // `cleanup()`, which nothing called: with fuzzy search on, every suggestion name ever shown
 // stayed prepared (50k names ~ +52 MiB) until the window reloaded.

@@ -1,37 +1,26 @@
 use std::process::Command;
 
 use assert_cmd::prelude::*;
-use paste::paste;
 
 macro_rules! init_test {
-    ($shell:expr, $stage:expr, $file:expr) => {
-        paste! {
-            fn [<init_output_ $shell _ $stage _ $file>]() -> Result<String, Box<dyn std::error::Error>> {
-                let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("fig_cli"));
-                cmd.arg("init").arg($shell).arg($stage).arg("--rcfile").arg($file);
-                // zsh's `post` names `hook.sock` under `$TMPDIR`, which differs between machines.
-                cmd.env("TMPDIR", "/fig-init-snapshot");
-                let out = cmd.assert().success().get_output().stdout.clone();
-                Ok(String::from_utf8(out)?)
-            }
-
-            #[test]
-            fn [<init_snapshot_ $shell _ $stage _ $file>]() -> Result<(), Box<dyn std::error::Error>> {
-                let init = [<init_output_ $shell _ $stage _ $file>]()?;
-
-                insta::assert_snapshot!(init);
-
-                Ok(())
-            }
+    ($name:ident, $shell:expr, $stage:expr, $file:expr) => {
+        #[test]
+        fn $name() -> Result<(), Box<dyn std::error::Error>> {
+            let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("fig_cli"));
+            cmd.arg("init").arg($shell).arg($stage).arg("--rcfile").arg($file);
+            cmd.env("TMPDIR", "/fig-init-snapshot");
+            let out = cmd.assert().success().get_output().stdout.clone();
+            let init = String::from_utf8(out)?;
+            insta::assert_snapshot!(init);
+            Ok(())
         }
     };
 }
 
-// zsh
-init_test!("zsh", "pre", "zshrc");
-init_test!("zsh", "pre", "zprofile");
-init_test!("zsh", "post", "zshrc");
-init_test!("zsh", "post", "zprofile");
+init_test!(init_snapshot_zsh_pre_zshrc, "zsh", "pre", "zshrc");
+init_test!(init_snapshot_zsh_pre_zprofile, "zsh", "pre", "zprofile");
+init_test!(init_snapshot_zsh_post_zshrc, "zsh", "post", "zshrc");
+init_test!(init_snapshot_zsh_post_zprofile, "zsh", "post", "zprofile");
 
 /// bash support ended, but the rc blocks it installed still run `init bash pre|post` in every new
 /// bash until they are uninstalled: that must print nothing and succeed, with or without

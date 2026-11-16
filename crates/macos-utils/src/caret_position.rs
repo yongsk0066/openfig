@@ -10,22 +10,20 @@ use accessibility::{
 };
 use accessibility_sys::{
     AXUIElementCopyParameterizedAttributeValue,
+    AXValue,
     AXValueCreate,
     AXValueGetValue,
     AXValueRef,
     kAXBoundsForRangeParameterizedAttribute,
     kAXValueTypeCFRange,
-    kAXValueTypeCGRect,
 };
 use core_foundation::base::{
     CFRange,
     CFType,
     CFTypeRef,
     TCFType,
-    TCFTypeRef,
 };
 use core_foundation::string::CFString;
-use core_graphics::geometry::CGRect;
 use tracing::{
     debug,
     error,
@@ -60,7 +58,7 @@ const INVALID_CARET_POSITION: CaretPosition = CaretPosition {
 ///    layouts.
 ///
 /// There is no pointer, aliasing or ownership obligation on the caller: every argument is a
-/// `bool`. `extend_range == false` is always the cheaper and leak-free path.
+/// `bool`. Both paths own and release every Create/Copy result.
 ///
 /// Returns [`INVALID_CARET_POSITION`] on every failure, including "no focused element".
 pub unsafe fn get_caret_position(extend_range: bool) -> CaretPosition {
@@ -107,17 +105,18 @@ pub unsafe fn get_caret_position(extend_range: bool) -> CaretPosition {
     //   `AXUIElement::attribute(&AXAttribute::selected_range())` and owned by this frame; the `as
     //   AXValueRef` cast is the toll-free reinterpretation of the same CF object.
     // - `x` points at `MaybeUninit<CFRange>` storage owned by `bool_ax_call`'s frame, which is
-    //   `size_of::<CFRange>()` bytes and correctly aligned (TYPE FACT), matching `kAXValueTypeCFRange`.
-    // - `CFRange` is two `CFIndex` (`isize`) fields, so every bit pattern written is a valid `CFRange`
-    //   — the `assume_init` cannot produce an invalid value even if the premise about "writes exactly
-    //   on `true`" were wrong; only uninitialized-read UB would remain.
+    //   `size_of::<CFRange>()` bytes and correctly aligned (TYPE FACT), matching
+    //   `kAXValueTypeCFRange`.
+    // - `CFRange` is two `CFIndex` (`isize`) fields, so every bit pattern written is a valid
+    //   `CFRange` — the `assume_init` cannot produce an invalid value even if the premise about
+    //   "writes exactly on `true`" were wrong; only uninitialized-read UB would remain.
     // The comment below is the original author's: `ax_call` is needed because the out-parameter
     // must be a raw pointer into storage the FFI call can write.
     let selected_range_result: Result<CFRange, bool> = bool_ax_call(|x: *mut CFRange| {
         AXValueGetValue(
             selected_range_value.as_concrete_TypeRef() as AXValueRef,
             kAXValueTypeCFRange,
-            x as *mut _ as *mut c_void,
+            x.cast::<c_void>(),
         )
     });
 
@@ -129,93 +128,54 @@ pub unsafe fn get_caret_position(extend_range: bool) -> CaretPosition {
         },
     };
 
-    // SAFETY:
-    // Operation (taken only when `extend_range`): the `AXValueCreate` FFI call.
-    // Contract (HIServices `AXValueCreate(theType, valuePtr)`): `valuePtr` must point to a
-    // readable value whose layout matches `theType`; the result follows the **Create rule**
-    // (`+1`) and may be NULL.
-    // Evidence:
-    // - `updated_range` is a live `CFRange` local, so `&updated_range as *const _ as *const c_void` is
-    //   non-null, aligned and initialized for the whole call. It stays alive until the end of the
-    //   enclosing function, which covers the use of the resulting `AXValueRef` below.
-    // - `kAXValueTypeCFRange` matches the `CFRange` layout, the same premise as above.
-    // Postcondition / LEAK: the `+1` is dropped on the floor — `as_void_ptr()` erases it to a
-    // raw `CFTypeRef` and nothing ever releases it. One `AXValue` leaks per caret update on the
-    // xterm path. See docs/13-unsafe-review.md #6.
-    // A NULL result would be passed to `AXUIElementCopyParameterizedAttributeValue` below,
-    // which returns an error rather than crashing; that is unchecked but not UB.
-    //
-    // The `else` branch performs no unsafe operation: `as_concrete_TypeRef` follows the Get rule
-    // and borrows from `selected_range_value`, which outlives the use below.
-    let selected_range_value_2 = if extend_range {
-        let updated_range = CFRange::init(selected_text_range.location, 1);
-        AXValueCreate(kAXValueTypeCFRange, &updated_range as *const _ as *const c_void).as_void_ptr()
-    } else {
-        selected_range_value.as_concrete_TypeRef()
-    };
-
-    // https://linear.app/fig/issue/ENG-109/ - autocomplete-popup-shows-when-copying-and-pasting-in-terminal
+    // A selection is not a caret. Reject before allocating its extended range.
     if selected_text_range.length > 1 {
-        error!("selectedRange length > 1");
+        debug!("selectedRange length > 1");
         return INVALID_CARET_POSITION;
     }
 
-    // SAFETY:
-    // Operations: `ax_call::<_, CFTypeRef>` (ending in `assume_init`) and the
-    // `AXUIElementCopyParameterizedAttributeValue` FFI call.
-    // Contract (HIServices): `element`, `parameterizedAttribute` and `parameter` must be live
-    // CF objects; on `kAXErrorSuccess` a `+1` value is written through the out-parameter, and
-    // nothing is written otherwise — which is exactly `ax_call`'s requirement.
-    // Evidence:
-    // - `focused_element` is a live `AXUIElement` owned by this frame.
-    // - `CFString::new(...)` is a temporary whose lifetime extends to the end of the enclosing
-    //   statement, i.e. past the FFI call.
-    // - `selected_range_value_2` is live on both branches: either the leaked `AXValueCreate` result, or
-    //   a borrow of `selected_range_value`, which is still owned by this frame.
-    // - `CFTypeRef` is a raw pointer, so any written value is valid at that type.
-    // LEAK: the `+1` written into `select_bounds` is never released — it is used as a raw
-    // `AXValueRef` and dropped. One leak per caret update. See docs/13-unsafe-review.md #6.
+    // SAFETY: AXValueCreate copies the live CFRange. Its non-null Create result is
+    // immediately owned, so errors below release it too. The original remains borrowed.
+    let extended_range = if extend_range {
+        let updated_range = CFRange::init(selected_text_range.location, 1);
+        let raw = AXValueCreate(kAXValueTypeCFRange, std::ptr::from_ref(&updated_range).cast());
+        if raw.is_null() {
+            return INVALID_CARET_POSITION;
+        }
+        own_ax_value(raw)
+    } else {
+        None
+    };
+    let range = extended_range.as_ref().map_or_else(
+        || selected_range_value.as_concrete_TypeRef(),
+        |value| value.as_CFTypeRef(),
+    );
+
+    // SAFETY: The element, attribute name and range live throughout this call.
+    // On success the out-parameter follows the Copy rule; take ownership immediately.
     let select_bounds_result = ax_call(|x: *mut CFTypeRef| {
         AXUIElementCopyParameterizedAttributeValue(
             focused_element.as_concrete_TypeRef(),
             CFString::new(kAXBoundsForRangeParameterizedAttribute).as_concrete_TypeRef(),
-            selected_range_value_2,
+            range,
             x,
         )
     });
 
-    let select_bounds: AXValueRef = match select_bounds_result {
-        Ok(select_bounds) => select_bounds as AXValueRef,
+    let select_bounds = match select_bounds_result {
+        Ok(raw) if !raw.is_null() => own_ax_value(raw.cast_mut().cast()).unwrap(),
+        Ok(_) => return INVALID_CARET_POSITION,
         Err(err) => {
-            error!("Selected bounds error, error code {:?}", err);
+            debug!("Selected bounds error: {err:?}");
             return INVALID_CARET_POSITION;
         },
     };
-
-    // SAFETY:
-    // Operations: `bool_ax_call::<_, CGRect>` and the `AXValueGetValue` FFI call.
-    // Contract: as for the `CFRange` call above — write iff `true`, `valuePtr` sized for
-    // `theType`.
-    // Evidence:
-    // - `select_bounds` is the live `+1` value produced by the previous call (leaked, hence certainly
-    //   still alive).
-    // - `x` points at `MaybeUninit<CGRect>` storage in `bool_ax_call`'s frame, matching
-    //   `kAXValueTypeCGRect`.
-    // - `CGRect` is four `CGFloat` (`f64`) fields; every bit pattern is a valid `f64` (including NaN),
-    //   so `assume_init` cannot produce an invalid value.
-    let selected_rect_result =
-        bool_ax_call(|x: *mut CGRect| AXValueGetValue(select_bounds, kAXValueTypeCGRect, x.cast()));
-
-    let select_rect = match selected_rect_result {
-        Ok(select_rect) => select_rect,
-        Err(err) => {
-            error!("Couldn't get selected range, did types match {:?}", err);
-            return INVALID_CARET_POSITION;
-        },
+    let Some(select_rect) = select_bounds.as_rect() else {
+        return INVALID_CARET_POSITION;
     };
     // Sanity check: prevents flashing autocomplete in bottom corner
     if select_rect.size.width == 0.0 && select_rect.size.height == 0.0 {
-        error!("Prevents flashing autocomplete in bottom corner");
+        debug!("Prevents flashing autocomplete in bottom corner");
         return INVALID_CARET_POSITION;
     }
 
@@ -228,4 +188,43 @@ pub unsafe fn get_caret_position(extend_range: bool) -> CaretPosition {
     };
     debug!("Got position {result:?}");
     result
+}
+
+// SAFETY: `raw` must be null or an AXValue Create/Copy result whose +1 ownership is transferred
+// here.
+unsafe fn own_ax_value(raw: AXValueRef) -> Option<AXValue> {
+    if raw.is_null() {
+        None
+    } else {
+        Some(unsafe { AXValue::wrap_under_create_rule(raw) })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn owned_range_is_released_on_normal_and_early_return_paths() {
+        // SAFETY: Both Create calls use the matching CFRange layout. The cloned witness retains
+        // each value independently so its retain count can be inspected after the owner drops.
+        unsafe {
+            assert!(own_ax_value(std::ptr::null_mut()).is_none());
+            for early_return in [false, true] {
+                let range = CFRange::init(17, 1);
+                let raw = AXValueCreate(kAXValueTypeCFRange, std::ptr::from_ref(&range).cast());
+                assert!(!raw.is_null());
+                let witness = AXValue::wrap_under_get_rule(raw);
+                let retained = witness.retain_count();
+                let read = || {
+                    let value = own_ax_value(raw).unwrap();
+                    if early_return {
+                        return None;
+                    }
+                    value.as_range()
+                };
+                assert_eq!(read(), if early_return { None } else { Some(range) });
+                assert_eq!(witness.retain_count(), retained - 1);
+            }
+        }
+    }
 }

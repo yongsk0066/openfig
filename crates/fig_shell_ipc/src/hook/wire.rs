@@ -13,6 +13,8 @@
 //! PING                         instead of HELLO: is anyone there (`doctor`); no session
 //! C <env> <alias>              exported variables as NUL-separated k=v; `alias` as k=v lines
 //! P <exit status> <cwd>        a prompt is about to be drawn (precmd)
+//! E2 <revision> <cursor chars> <cursor bytes> <text>  negotiated edits-v2 report
+//! ACK <request id> <status>     0 applied, 1 stale/expired, 2 unavailable
 //! E <cursor chars> <cursor bytes> <text>   $PREBUFFER$BUFFER and the cursor in it
 //! X <command>                  a command line was accepted (preexec)
 //! K <key>                      a bound key the desktop asked to see (`INTERCEPT 1`)
@@ -22,8 +24,9 @@
 //!
 //! ```text
 //! PONG <version>               the answer to PING, then the desktop closes
-//! WELCOME 1 <version>          HELLO accepted
+//! WELCOME 1 <version> [edits-v2] HELLO accepted; optional capability, old hooks still work
 //! WELCOME 0 <reason>           refused; the desktop closes and the shell stops asking
+//! INSERT2 <id> <revision> <cursor chars> <expected buffer> <delete before> <text> <cursor left> <accept> <deadline ms>
 //! INSERT <delete before> <text> <cursor left> <accept>
 //! INTERCEPT 0 | INTERCEPT 1 <key>...
 //! KEY 0|1|2 <key>              the answer to `K`: zsh keeps the key (0), the desktop took it and may
@@ -132,6 +135,15 @@ pub enum ShellLine {
         /// UTF-8 byte offset of the cursor in `text`, what `EditBufferHook.cursor` carries.
         cursor: usize,
     },
+    EditBufferV2 {
+        revision: u64,
+        text: String,
+        cursor: usize,
+    },
+    EditAck {
+        id: String,
+        status: u32,
+    },
     PreExec {
         command: String,
     },
@@ -192,6 +204,18 @@ impl ShellLine {
                 let text = fields.text()?;
                 let cursor = cursor_offset(&text, chars, bytes);
                 ShellLine::EditBuffer { text, cursor }
+            },
+            "E2" => {
+                let revision = fields.number("revision")?;
+                let chars = fields.number("cursor chars")?;
+                let bytes = fields.number("cursor bytes")?;
+                let text = fields.text()?;
+                let cursor = cursor_offset(&text, chars, bytes);
+                ShellLine::EditBufferV2 { revision, text, cursor }
+            },
+            "ACK" => ShellLine::EditAck {
+                id: fields.text()?,
+                status: fields.number("status")?,
             },
             "X" => ShellLine::PreExec {
                 command: fields.text()?,
@@ -255,6 +279,14 @@ pub enum DaemonLine {
         reason: String,
     },
     Insert(Insert),
+    AtomicEdit {
+        id: String,
+        revision: u64,
+        deadline_ms: u128,
+        cursor: usize,
+        buffer: String,
+        edit: Insert,
+    },
     /// The keys `K` should be sent for; empty stops interception.
     Intercept(BTreeSet<String>),
     Key {
@@ -268,7 +300,7 @@ impl fmt::Display for DaemonLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DaemonLine::Pong => write!(f, "PONG {HOOK_PROTOCOL_VERSION}"),
-            DaemonLine::Welcome => write!(f, "WELCOME 1 {HOOK_PROTOCOL_VERSION}"),
+            DaemonLine::Welcome => write!(f, "WELCOME 1 {HOOK_PROTOCOL_VERSION} edits-v2"),
             DaemonLine::Refuse { reason } => write!(f, "WELCOME 0 {}", escape(reason)),
             DaemonLine::Insert(Insert {
                 delete_before,
@@ -280,6 +312,22 @@ impl fmt::Display for DaemonLine {
                 "INSERT {delete_before} {} {cursor_left} {}",
                 escape(text),
                 u8::from(*accept)
+            ),
+            DaemonLine::AtomicEdit {
+                id,
+                revision,
+                deadline_ms,
+                cursor,
+                buffer,
+                edit,
+            } => write!(
+                f,
+                "INSERT2 {id} {revision} {cursor} {} {} {} {} {} {deadline_ms}",
+                escape(buffer),
+                edit.delete_before,
+                escape(&edit.text),
+                edit.cursor_left,
+                u8::from(edit.accept)
             ),
             DaemonLine::Intercept(keys) if keys.is_empty() => write!(f, "INTERCEPT 0"),
             DaemonLine::Intercept(keys) => {
@@ -431,7 +479,7 @@ mod tests {
     fn daemon_lines_format() {
         assert_eq!(
             DaemonLine::Welcome.to_string(),
-            format!("WELCOME 1 {HOOK_PROTOCOL_VERSION}")
+            format!("WELCOME 1 {HOOK_PROTOCOL_VERSION} edits-v2")
         );
         assert_eq!(DaemonLine::Pong.to_string(), format!("PONG {HOOK_PROTOCOL_VERSION}"));
         assert_eq!(

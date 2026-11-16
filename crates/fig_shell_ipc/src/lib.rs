@@ -20,6 +20,7 @@ use tracing::{
 use uuid::Uuid;
 
 pub mod hook;
+pub mod process;
 pub mod session;
 
 /// What a shell session's hook tells the desktop. [`hook`] turns `fig.zsh`'s lines into these.

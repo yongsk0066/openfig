@@ -23,6 +23,7 @@ async fn desktop(_message_id: i64, request: DesktopRequest) -> RequestResult {
         DesktopRequest::Notification(_) => RequestResult::success(),
         DesktopRequest::InsertText(request) => RequestResult::unimplemented(request),
         DesktopRequest::RunProcess(request) => RequestResult::unimplemented(request),
+        DesktopRequest::CancelProcess(request) => RequestResult::unimplemented(request),
         DesktopRequest::UpdateApplicationProperties(request) => RequestResult::unimplemented(request),
         DesktopRequest::PositionWindow(request) => RequestResult::unimplemented(request),
         DesktopRequest::DragWindow(request) => RequestResult::unimplemented(request),

@@ -24,7 +24,7 @@ function flattenSubcommands(
   // This subcommand has no children - join the name of all of its parent
   // commands with the separator and set that as the new name.
   const name = parents
-    .map(({ name }) => name)
+    .map(({ name: parentName }) => parentName)
     .concat(subcommand.name)
     .join(separator);
 

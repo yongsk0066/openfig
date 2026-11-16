@@ -58,4 +58,6 @@ declare global {
   }
 }
 
-window.f = lib;
+export const installGlobalAPI = () => {
+  window.f = lib;
+};

@@ -7,8 +7,9 @@ import {
   type ServerOriginatedMessage,
 } from "@fig/proto/fig";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { _subscribe } from "../notifications";
 import { bytesToBase64 } from "../utils";
+
+let subscribeNotification: typeof import("../notifications").subscribeNotification;
 
 type FetchArgs = [URL, RequestInit];
 type Submessage = ServerOriginatedMessage["submessage"];
@@ -33,7 +34,9 @@ describe("notification subscriptions over api://", () => {
   /** Answers the next requests with these submessages (an HTTP status for a transport error). */
   const answers: (Submessage | number)[] = [];
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.stubGlobal("document", document.implementation.createHTMLDocument());
     vi.stubGlobal("fig", {
       constants: { supportApiProto: true, apiProtoUrl: "api://localhost/" },
       quiet: true,
@@ -42,12 +45,15 @@ describe("notification subscriptions over api://", () => {
     requests.length = 0;
     answers.length = 0;
     fetchMock.mockImplementation(async (_url, init) => {
-      const { id } = fromBinary(ClientOriginatedMessageSchema, init.body as Uint8Array);
-      requests.push(id!);
-      const answer = answers.shift() ?? success;
+      const { id, submessage } = fromBinary(ClientOriginatedMessageSchema, init.body as Uint8Array);
+      const clearing =
+        submessage?.case === "notificationRequest" && submessage.value.subscribe === false;
+      if (!clearing) requests.push(id!);
+      const answer = clearing ? success : (answers.shift() ?? success);
       if (typeof answer === "number") return new Response("", { status: answer });
       return new Response(encode({ id, submessage: answer }), { status: 200 });
     });
+    ({ subscribeNotification } = await import("../notifications"));
   });
 
   afterEach(() => {
@@ -66,10 +72,10 @@ describe("notification subscriptions over api://", () => {
         : NotificationType.NOTIFY_ON_FOCUS_CHANGED;
     answers.push(answer);
     const first = vi.fn();
-    await expect(_subscribe({ type }, first)).rejects.toThrow(message);
+    await expect(subscribeNotification({ type }, first)).rejects.toThrow(message);
 
     const second = vi.fn();
-    await _subscribe({ type }, second);
+    await subscribeNotification({ type }, second);
     expect(requests).toHaveLength(2);
 
     notify(requests[1]);
@@ -80,8 +86,8 @@ describe("notification subscriptions over api://", () => {
   it("a subscriber that arrives while the request is in flight shares its outcome", async () => {
     const type = NotificationType.NOTIFY_ON_LOCATION_CHANGE;
     answers.push({ case: "error", value: "denied" });
-    const first = _subscribe({ type }, vi.fn());
-    const second = _subscribe({ type }, vi.fn());
+    const first = subscribeNotification({ type }, vi.fn());
+    const second = subscribeNotification({ type }, vi.fn());
 
     await expect(first).rejects.toThrow("denied");
     // It must not resolve against a subscription the desktop refused.
@@ -92,8 +98,8 @@ describe("notification subscriptions over api://", () => {
   it("unsubscribe is idempotent and removes only its own registration", async () => {
     const type = NotificationType.NOTIFY_ON_APPLICATION_UPDATE_AVAILABLE;
     const handler = vi.fn();
-    const one = await _subscribe({ type }, handler);
-    const two = await _subscribe({ type }, handler);
+    const one = await subscribeNotification({ type }, handler);
+    const two = await subscribeNotification({ type }, handler);
     expect(requests).toHaveLength(1);
 
     notify(requests[0]);

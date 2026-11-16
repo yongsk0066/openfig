@@ -1,5 +1,5 @@
 import { type LocalStateChangedNotification, NotificationType } from "@fig/proto/fig";
-import { _subscribe, type NotificationResponse } from "./notifications.js";
+import { subscribeNotification, type NotificationResponse } from "./notifications.js";
 
 import { sendGetLocalStateRequest, sendUpdateLocalStateRequest } from "./requests.js";
 
@@ -7,16 +7,19 @@ export const didChange = {
   subscribe(
     handler: (notification: LocalStateChangedNotification) => NotificationResponse | undefined,
   ) {
-    return _subscribe({ type: NotificationType.NOTIFY_ON_LOCAL_STATE_CHANGED }, (notification) => {
-      switch (notification?.type?.case) {
-        case "localStateChangedNotification":
-          return handler(notification.type.value);
-        default:
-          break;
-      }
+    return subscribeNotification(
+      { type: NotificationType.NOTIFY_ON_LOCAL_STATE_CHANGED },
+      (notification) => {
+        switch (notification?.type?.case) {
+          case "localStateChangedNotification":
+            return handler(notification.type.value);
+          default:
+            break;
+        }
 
-      return { unsubscribe: false };
-    });
+        return { unsubscribe: false };
+      },
+    );
   },
 };
 

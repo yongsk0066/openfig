@@ -31,7 +31,7 @@ export default function IntegrationCard({
       />
       <div className="flex flex-col relative z-10 items-center text-center">
         <h3 className="text-white text-xl font-bold">{integration.title}</h3>
-        <img className="h-40 w-40" src={`/images/integrations/icons/${integrationId}.png`} />
+        <img alt="" className="h-40 w-40" src={`/images/integrations/icons/${integrationId}.png`} />
       </div>
       <p className="text-black/50 dark:text-white/50 self-center text-center flex-auto">
         {integration.description}

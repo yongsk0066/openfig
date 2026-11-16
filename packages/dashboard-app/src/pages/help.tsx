@@ -32,12 +32,12 @@ export default function Page() {
               return (
                 <li key={i} className="flex gap-2 items-baseline">
                   <span>{i + 1}.</span>
-                  {stringAsArray.map((substr, i) => {
-                    if (i === 1) {
-                      return <Code key={i}>{substr}</Code>;
+                  {stringAsArray.map((substr, partIndex) => {
+                    if (partIndex === 1) {
+                      return <Code key={partIndex}>{substr}</Code>;
                     }
 
-                    return <span key={i}>{substr}</span>;
+                    return <span key={partIndex}>{substr}</span>;
                   })}
                 </li>
               );

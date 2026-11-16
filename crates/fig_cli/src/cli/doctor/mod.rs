@@ -808,8 +808,8 @@ impl DoctorCheck<DiagnosticsResponse> for AccessibilityCheck {
                 //         .status()?
                 //         .success()
                 //     {
-                //         bail!("Failed to open accessibility in System Settings: {CLI_BINARY_NAME} debug
-                // prompt-accessibility");     }
+                //         bail!("Failed to open accessibility in System Settings: {CLI_BINARY_NAME}
+                // debug prompt-accessibility");     }
 
                 //     println!("2. Restarting");
                 //     println!("3. Reset accessibility");
@@ -867,8 +867,9 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
         } else {
             match platform {
                 Platform::MacOs => DoctorCheckType::NormalCheck,
-                // We can promote this to normal check once we have better terminal detection on other platforms,
-                // also we should probably use process tree climbing instead of env vars
+                // We can promote this to normal check once we have better terminal detection on
+                // other platforms, also we should probably use process tree climbing instead of env
+                // vars
                 _ => DoctorCheckType::SoftCheck,
             }
         }

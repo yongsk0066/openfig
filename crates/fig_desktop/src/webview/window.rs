@@ -68,9 +68,30 @@ pub struct WindowGeometryState {
     pub anchor: LogicalSize<f64>,
 }
 
+impl WindowGeometryState {
+    fn requested(
+        &mut self,
+        position: Option<WindowPosition>,
+        size: Option<LogicalSize<f64>>,
+        anchor: Option<LogicalSize<f64>>,
+        dry_run: bool,
+    ) -> (WindowPosition, LogicalSize<f64>, LogicalSize<f64>) {
+        let result = (
+            position.unwrap_or(self.position),
+            size.unwrap_or(self.size),
+            anchor.unwrap_or(self.anchor),
+        );
+        if !dry_run {
+            (self.position, self.size, self.anchor) = result;
+        }
+        result
+    }
+}
+
 // TODO: Add state for the active terminal window
 #[allow(dead_code)]
 pub struct WindowState {
+    pub(super) page_epoch: std::sync::Arc<super::page_epoch::PageEpoch>,
     pub window: Window,
     pub webview: WebView,
     pub context: WebContext,
@@ -85,8 +106,13 @@ pub struct WindowState {
     /// frame from before the first, and a move back to that stale frame would be skipped, leaving
     /// the window where the first event put it.
     applied_geometry: Mutex<Option<AppliedGeometry>>,
+    geometry_turn: Mutex<GeometryTurn>,
     pub enabled: AtomicBool,
     pub url: Mutex<Url>,
+    pub(super) delivery: Mutex<super::delivery::Delivery>,
+    pub(super) recovery_queued: AtomicBool,
+    pub(super) watch_delivery: std::sync::Arc<AtomicBool>,
+    pub(super) proxy: crate::EventLoopProxy,
 }
 
 /// A window frame as it was last requested from Cocoa.
@@ -164,6 +190,20 @@ pub struct Screen {
     /// coordinate space, so it is what caret positions are converted with.
     pub primary_scale_factor: Option<f64>,
     pub monitors: Vec<MonitorFrame>,
+}
+
+/// Coalesces caret-only updates in one event-loop turn. Requests that need a response
+/// consume the latest caret immediately; dry runs and hide/show remain ordering barriers.
+#[derive(Default)]
+struct GeometryTurn {
+    caret: Option<WindowPosition>,
+    screen: Option<Screen>,
+}
+
+impl GeometryTurn {
+    fn screen(&mut self, read: impl FnOnce() -> Screen) -> Screen {
+        self.screen.get_or_insert_with(read).clone()
+    }
 }
 
 /// Where the autocomplete window goes, and what to tell the app about the result.
@@ -285,6 +325,10 @@ fn solve_geometry(
 }
 
 impl WindowState {
+    pub(super) fn invalidate_geometry(&self) {
+        *self.applied_geometry.lock() = None;
+    }
+
     pub fn new(
         window: Window,
         window_id: WindowId,
@@ -292,6 +336,7 @@ impl WindowState {
         context: WebContext,
         enabled: bool,
         url: Url,
+        proxy: crate::EventLoopProxy,
     ) -> Self {
         let scale_factor = window.scale_factor();
 
@@ -302,7 +347,33 @@ impl WindowState {
 
         let size = window.inner_size().to_logical(scale_factor);
 
+        let watch_delivery = std::sync::Arc::new(AtomicBool::new(window_id == AUTOCOMPLETE_ID));
+        if window_id == AUTOCOMPLETE_ID {
+            let watch = watch_delivery.clone();
+            let proxy = proxy.clone();
+            let id = window_id.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    if watch.load(std::sync::atomic::Ordering::Relaxed)
+                        && proxy
+                            .send_event(crate::event::Event::WindowEvent {
+                                window_id: id.clone(),
+                                window_event: WindowEvent::RuntimeTick,
+                            })
+                            .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+        }
         Self {
+            page_epoch: Default::default(),
+            delivery: Mutex::default(),
+            recovery_queued: AtomicBool::new(false),
+            watch_delivery,
+            proxy,
             window,
             webview,
             context,
@@ -313,6 +384,7 @@ impl WindowState {
                 anchor: LogicalSize::<f64>::default(),
             }),
             applied_geometry: Mutex::new(None),
+            geometry_turn: Mutex::default(),
             enabled: enabled.into(),
             url: Mutex::new(url),
         }
@@ -334,46 +406,28 @@ impl WindowState {
         platform_state: &PlatformState,
         dry_run: bool,
     ) -> (bool, bool) {
+        let _measure = crate::latency::Measure::new("geometry");
         // Lock our atomic state
         let mut state = self.window_geometry_state.lock();
 
-        // Acquire our position, size, and anchor, and update them if dirty
-        let position = match position {
-            Some(position) if !dry_run => {
-                state.position = position;
-                position
-            },
-            Some(position) => position,
-            None => state.position,
-        };
-
-        let size = match size {
-            Some(size) if !dry_run => {
-                state.size = size;
-                size
-            },
-            _ => state.size,
-        };
-
-        let anchor = match anchor {
-            Some(anchor) if !dry_run => {
-                state.anchor = anchor;
-                anchor
-            },
-            _ => state.anchor,
-        };
+        // A dry run solves the requested geometry without committing it.
+        let (position, size, anchor) = state.requested(position, size, anchor, dry_run);
 
         let window = &self.window;
 
-        let screen = Screen {
-            current: window.current_monitor().map(MonitorFrame::from),
-            primary_scale_factor: window.primary_monitor().map(|monitor| monitor.scale_factor()),
-            monitors: window.available_monitors().map(MonitorFrame::from).collect(),
-        };
+        let screen = self.geometry_turn.lock().screen(|| {
+            let _measure = crate::latency::Measure::new("geometry-screen");
+            Screen {
+                current: window.current_monitor().map(MonitorFrame::from),
+                primary_scale_factor: window.primary_monitor().map(|monitor| monitor.scale_factor()),
+                monitors: window.available_monitors().map(MonitorFrame::from).collect(),
+            }
+        });
 
         let max_height = fig_settings::settings::get_int_or("autocomplete.height", 140) as f64;
 
         let Some((position, result)) = solve_geometry(position, size, anchor, &screen, max_height, |scale| {
+            let _measure = crate::latency::Measure::new("geometry-window-bottom");
             platform_state.active_window_bottom(scale)
         }) else {
             return (false, false);
@@ -381,7 +435,8 @@ impl WindowState {
 
         if !dry_run {
             // A keystroke that moves neither the caret nor the suggestion list costs no
-            // `setFrameTopLeftPoint:` / `setContentSize:` at all; see `geometry_calls` for the order.
+            // `setFrameTopLeftPoint:` / `setContentSize:` at all; see `geometry_calls` for the
+            // order.
             let target = AppliedGeometry { position, size };
             let mut applied = self.applied_geometry.lock();
             let calls = geometry_calls(*applied, target);
@@ -397,6 +452,17 @@ impl WindowState {
         }
 
         (result.is_above, result.is_clipped)
+    }
+
+    pub fn invalidate_geometry_screen(&self) {
+        self.geometry_turn.lock().screen = None;
+    }
+
+    pub fn flush_geometry(&self, platform: &PlatformState) {
+        let caret = self.geometry_turn.lock().caret.take();
+        if let Some(position) = caret {
+            self.update_window_geometry(Some(position), None, None, platform, false);
+        }
     }
 
     #[allow(clippy::only_used_in_recursion)]
@@ -418,15 +484,40 @@ impl WindowState {
                 dry_run,
                 tx,
             } => {
+                if !dry_run && tx.is_none() && size.is_none() && anchor.is_none() {
+                    if position.is_some() {
+                        self.geometry_turn.lock().caret = position;
+                    }
+                    return;
+                }
+                if dry_run {
+                    self.flush_geometry(platform_state);
+                }
+                let pending = self.geometry_turn.lock().caret.take();
                 let (is_above, is_clipped) =
-                    self.update_window_geometry(position, size, anchor, platform_state, dry_run);
+                    self.update_window_geometry(position.or(pending), size, anchor, platform_state, dry_run);
                 if let Some(tx) = tx
                     && let Err(err) = tx.send(WindowGeometryResult { is_above, is_clipped })
                 {
                     tracing::error!(%err, "failed to send window geometry update result");
                 }
             },
+            WindowEvent::RuntimeReset
+            | WindowEvent::RuntimeRecover
+            | WindowEvent::RuntimeHello { .. }
+            | WindowEvent::RuntimeReady(_)
+            | WindowEvent::RuntimeFatal(_)
+            | WindowEvent::RuntimeReload(_)
+            | WindowEvent::RuntimeAck { .. }
+            | WindowEvent::RuntimeTick => {
+                self.handle_runtime(event, shell_sessions, platform_state, notifications_state);
+            },
             WindowEvent::Hide => {
+                // Commit caret state, but do not perform an invisible placement.
+                if let Some(caret) = self.geometry_turn.lock().caret.take() {
+                    self.window_geometry_state.lock().position = caret;
+                }
+                self.invalidate_geometry_screen();
                 if !self.window.is_visible() {
                     return;
                 }
@@ -434,11 +525,7 @@ impl WindowState {
 
                 if self.window_id == AUTOCOMPLETE_ID {
                     platform_state.set_autocomplete_visible(false);
-                    for session in shell_sessions.inner.lock().linked_sessions.values_mut() {
-                        let _ = session
-                            .sender
-                            .send(ShellCommand::InterceptFigJSVisible { visible: false });
-                    }
+                    shell_sessions.broadcast(|| ShellCommand::InterceptFigJSVisible { visible: false });
 
                     // This used to toggle `set_resizable(true)` then `set_resizable(false)` on
                     // every hide, under a "why?" TODO. The window is built non-resizable and
@@ -468,16 +555,18 @@ impl WindowState {
                 }
             },
             WindowEvent::Show => {
+                if !self.window.is_visible() {
+                    self.flush_geometry(platform_state);
+                }
+                if self.window_id == AUTOCOMPLETE_ID && self.delivery.lock().phase != super::delivery::Phase::Ready {
+                    return;
+                }
                 if self.window_id == AUTOCOMPLETE_ID {
                     // `Hide` has always checked; `Show` did not, so every keystroke re-sent
                     // `InterceptFigJSVisible` to every linked shell session and re-called
                     // `set_visible(true)` on an already visible window.
                     if !self.window.is_visible() {
-                        for session in shell_sessions.inner.lock().linked_sessions.values_mut() {
-                            let _ = session
-                                .sender
-                                .send(ShellCommand::InterceptFigJSVisible { visible: true });
-                        }
+                        shell_sessions.broadcast(|| ShellCommand::InterceptFigJSVisible { visible: true });
 
                         self.window.set_visible(true);
                         platform_state.set_autocomplete_visible(true);
@@ -591,17 +680,59 @@ impl WindowState {
     /// `evaluate_script` returns `Err` once the webview is gone — during shutdown, or after a
     /// WebKit process crash. Notifications keep arriving until the event loop actually stops, so
     /// unwrapping here turned an ordinary shutdown race into a main-thread panic.
-    fn eval(&self, script: &str) {
+    pub(super) fn eval(&self, script: &str) {
         if let Err(err) = self.webview.evaluate_script(script) {
             warn!(%err, %self.window_id, "Failed to evaluate script in webview");
         }
     }
 
+    pub fn emit_edit_buffer(&self, channel: i64, notification: fig_proto::fig::EditBufferChangedNotification) {
+        if self.window_id == AUTOCOMPLETE_ID {
+            self.enqueue(super::delivery::Frame::Edit {
+                channel,
+                value: Box::new(notification),
+            });
+        } else {
+            self.eval(&Self::edit_script(channel, notification));
+        }
+    }
+
+    pub(super) fn edit_script(channel: i64, notification: fig_proto::fig::EditBufferChangedNotification) -> String {
+        use base64::prelude::*;
+        use fig_proto::fig::{
+            Notification,
+            ServerOriginatedMessage,
+            notification,
+            server_originated_message,
+        };
+        use fig_proto::prost::Message;
+        let message = ServerOriginatedMessage {
+            id: Some(channel),
+            submessage: Some(server_originated_message::Submessage::Notification(Notification {
+                r#type: Some(notification::Type::EditBufferNotification(notification)),
+            })),
+        };
+        Self::event_script(
+            crate::event::EmitEventName::Notification,
+            BASE64_STANDARD.encode(message.encode_to_vec()).into(),
+        )
+    }
+
     pub fn emit(&self, event_name: impl Display, payload: impl Into<serde_json::Value>) {
-        let payload = payload.into();
-        self.eval(&format!(
-            "document.dispatchEvent(new CustomEvent('{event_name}', {{'detail': {payload}}}));"
-        ));
+        let script = Self::event_script(event_name, payload.into());
+        if self.window_id == AUTOCOMPLETE_ID {
+            self.enqueue(super::delivery::Frame::Script(script));
+        } else {
+            self.eval(&script);
+        }
+    }
+
+    fn event_script(event_name: impl Display, payload: serde_json::Value) -> String {
+        if event_name.to_string() == "FigProtoMessageReceived" {
+            format!("window.figReceiveMessage({payload});")
+        } else {
+            format!("document.dispatchEvent(new CustomEvent('{event_name}', {{'detail': {payload}}}));")
+        }
     }
 
     pub fn notification(
@@ -660,6 +791,78 @@ mod tests {
             position: Position::Logical(LogicalPosition::new(x, y)),
             size: LogicalSize::new(width, height),
         }
+    }
+
+    #[test]
+    fn edit_transport_encoding_round_trip_and_stage_cost() {
+        use base64::prelude::*;
+        use fig_proto::fig::{
+            EditBufferChangedNotification,
+            ServerOriginatedMessage,
+        };
+        use fig_proto::prost::Message;
+        for length in [100, 16_384] {
+            let value = EditBufferChangedNotification {
+                buffer: Some("x".repeat(length)),
+                ..Default::default()
+            };
+            let mut samples = Vec::new();
+            let mut bytes = 0;
+            for iteration in 0..1050 {
+                let input = value.clone();
+                let start = std::time::Instant::now();
+                let script = WindowState::edit_script(7, input);
+                let elapsed = start.elapsed().as_secs_f64() * 1_000_000.0;
+                bytes = std::hint::black_box(script.len());
+                if iteration >= 50 {
+                    samples.push(elapsed);
+                }
+                if iteration == 0 {
+                    let payload = script
+                        .strip_prefix("window.figReceiveMessage(")
+                        .unwrap()
+                        .strip_suffix(");")
+                        .unwrap();
+                    let encoded: String = serde_json::from_str(payload).unwrap();
+                    let decoded =
+                        ServerOriginatedMessage::decode(BASE64_STANDARD.decode(encoded).unwrap().as_slice()).unwrap();
+                    assert_eq!(decoded.id, Some(7));
+                    let Some(fig_proto::fig::server_originated_message::Submessage::Notification(notification)) =
+                        decoded.submessage
+                    else {
+                        panic!("expected notification");
+                    };
+                    assert_eq!(
+                        notification.r#type,
+                        Some(fig_proto::fig::notification::Type::EditBufferNotification(
+                            value.clone()
+                        ))
+                    );
+                }
+            }
+            samples.sort_by(f64::total_cmp);
+            println!(
+                "edit-encode input_bytes={length} script_bytes={bytes} p50_us={} p95_us={} (no WebKit/IPC time)",
+                samples[500], samples[950]
+            );
+        }
+    }
+
+    #[test]
+    fn dry_run_uses_requested_size_and_anchor_without_mutating_live_geometry() {
+        let mut state = WindowGeometryState {
+            position: WindowPosition::Centered,
+            size: LogicalSize::new(300.0, 140.0),
+            anchor: LogicalSize::new(0.0, 2.0),
+        };
+        let size = LogicalSize::new(600.0, 200.0);
+        let anchor = LogicalSize::new(-300.0, 5.0);
+        let (_, requested_size, requested_anchor) = state.requested(None, Some(size), Some(anchor), true);
+        assert_eq!((requested_size, requested_anchor), (size, anchor));
+        assert_eq!(state.size, LogicalSize::new(300.0, 140.0));
+        assert_eq!(state.anchor, LogicalSize::new(0.0, 2.0));
+        state.requested(None, Some(size), Some(anchor), false);
+        assert_eq!((state.size, state.anchor), (size, anchor));
     }
 
     #[test]
@@ -810,5 +1013,21 @@ mod tests {
 
         assert!(!result.is_clipped, "nothing to clip against");
         assert_eq!(logical(position), LogicalPosition::new(400.0, 325.0));
+    }
+    #[test]
+    fn geometry_screen_snapshot_is_shared_only_within_one_turn() {
+        let mut turn = GeometryTurn::default();
+        let calls = std::cell::Cell::new(0);
+        let read = || {
+            calls.set(calls.get() + 1);
+            screen()
+        };
+        let a = turn.screen(read);
+        let b = turn.screen(read);
+        assert_eq!(a.monitors, b.monitors);
+        assert_eq!(calls.get(), 1);
+        turn.screen = None;
+        turn.screen(read);
+        assert_eq!(calls.get(), 2);
     }
 }

@@ -5,10 +5,7 @@ use tao::dpi::{
     Position,
     Size,
 };
-use tao::event_loop::{
-    ControlFlow,
-    EventLoopClosed,
-};
+use tao::event_loop::ControlFlow;
 use tokio::sync::mpsc::UnboundedSender;
 use wry::Theme;
 
@@ -18,6 +15,11 @@ use crate::webview::WindowId;
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum Event {
+    PageEvent {
+        epoch: u64,
+        event: Box<Event>,
+    },
+    EditBuffer(crate::event_queue::PendingEdit),
     WindowEvent {
         window_id: WindowId,
         window_event: WindowEvent,
@@ -86,6 +88,21 @@ pub struct WindowGeometryResult {
 
 #[derive(Debug, Clone)]
 pub enum WindowEvent {
+    RuntimeReset,
+    RuntimeFatal(u64),
+    RuntimeReload(u64),
+    RuntimeHello {
+        epoch: u64,
+        nonce: String,
+    },
+    RuntimeReady(u64),
+    RuntimeAck {
+        epoch: u64,
+        id: u64,
+        success: bool,
+    },
+    RuntimeTick,
+    RuntimeRecover,
     /// Sets the window to be enabled or disabled
     ///
     /// This will cause events to be ignored other than [`WindowEvent::Hide`] and
@@ -134,14 +151,14 @@ impl WindowEvent {
     pub fn is_allowed_while_disabled(&self) -> bool {
         matches!(
             self,
-            WindowEvent::Hide
+            WindowEvent::RuntimeFatal(_) | WindowEvent::RuntimeReload(_) | WindowEvent::RuntimeReset | WindowEvent::RuntimeHello { .. } | WindowEvent::RuntimeReady(_) | WindowEvent::RuntimeAck { .. } | WindowEvent::RuntimeTick | WindowEvent::RuntimeRecover | WindowEvent::Hide
                 | WindowEvent::SetEnabled(_)
-                // TODO: we really shouldnt need to allow these to be called when disabled,
-                // however we allow them at the moment because notification listeners are
-                // initialized early on and we dont have a way to delay them until the window
-                // is enabled
+                // Keep shell/UI state in sync during focus and permission transitions. A later
+                // edit buffer may omit the environment that was only sent while disabled.
                 | WindowEvent::Emit {
-                    event_name: EmitEventName::GlobalErrorOccurred | EmitEventName::ProtoMessageReceived,
+                    // Both proto variants dispatch FigProtoMessageReceived in the webview.
+                    event_name:
+                        EmitEventName::GlobalErrorOccurred | EmitEventName::ProtoMessageReceived | EmitEventName::Notification,
                     ..
                 }
         )
@@ -154,6 +171,11 @@ impl WindowEvent {
 /// handlers underneath it can be exercised in tests: tao refuses to create an `EventLoop`
 /// anywhere but the process main thread, and libtest runs every test on a spawned one.
 pub trait EventSender: Send + Sync {
+    /// Order a synchronous shell command between edit-buffer merge groups.
+    fn with_edit_buffer_barrier(&self, action: Box<dyn FnOnce() + '_>) {
+        action();
+    }
+
     /// Send `event`, handing it back if the event loop has already exited.
     #[must_use = "an undelivered event is handed back"]
     fn try_send_event(&self, event: Event) -> Option<Event>;
@@ -180,9 +202,51 @@ pub trait EventSender: Send + Sync {
 }
 
 impl EventSender for crate::EventLoopProxy {
+    fn with_edit_buffer_barrier(&self, action: Box<dyn FnOnce() + '_>) {
+        self.with_edit_barrier(action);
+    }
+
     fn try_send_event(&self, event: Event) -> Option<Event> {
         crate::EventLoopProxy::send_event(self, event)
             .err()
-            .map(|EventLoopClosed(event)| event)
+            .map(|closed| closed.0)
+    }
+}
+
+/// Tag queued effects as well as the API future which produced them.
+pub struct PageEventSender<'a> {
+    pub epoch: u64,
+    pub inner: &'a dyn EventSender,
+}
+impl EventSender for PageEventSender<'_> {
+    fn with_edit_buffer_barrier(&self, action: Box<dyn FnOnce() + '_>) {
+        self.inner.with_edit_buffer_barrier(action);
+    }
+
+    fn try_send_event(&self, event: Event) -> Option<Event> {
+        self.inner.try_send_event(Event::PageEvent {
+            epoch: self.epoch,
+            event: Box::new(event),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn both_proto_notification_names_keep_delivering_while_the_window_is_disabled() {
+        // A focus/permission transition may disable the window while the shell sends its
+        // full context. Dropping that notification leaves subsequent lean updates without
+        // PATH and aliases, even after the window is enabled again.
+        for event_name in [EmitEventName::Notification, EmitEventName::ProtoMessageReceived] {
+            let event = WindowEvent::Emit {
+                event_name,
+                payload: "payload".into(),
+            };
+            assert!(event.is_allowed_while_disabled());
+        }
+        assert!(!WindowEvent::Show.is_allowed_while_disabled());
     }
 }

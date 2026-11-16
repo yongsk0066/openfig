@@ -4,15 +4,18 @@ version = "0.1.6"
 authors = ["Mack Straight <mack@discordapp.com>"]
 edition = "2018"
 license = "MIT / Apache-2.0"
-homepage = "https://github.com/eiz/accessibility"
 repository = "https://github.com/eiz/accessibility"
 description = "Bindings for macOS Accessibility services"
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
-cocoa.workspace = true
 core-foundation.workspace = true
-objc.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSRunningApplication"] }
+objc2-foundation.workspace = true
 thiserror.workspace = true
 
 accessibility-sys = { path = "../accessibility-sys", version = "0.1.3" }

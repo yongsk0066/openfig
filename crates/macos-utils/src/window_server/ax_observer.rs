@@ -116,11 +116,11 @@ impl<T> AXObserver<T> {
         // Contract of `MaybeUninit::assume_init` (std): the memory must be initialized with a
         // valid value of the type.
         // Evidence:
-        // - HIServices documents `AXObserverCreate(pid, callback, outObserver)` as writing a `+1` observer
-        //   through `outObserver` iff it returns `kAXErrorSuccess`; `AXObserverRef` is a raw pointer, so
-        //   any value it writes is a valid `AXObserverRef`.
-        // - `callback` is a `fn` pointer with the C ABI required by `AXObserverCallback` (TYPE FACT from
-        //   the `accessibility_sys` declaration), so the foreign call is ABI-correct.
+        // - HIServices documents `AXObserverCreate(pid, callback, outObserver)` as writing a `+1`
+        //   observer through `outObserver` iff it returns `kAXErrorSuccess`; `AXObserverRef` is a
+        //   raw pointer, so any value it writes is a valid `AXObserverRef`.
+        // - `callback` is a `fn` pointer with the C ABI required by `AXObserverCallback` (TYPE FACT
+        //   from the `accessibility_sys` declaration), so the foreign call is ABI-correct.
         // - `pid` is a plain `i32`; an unknown pid yields `kAXErrorInvalidUIElement`, not UB.
         // Postcondition: on `Ok`, `observer` is a live `AXObserverRef` that this function now
         // owns the sole `+1` on.
@@ -130,15 +130,15 @@ impl<T> AXObserver<T> {
         // Operations: `CFRunLoopGetCurrent`, `AXObserverGetRunLoopSource`, `CFRunLoopAddSource`,
         // and the read of the extern static `kCFRunLoopDefaultMode`.
         // Contracts (Apple CFRunLoop / HIServices reference):
-        // - `CFRunLoopGetCurrent()` never returns NULL; it returns the calling thread's run loop and
-        //   follows the Get rule.
-        // - `AXObserverGetRunLoopSource(observer)` follows the Get rule and requires a live observer.
-        //   POSTCONDITION of the call above: `observer` is live and owned here.
-        // - `CFRunLoopAddSource(rl, source, mode)` requires non-null `rl`, `source` and `mode`, and retains
-        //   the source itself.
-        // - `kCFRunLoopDefaultMode` is an extern static initialized by CoreFoundation before any Rust code
-        //   in this process runs; reading it is the unsafe operation and it is never written by this
-        //   program, so there is no data race.
+        // - `CFRunLoopGetCurrent()` never returns NULL; it returns the calling thread's run loop
+        //   and follows the Get rule.
+        // - `AXObserverGetRunLoopSource(observer)` follows the Get rule and requires a live
+        //   observer. POSTCONDITION of the call above: `observer` is live and owned here.
+        // - `CFRunLoopAddSource(rl, source, mode)` requires non-null `rl`, `source` and `mode`, and
+        //   retains the source itself.
+        // - `kCFRunLoopDefaultMode` is an extern static initialized by CoreFoundation before any
+        //   Rust code in this process runs; reading it is the unsafe operation and it is never
+        //   written by this program, so there is no data race.
         // Postcondition: the observer's source is attached to *this thread's* run loop. That
         // pairing is the premise of the `Drop` impl below and of `create`'s `# Safety` clause 3.
         let run_loop = CFRunLoopGetCurrent();
@@ -202,16 +202,16 @@ impl<T> AXObserver<T> {
         // pointer that is handed back verbatim to the callback. The function does not take
         // ownership of any argument; it copies/retains what it needs.
         // Evidence:
-        // - `self.inner` is live: POSTCONDITION of `create`, and nothing between `create` and here releases
-        //   it (`Drop` is the only other user and has not run).
-        // - `self.ax_ref` is live by `create`'s `# Safety` clause 1, restated by this function's own `#
-        //   Safety` section.
-        // - `name` is a live `CFString` owned by this stack frame and is not dropped until after the call
-        //   returns; `as_concrete_TypeRef` follows the Get rule and does not transfer ownership
-        //   (core-foundation 0.10 `TCFType`).
-        // - `callback_data` is a `*mut T` into the pinned box owned by `self`, whose address is stable for
-        //   `self`'s lifetime (type INVARIANT above), i.e. it stays valid for exactly as long as the
-        //   registration can fire.
+        // - `self.inner` is live: POSTCONDITION of `create`, and nothing between `create` and here
+        //   releases it (`Drop` is the only other user and has not run).
+        // - `self.ax_ref` is live by `create`'s `# Safety` clause 1, restated by this function's
+        //   own `# Safety` section.
+        // - `name` is a live `CFString` owned by this stack frame and is not dropped until after
+        //   the call returns; `as_concrete_TypeRef` follows the Get rule and does not transfer
+        //   ownership (core-foundation 0.10 `TCFType`).
+        // - `callback_data` is a `*mut T` into the pinned box owned by `self`, whose address is
+        //   stable for `self`'s lifetime (type INVARIANT above), i.e. it stays valid for exactly as
+        //   long as the registration can fire.
         // Postcondition: on `kAXErrorSuccess`, foreign code holds `callback_data` and may
         // dereference it from the run loop until `Drop` removes the source.
         //
@@ -226,7 +226,7 @@ impl<T> AXObserver<T> {
                 self.inner,
                 self.ax_ref,
                 name.as_concrete_TypeRef(),
-                callback_data as *mut c_void,
+                callback_data.cast::<c_void>(),
             )
         };
 
@@ -249,23 +249,24 @@ impl<T> Drop for AXObserver<T> {
         // `CFRelease` calls.
         //
         // Contracts:
-        // - `AXObserverRemoveNotification(observer, element, notification)` (HIServices) requires a live
-        //   observer, a live element and a live notification name; removing a notification that is not
-        //   registered returns `kAXErrorNotificationNotRegistered`, which is an error code, not UB.
+        // - `AXObserverRemoveNotification(observer, element, notification)` (HIServices) requires a
+        //   live observer, a live element and a live notification name; removing a notification
+        //   that is not registered returns `kAXErrorNotificationNotRegistered`, which is an error
+        //   code, not UB.
         // - `CFRunLoopRemoveSource(rl, source, mode)` (Apple CFRunLoop reference) requires non-null
         //   arguments; removing a source that is not attached is a documented no-op.
         // - `CFRelease(cf)` requires a live, non-null CFType this frame owns a reference on, and is
         //   documented thread-safe.
         //
         // Evidence:
-        // - `self.inner` and `self.ax_ref` are live until this body finishes (type INVARIANT: this value
-        //   owns one reference on each, taken in `create`), so every call above has live arguments and the
-        //   two releases are balanced, not over-releases.
-        // - `self.subscriptions` contains exactly the names `subscribe` registered successfully, each a
-        //   `CFString` owned by this value.
-        // - `self.run_loop` is the run loop `create` attached the source to, captured there rather than
-        //   re-derived from `CFRunLoopGetCurrent()`, which is thread-local and would name the wrong run
-        //   loop on an off-thread drop.
+        // - `self.inner` and `self.ax_ref` are live until this body finishes (type INVARIANT: this
+        //   value owns one reference on each, taken in `create`), so every call above has live
+        //   arguments and the two releases are balanced, not over-releases.
+        // - `self.subscriptions` contains exactly the names `subscribe` registered successfully,
+        //   each a `CFString` owned by this value.
+        // - `self.run_loop` is the run loop `create` attached the source to, captured there rather
+        //   than re-derived from `CFRunLoopGetCurrent()`, which is thread-local and would name the
+        //   wrong run loop on an off-thread drop.
         //
         // Purpose: unregistering the notifications and removing the run-loop source is what stops
         // foreign code from dereferencing the `refcon` after `self.callback_data` is deallocated

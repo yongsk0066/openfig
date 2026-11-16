@@ -374,9 +374,11 @@ fn contents_of_directory() {
 
     sandbox.send(Submessage::ContentsOfDirectoryRequest(ContentsOfDirectoryRequest {
         directory: file_path("dir"),
+        append_directory_separator: None,
     }));
     sandbox.send(Submessage::ContentsOfDirectoryRequest(ContentsOfDirectoryRequest {
         directory: file_path("missing-dir"),
+        append_directory_separator: None,
     }));
     insta::assert_snapshot!(sandbox.transcript());
 }

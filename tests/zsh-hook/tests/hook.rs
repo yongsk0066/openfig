@@ -493,8 +493,8 @@ async fn hook_applies_insertions() {
         "cursor before the closing quote"
     );
 
-    // Asked to run the line, but not in answer to a key: typed, left for the user to run (a `zle -F`
-    // handler cannot run it, see `fig_shell_ipc::hook::wire`).
+    // Asked to run the line, but not in answer to a key: typed, left for the user to run (a `zle
+    // -F` handler cannot run it, see `fig_shell_ipc::hook::wire`).
     shell.press("\x15").unwrap();
     shell.type_text("echo in").await.unwrap();
     expect_buffer(&mut shell, "echo in").await;
@@ -878,4 +878,201 @@ async fn hook_works_under_hostile_options() {
         "K tab".to_owned()
     ]);
     assert_no_noise(&shell.output());
+}
+
+/// The shell, not just the socket queue, acknowledges a revision-checked Unicode edit.
+#[tokio::test]
+async fn hook_atomic_edit_acknowledges_and_rejects_stale_input() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Real).await.unwrap();
+    shell.type_text("echo 한😀").await.unwrap();
+    expect_buffer(&mut shell, "echo 한😀").await;
+    let revision = shell
+        .shell_sessions
+        .as_ref()
+        .unwrap()
+        .most_recent()
+        .unwrap()
+        .context
+        .as_ref()
+        .unwrap()
+        .input_revision
+        .unwrap();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    shell
+        .command(ShellCommand::ApplyEdit {
+            expires_at: std::time::Instant::now() + std::time::Duration::from_millis(1500),
+            revision,
+            cursor_utf16: "echo 한😀".encode_utf16().count() as u64,
+            buffer: "echo 한😀".into(),
+            edit: fig_shell_ipc::hook::wire::Insert {
+                delete_before: 2,
+                text: "완료".into(),
+                ..Default::default()
+            },
+            response: tx,
+        })
+        .unwrap();
+    expect_buffer(&mut shell, "echo 완료").await;
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), rx)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_ok()
+    );
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    shell
+        .command(ShellCommand::ApplyEdit {
+            expires_at: std::time::Instant::now() + std::time::Duration::from_millis(1500),
+            revision,
+            cursor_utf16: 8,
+            buffer: "echo 한😀".into(),
+            edit: fig_shell_ipc::hook::wire::Insert {
+                text: "WRONG".into(),
+                ..Default::default()
+            },
+            response: tx,
+        })
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), rx)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
+    shell.type_text("!").await.unwrap();
+    expect_buffer(&mut shell, "echo 완료!").await;
+}
+
+/// A raw daemon does no validation: rejection/deduplication must happen inside the real zle owner.
+#[tokio::test]
+async fn hook_owner_checks_cursor_deadline_and_duplicate_edits() {
+    use fig_shell_ipc::hook::wire::ShellLine;
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Raw).await.unwrap();
+    shell.run("_fig_v2=1", "% ").await.unwrap();
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    shell.events();
+    shell.type_text("한😀").await.unwrap();
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    let revision = shell
+        .events()
+        .iter()
+        .rev()
+        .find_map(|event| match event {
+            HookEvent::Line(line) => match ShellLine::parse(line) {
+                Ok(ShellLine::EditBufferV2 { revision, text, .. }) if text == "한😀" => Some(revision),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("negotiated revision report");
+    let deadline = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        + 10_000;
+    shell
+        .send_line(&format!(
+            "INSERT2 wrong-cursor {revision} 1 한😀 0 WRONG 0 0 {deadline}"
+        ))
+        .await
+        .unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "ACK wrong-cursor 1"),
+        )
+        .await
+        .unwrap();
+    shell
+        .send_line(&format!("INSERT2 expired {revision} 2 한😀 0 WRONG 0 0 0"))
+        .await
+        .unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "ACK expired 1"),
+        )
+        .await
+        .unwrap();
+    let edit = format!("INSERT2 once {revision} 2 한😀 1 완료 0 0 {deadline}");
+    shell.send_line(&edit).await.unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "ACK once 0"),
+        )
+        .await
+        .unwrap();
+    shell.events();
+    shell.send_line(&edit).await.unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "ACK once 0"),
+        )
+        .await
+        .unwrap();
+    shell.events();
+    shell.type_text("!").await.unwrap();
+    shell
+        .wait_for_event(std::time::Instant::now() + STEP_TIMEOUT, |e| match e {
+            HookEvent::Line(line) => {
+                matches!(ShellLine::parse(line), Ok(ShellLine::EditBufferV2 { text, .. }) if text == "한완료!")
+            },
+            _ => false,
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn hook_rejects_cancelled_and_expired_edits_before_dispatch() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Real).await.unwrap();
+    shell.type_text("echo before").await.unwrap();
+    expect_buffer(&mut shell, "echo before").await;
+    let revision = shell
+        .shell_sessions
+        .as_ref()
+        .unwrap()
+        .most_recent()
+        .unwrap()
+        .context
+        .as_ref()
+        .unwrap()
+        .input_revision
+        .unwrap();
+    for expired in [false, true] {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let rx = if expired {
+            Some(rx)
+        } else {
+            drop(rx);
+            None
+        };
+        shell
+            .command(ShellCommand::ApplyEdit {
+                expires_at: if expired {
+                    std::time::Instant::now() - Duration::from_secs(1)
+                } else {
+                    std::time::Instant::now() + Duration::from_secs(1)
+                },
+                revision,
+                cursor_utf16: 11,
+                buffer: "echo before".into(),
+                edit: fig_shell_ipc::hook::wire::Insert {
+                    text: "WRONG".into(),
+                    ..Default::default()
+                },
+                response: tx,
+            })
+            .unwrap();
+        if let Some(rx) = rx {
+            assert!(rx.await.unwrap().is_err());
+        }
+    }
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    shell.type_text("!").await.unwrap();
+    expect_buffer(&mut shell, "echo before!").await;
 }

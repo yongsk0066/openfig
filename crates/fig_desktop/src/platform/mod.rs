@@ -8,8 +8,10 @@ use macos_utils::window_server::ApplicationSpecifier;
 
 use crate::webview::WindowId;
 
+mod focus_validation;
 mod macos;
 mod objc_overrides;
+pub(crate) mod webview_host;
 
 pub use self::macos::*;
 
@@ -39,6 +41,10 @@ pub enum PlatformBoundEvent {
     /// window's frame and reposition if it moved. macOS posts `kAXWindowMovedNotification`
     /// only when a drag *ends*, so without this the dropdown sat still during the drag.
     FrameWatchTick,
+    WindowFocusValidated {
+        target: focus_validation::FocusTarget,
+        focused_window_id: Option<u32>,
+    },
     WindowDestroyed {
         // TODO: dont use on other platforms than macos
         app: ApplicationSpecifier,

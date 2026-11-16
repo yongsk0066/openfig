@@ -21,13 +21,11 @@
     "@fig/proto": "workspace:^",
     "@fig/shell-parser": "workspace:^",
     "@fig/spec-helpers": "workspace:^",
-    "deep-object-diff": "^1.1.9",
     "loglevel": "^1.9.2",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-window": "^2.3.1",
-    "tailwind-merge": "^3.6.0",
-    "use-resize-observer": "^10.0.0",
+    "react-window": "^2.5.3",
+    "tailwind-merge": "^3.7.0",
     "zustand": "catalog:"
   },
   "devDependencies": {

@@ -1,13 +1,20 @@
+import { installGlobalAPI } from "@fig/api-bindings";
 import React from "react";
 import logger from "loglevel";
 import ReactDOM from "react-dom/client";
-import { preloadSpecs } from "@fig/autocomplete-parser";
 import App from "./App";
+import { recordTiming, timingSnapshot } from "./telemetry";
+import { startAutocompleteRuntime, disposeAutocompleteRuntime } from "./fig/runtime";
 import ErrorBoundary from "./components/ErrorBoundary";
 
-window.onerror = (message, source, lineno, colno, error) => {
-  logger.error(error ?? new Error(`${source}:${lineno}:${colno}: ${message}`));
+const reportError = (event: ErrorEvent) => {
+  logger.error(
+    event.error ?? new Error(`${event.filename}:${event.lineno}:${event.colno}: ${event.message}`),
+  );
 };
+window.addEventListener("error", reportError);
+if (import.meta.hot)
+  import.meta.hot.dispose(() => window.removeEventListener("error", reportError));
 
 window.globalCWD = "";
 window.globalSSHString = "";
@@ -16,14 +23,19 @@ window.logger = logger;
 
 logger.setDefaultLevel("warn");
 
-setTimeout(() => {
-  preloadSpecs();
-}, 0);
-
+installGlobalAPI();
+Object.defineProperty(window, "figTimingSnapshot", { value: timingSnapshot, configurable: true });
+startAutocompleteRuntime();
+if (import.meta.hot) import.meta.hot.dispose(disposeAutocompleteRuntime);
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <React.Profiler
+        id="autocomplete"
+        onRender={(_id, _phase, duration) => recordTiming("react-render", duration)}
+      >
+        <App />
+      </React.Profiler>
     </ErrorBoundary>
   </React.StrictMode>,
 );

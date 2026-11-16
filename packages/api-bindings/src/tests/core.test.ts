@@ -1,4 +1,5 @@
-/// <reference types="node" />
+import process from "node:process";
+import { Os } from "@fig/proto/fig";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   ClientOriginatedMessageSchema,
@@ -8,7 +9,7 @@ import {
   type ServerOriginatedMessage,
 } from "@fig/proto/fig";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sendMessage } from "../core";
+import { sendMessage, setHandlerForId } from "../core";
 import { sendGetPlatformInfoRequest } from "../requests";
 import { bytesToBase64 } from "../utils";
 
@@ -53,20 +54,57 @@ describe("sendMessage over api://", () => {
     vi.unstubAllGlobals();
   });
 
+  it("waits for the native page lease before issuing API requests", async () => {
+    let bind!: (epoch: string) => void;
+    const ready = new Promise<string>((resolve) => {
+      bind = resolve;
+    });
+    vi.stubGlobal("figRuntime", { ready });
+    fetchMock.mockImplementation(
+      async (_url, init) =>
+        new Response(
+          encode({
+            id: requestId(init),
+            submessage: {
+              case: "getPlatformInfoResponse",
+              value: create(GetPlatformInfoResponseSchema, { os: Os.MACOS }),
+            },
+          }),
+        ),
+    );
+    const pending = sendGetPlatformInfoRequest({});
+    expect(fetchMock).not.toHaveBeenCalled();
+    bind("23");
+    await pending;
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ "x-fig-view-epoch": "23" });
+  });
+
+  it("propagates native decode and subscriber failures to the delivery NACK boundary", () => {
+    setHandlerForId(() => {
+      throw new Error("subscriber failed");
+    }, "901");
+    expect(() => window.figReceiveMessage!("////")).toThrow();
+    expect(() =>
+      window.figReceiveMessage!(
+        bytesToBase64(encode({ id: 901n, submessage: { case: "success", value: true } })),
+      ),
+    ).toThrow("subscriber failed");
+  });
+
   it("resolves with the decoded response", async () => {
     fetchMock.mockImplementation(async (_url, init) => {
       const body = encode({
         id: requestId(init),
         submessage: {
           case: "getPlatformInfoResponse",
-          value: create(GetPlatformInfoResponseSchema, { os: 1 }),
+          value: create(GetPlatformInfoResponseSchema, { os: Os.MACOS }),
         },
       });
       return new Response(body, { status: 200 });
     });
 
     const result = await settle(sendGetPlatformInfoRequest({}));
-    expect(result).toMatchObject({ status: "resolved", value: { os: 1 } });
+    expect(result).toMatchObject({ status: "resolved", value: { os: Os.MACOS } });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url.pathname).toBe("/getPlatformInfoRequest");

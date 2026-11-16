@@ -1,8 +1,9 @@
+export type Update<T> = T | ((value: T) => T);
 import type { Suggestion } from "@fig/shared/internal";
-import type { ArgumentParserResult } from "@fig/autocomplete-parser";
+import type { ArgumentParserResult } from "@fig/autocomplete-parser/core";
 import type { Command } from "@fig/shell-parser";
-import type { SettingsMap } from "@fig/api-bindings/wrappers";
-import type { FigState } from "../fig/hooks";
+import type { SettingsMap } from "@fig/shared/settings";
+import type { FigState } from "./fig-state";
 import type { GeneratorState } from "../generators/helpers";
 
 export enum Visibility {
@@ -32,16 +33,18 @@ type AutocompleteActions = {
   error: (error: string) => void;
   setVisibleState: (visibleState: Visibility) => void;
   scroll: (index: number, visibleState: Visibility) => void;
-  setFigState: React.Dispatch<React.SetStateAction<FigState>>;
+  setFigState: (update: Update<FigState>) => void;
   updateVisibilityPostInsert: (suggestion: Suggestion, isFullCompletion: boolean) => void;
   insertTextForItem: (item: Suggestion, execute?: boolean) => void;
   insertCommonPrefix: () => void;
-  setHistoryModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  setUserFuzzySearchEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  setSettings: React.Dispatch<React.SetStateAction<SettingsMap>>;
+  setHistoryModeEnabled: (update: Update<boolean>) => void;
+  setUserFuzzySearchEnabled: (update: Update<boolean>) => void;
+  setSettings: (update: Update<SettingsMap>) => void;
 };
 
 export type AutocompleteState = {
+  parsing: boolean;
+  parsedInput?: { sessionId?: string; inputRevision?: bigint };
   figState: FigState;
   parserResult: ArgumentParserResult;
   generatorStates: GeneratorState[];

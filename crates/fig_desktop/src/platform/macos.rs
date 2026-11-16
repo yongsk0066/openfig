@@ -1,7 +1,3 @@
-// This is needed for objc
-#![allow(unexpected_cfgs)]
-#![allow(deprecated)]
-
 use std::path::Path;
 use std::sync::atomic::{
     AtomicBool,
@@ -16,7 +12,6 @@ use std::sync::{
 use accessibility_sys::{
     AXError,
     AXIsProcessTrusted,
-    AXUIElementCreateApplication,
     AXUIElementCreateSystemWide,
     AXUIElementSetMessagingTimeout,
     pid_t,
@@ -45,12 +40,7 @@ use macos_utils::{
     WindowServer,
     WindowServerEvent,
 };
-use objc::runtime::Object;
-use objc::{
-    msg_send,
-    sel,
-    sel_impl,
-};
+use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{
     NSOperationQueue,
     ns_string,
@@ -64,7 +54,6 @@ use tao::dpi::{
 use tao::platform::macos::{
     ActivationPolicy,
     EventLoopWindowTargetExtMacOS,
-    WindowExtMacOS as _,
 };
 use tracing::{
     debug,
@@ -128,6 +117,10 @@ pub struct PlatformState {
     /// Last observed frame of the followed terminal window, compared on every tick.
     #[serde(skip)]
     watched_frame: Mutex<Option<CGRect>>,
+    #[serde(skip)]
+    focus_generation: std::sync::atomic::AtomicU64,
+    #[serde(skip)]
+    focus_validation: tokio::sync::watch::Sender<Option<super::focus_validation::FocusTarget>>,
 }
 
 #[derive(Debug, Clone)]
@@ -179,14 +172,13 @@ impl PlatformWindowImpl {
     }
 
     pub fn get_bounds(&self) -> Option<CGRect> {
-        let info = self.ui_element.window_info(false)?;
-        Some(info.bounds)
+        let info = UIElement::window_info_for_id(self.window_id)?;
+        (info.owner_pid == self.pid as u64).then_some(info.bounds)
     }
 
     pub fn get_level(&self) -> Option<i64> {
-        // We grab all the windows since we don't want this to fail and are more fine if it's slow
-        let info = self.ui_element.window_info(true)?;
-        Some(info.level)
+        let info = UIElement::window_info_for_id(self.window_id)?;
+        (info.owner_pid == self.pid as u64).then_some(info.level)
     }
 
     pub fn get_x_term_cursor_elem(&mut self) -> Option<UIElement> {
@@ -215,12 +207,32 @@ impl PlatformWindowImpl {
 impl PlatformState {
     pub fn new(proxy: EventLoopProxy) -> Self {
         let focused_window: Option<PlatformWindowImpl> = None;
+        let result_proxy = proxy.clone();
+        let focus_validation = super::focus_validation::start(
+            |pid| {
+                let _measure = crate::latency::Measure::new("focus-validation-worker");
+                // Each query owns a fresh AX application element and uses it serially on one
+                // worker; no observer/run-loop source or shared UIElement crosses threads.
+                UIElement::application(pid).focused_window().ok().and_then(|window| {
+                    // SAFETY: window owns a live AX element; inherit the documented SPI premise.
+                    unsafe { window.get_window_id().ok() }
+                })
+            },
+            move |target, focused_window_id| {
+                result_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::WindowFocusValidated {
+                    target,
+                    focused_window_id,
+                }));
+            },
+        );
         Self {
             proxy,
             focused_window: Mutex::new(focused_window),
             window_server: Mutex::new(None),
             autocomplete_visible: Arc::new(AtomicBool::new(false)),
             watched_frame: Mutex::new(None),
+            focus_generation: Default::default(),
+            focus_validation,
         }
     }
 
@@ -249,10 +261,10 @@ impl PlatformState {
                 // `AXUIElementSetMessagingTimeout`.
                 // Contracts (HIServices):
                 // - `AXIsProcessTrusted()` takes no arguments and has no preconditions.
-                // - `AXUIElementCreateSystemWide()` takes no arguments and returns a `+1` `AXUIElementRef` (Create
-                //   rule); it never returns NULL.
-                // - `AXUIElementSetMessagingTimeout(element, seconds)` requires a live element and a non-negative
-                //   timeout; it borrows the element.
+                // - `AXUIElementCreateSystemWide()` takes no arguments and returns a `+1`
+                //   `AXUIElementRef` (Create rule); it never returns NULL.
+                // - `AXUIElementSetMessagingTimeout(element, seconds)` requires a live element and
+                //   a non-negative timeout; it borrows the element.
                 // Evidence: the element argument is the POSTCONDITION of the call nested
                 // directly inside it, so it is live for the whole call; `0.25` is a positive
                 // `f32`.
@@ -339,7 +351,9 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::InitializePostRun => {
-                super::objc_overrides::install(window_map);
+                if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
+                    super::webview_host::install_focus_behavior(&window.webview)?;
+                }
 
                 // Frame watch: 20 Hz while the autocomplete window is visible, nothing otherwise.
                 let proxy = self.proxy.clone();
@@ -444,10 +458,10 @@ impl PlatformState {
                     });
                 });
 
+                self.focus_generation.fetch_add(1, Ordering::Relaxed);
                 self.focused_window.lock().unwrap().replace(window);
 
                 if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
-                    let ns_window = window.window.ns_window().cast::<Object>();
                     // Handle iTerm Quake mode by explicitly setting window level. See
                     // https://github.com/gnachman/iTerm2/blob/1a5a09f02c62afcc70a647603245e98862e51911/sources/iTermProfileHotKey.m#L276-L310
                     // for more on window levels.
@@ -463,19 +477,7 @@ impl PlatformState {
                         Some(level) => level,
                     };
                     debug!("Setting window level to {level:?}");
-                    // SAFETY:
-                    // Operation: `objc_msgSend` for `-[NSWindow setLevel:]`.
-                    // Contract (ObjC ABI): live receiver responding to the selector, and the
-                    // argument type must match `NSWindowLevel`.
-                    // Evidence:
-                    // - `ns_window` is `window.window.ns_window().cast::<Object>()`, i.e. tao's backing `NSWindow` for
-                    //   a `tao::window::Window` that `window_map` still owns, so it is live for this statement. A nil
-                    //   pointer would make this a documented no-op rather than UB.
-                    // - `NSWindowLevel` is a typedef for `NSInteger`, which on aarch64-apple and x86_64-apple is
-                    //   64-bit; `above: i64` therefore matches the ObjC parameter type exactly (TYPE FACT for the only
-                    //   supported targets).
-                    // - The `()` return type matches the method's `void`.
-                    let _: () = unsafe { msg_send![ns_window, setLevel: above] };
+                    super::webview_host::set_level(&window.window, above);
                 }
 
                 Ok(())
@@ -568,8 +570,8 @@ impl PlatformState {
                         // docs/13-unsafe-review.md #8.
                         // Leak note: one more system-wide element per accessibility toggle.
                         unsafe {
-                            // This prevents Fig from becoming unresponsive if one of the applications
-                            // we are tracking becomes unresponsive.
+                            // This prevents Fig from becoming unresponsive if one of the
+                            // applications we are tracking becomes unresponsive.
                             AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25);
                         }
                     }
@@ -641,31 +643,38 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::WindowDestroyed { app } => {
-                // Fired for every destroyed window of a tracked app (the observer cannot tell
-                // which one — the element is dead). Terminal.app does not post a focused-window
-                // change when a window closes and a sibling takes over, so ask the app which
-                // window is focused now and drop ours if it is not that one any more.
-                let mut focused = self.focused_window.lock().unwrap();
-                if let Some(focused_window) = focused.as_ref()
-                    && focused_window.bundle_id() == app.bundle_id
+                let focused = self.focused_window.lock().unwrap();
+                if let Some(window) = focused.as_ref()
+                    && window.bundle_id() == app.bundle_id
+                    && window.pid == app.pid
                 {
-                    // SAFETY: `AXUIElementCreateApplication` has no preconditions; `get_window_id`
-                    // requires a live element, which a freshly returned focused window is. The
-                    // `+1` from the Create rule is owned by the `UIElement` and released on drop.
-                    let still_focused = unsafe {
-                        UIElement::from(AXUIElementCreateApplication(app.pid))
-                            .focused_window()
-                            .ok()
-                            .and_then(|window| window.get_window_id().ok())
-                    } == Some(focused_window.window_id);
-                    if !still_focused {
+                    self.focus_validation
+                        .send_replace(Some(super::focus_validation::FocusTarget {
+                            pid: window.pid,
+                            window_id: window.window_id,
+                            generation: self.focus_generation.load(Ordering::Relaxed),
+                        }));
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::WindowFocusValidated {
+                target,
+                focused_window_id,
+            } => {
+                let mut focused = self.focused_window.lock().unwrap();
+                if let Some(window) = focused.as_ref() {
+                    let current = super::focus_validation::FocusTarget {
+                        pid: window.pid,
+                        window_id: window.window_id,
+                        generation: self.focus_generation.load(Ordering::Relaxed),
+                    };
+                    if super::focus_validation::should_clear(current, target, focused_window_id) {
                         focused.take();
-                        self.proxy
-                            .send_event(Event::WindowEvent {
-                                window_id: AUTOCOMPLETE_ID,
-                                window_event: WindowEvent::Hide,
-                            })
-                            .ok();
+                        self.focus_generation.fetch_add(1, Ordering::Relaxed);
+                        self.proxy.send_event_or_log(Event::WindowEvent {
+                            window_id: AUTOCOMPLETE_ID,
+                            window_event: WindowEvent::Hide,
+                        });
                     }
                 }
                 Ok(())
@@ -677,7 +686,15 @@ impl PlatformState {
         let mut guard = self.focused_window.lock().unwrap();
         let active_window = guard.as_mut().context("No active window")?;
         let current_terminal = Terminal::from_bundle_id(active_window.bundle_id());
-
+        let frontmost_pid = NSWorkspace::sharedWorkspace()
+            .frontmostApplication()
+            .map(|app| app.processIdentifier());
+        // AX notifications can already be queued when focus leaves the terminal. A system-wide
+        // caret read would then query an unrelated application (and can wait for its AX timeout).
+        if !should_query_caret(current_terminal.is_some(), active_window.pid, frontmost_pid) {
+            return Ok(());
+        }
+        let _measure = crate::latency::Measure::new("caret-query");
         let is_xterm = current_terminal.is_some_and(|t| t.is_xterm());
 
         let caret = if is_xterm {
@@ -794,5 +811,21 @@ impl PlatformState {
 
     pub fn accessibility_is_enabled() -> Option<bool> {
         Some(ACCESSIBILITY_ENABLED.load(Ordering::SeqCst))
+    }
+}
+
+fn should_query_caret(is_terminal: bool, tracked_pid: pid_t, frontmost_pid: Option<pid_t>) -> bool {
+    is_terminal && frontmost_pid == Some(tracked_pid)
+}
+
+#[cfg(test)]
+mod caret_target_tests {
+    use super::should_query_caret;
+    #[test]
+    fn queued_caret_events_do_not_query_an_unrelated_foreground_app() {
+        assert!(should_query_caret(true, 10, Some(10)));
+        assert!(!should_query_caret(true, 10, Some(11)));
+        assert!(!should_query_caret(true, 10, None));
+        assert!(!should_query_caret(false, 10, Some(10)));
     }
 }

@@ -6,6 +6,7 @@ import {
   compareNamedObjectsAlphabetically,
   fieldsAreEqual,
 } from "../src/utils";
+const fn = () => {};
 
 describe("fieldsAreEqual", () => {
   it("should return immediately if two values are the same", () => {
@@ -28,7 +29,6 @@ describe("fieldsAreEqual", () => {
   });
 
   it("should return true if fields are equal", () => {
-    const fn = () => {};
     expect(
       fieldsAreEqual(
         {
@@ -90,6 +90,11 @@ describe("makeArrayIfExists", () => {
 });
 
 describe("longestCommonPrefix", () => {
+  it("preserves the caller suggestion ordering", () => {
+    const suggestions = ["foo zoo", "foo bar", "foo alpha"];
+    expect(longestCommonPrefix(suggestions)).toBe("foo ");
+    expect(suggestions).toEqual(["foo zoo", "foo bar", "foo alpha"]);
+  });
   it("should return the shared match", () => {
     expect(longestCommonPrefix(["foo", "foo bar", "foo hello world"])).toEqual("foo");
   });

@@ -44,8 +44,8 @@ const getConfigLines = async (
 
   // Get the lines of every include file
   const includeLines: string[][] = await Promise.all(
-    includes.map((file) =>
-      getConfigLines(file, executeShellCommand, home, basePath)
+    includes.map((includeFile) =>
+      getConfigLines(includeFile, executeShellCommand, home, basePath)
     )
   );
 

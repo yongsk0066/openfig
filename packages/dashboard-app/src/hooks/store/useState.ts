@@ -1,7 +1,7 @@
 import { StoreContext } from "@/context/zustand";
 import { useCallback, useContext } from "react";
 import { useStore } from "zustand";
-import z from "zod";
+import { z } from "zod";
 
 export function useLocalState(key: string): readonly [unknown, (value: unknown) => void] {
   const store = useContext(StoreContext);

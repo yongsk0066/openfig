@@ -1,4 +1,3 @@
-import { ai } from "@fig/spec-generators";
 
 const filterMessages = (out: string): string => {
   return out.startsWith("warning:") || out.startsWith("error:")
@@ -4401,34 +4400,6 @@ const completionSpec: Fig.Spec = {
           description: "Use the given message as the commit message",
           args: {
             name: "message",
-            generators: ai({
-              name: "git commit -m",
-              prompt: async ({ executeCommand }) => {
-                const { stdout } = await executeCommand({
-                  command: "git",
-                  args: [
-                    "log",
-                    "--pretty=format:%s",
-                    "--abbrev-commit",
-                    "--max-count=20",
-                  ],
-                });
-
-                return (
-                  'Generate a git commit message summary based on this git diff, the "summary" must be no more ' +
-                  "than 70-75 characters, and it must describe both what the patch changes, as well as why the " +
-                  `patch might be necessary.\n\nHere are some examples from the repo:\n${stdout}`
-                );
-              },
-              message: async ({ executeCommand }) =>
-                (
-                  await executeCommand({
-                    command: "git",
-                    args: ["diff", "--staged"],
-                  })
-                ).stdout,
-              splitOn: "\n",
-            }),
           },
         },
         {

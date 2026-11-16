@@ -11,7 +11,7 @@ const specData = {
 
 describe("test `getVersionFromFullFile`", () => {
   beforeEach(() => {
-    vi.spyOn(loadHelpers, "getCachedCLIVersion").mockReturnValue(null);
+    loadHelpers.defaultSpecLoader.clear();
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -43,7 +43,7 @@ describe("test `getVersionFromFullFile`", () => {
   });
 
   it("missing `getVersionCommand` and throwing `command --version`", async () => {
-    vi.spyOn(wrappers, "executeCommand").mockReturnValue(Promise.reject());
+    vi.spyOn(wrappers, "executeCommand").mockRejectedValue(new Error("command failed"));
     const newSpecData = { ...specData, getVersionCommand: undefined };
     const version = await getVersionFromFullFile(newSpecData, "npm");
     expect(version).toBeUndefined();

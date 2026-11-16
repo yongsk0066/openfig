@@ -1,4 +1,7 @@
 // TODO: suggest available s3 endpoints
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 import awsRegions from "./regions";
 
 const storageClasses = [
@@ -60,15 +63,11 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
 };
 
 const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const alphabeticalSortFilesAndFolders = (entries: string[]) => {
     const dots_arr: string[] = [];
     const other_arr: string[] = [];
 
-    arr.map((fsObject) => {
+    entries.map((fsObject) => {
       if (fsObject.toLowerCase() == ".ds_store") return;
       if (fsObject.slice(0, 1) === ".") {
         dots_arr.push(fsObject);
@@ -79,15 +78,15 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
 
     if (isS3) {
       return [
-        ...other_arr.sort(sortFnStrings),
-        ...dots_arr.sort(sortFnStrings),
+        ...other_arr.toSorted(sortFnStrings),
+        ...dots_arr.toSorted(sortFnStrings),
       ];
     }
 
     return [
-      ...other_arr.sort(sortFnStrings),
+      ...other_arr.toSorted(sortFnStrings),
       "../",
-      ...dots_arr.sort(sortFnStrings),
+      ...dots_arr.toSorted(sortFnStrings),
     ];
   };
 
@@ -124,9 +123,9 @@ const triggerPrefix = (
   return newToken.lastIndexOf("/") !== oldToken.lastIndexOf("/");
 };
 
-const _prefixS3 = "s3://";
-const _prefixFile = "";
-const _prefixFileb = "fileb://";
+const prefixS3 = "s3://";
+const prefixFile = "";
+const prefixFileb = "fileb://";
 
 const generators: Record<string, Fig.Generator> = {
   listFilesGenerator: {
@@ -135,24 +134,24 @@ const generators: Record<string, Fig.Generator> = {
       const whatHasUserTyped = tokens[tokens.length - 1];
 
       // Do not show file suggestions when s3:// typed
-      if (whatHasUserTyped.startsWith(_prefixS3)) {
+      if (whatHasUserTyped.startsWith(prefixS3)) {
         return undefined;
       }
 
       return appendFolderPath(whatHasUserTyped, baseLsCommand);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
 
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
 
     getQueryTerm: (token) => {
       // if token is either s3:// or any substr permutation (e.g: "s", "s3", "s3:/")
       // simply return token
-      if (!token.startsWith(_prefixS3) && _prefixS3.startsWith(token)) {
+      if (!token.startsWith(prefixS3) && prefixS3.startsWith(token)) {
         return token;
       }
       return token.slice(token.lastIndexOf("/") + 1);
@@ -167,8 +166,8 @@ const generators: Record<string, Fig.Generator> = {
       const baseLSCommand = ["ls", "-1ApL "];
       let whatHasUserTyped = tokens[tokens.length - 1];
 
-      if (whatHasUserTyped.startsWith(_prefixFileb)) {
-        whatHasUserTyped = whatHasUserTyped.slice(_prefixFileb.length);
+      if (whatHasUserTyped.startsWith(prefixFileb)) {
+        whatHasUserTyped = whatHasUserTyped.slice(prefixFileb.length);
       } else {
         return ["echo", "fileb://"];
       }
@@ -176,15 +175,15 @@ const generators: Record<string, Fig.Generator> = {
       return appendFolderPath(whatHasUserTyped, baseLSCommand);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFileb);
+      return postProcessFiles(out, prefixFileb);
     },
 
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFileb);
+      return triggerPrefix(newToken, oldToken, prefixFileb);
     },
 
     getQueryTerm: (token) => {
-      if (!token.startsWith(_prefixFileb)) return token;
+      if (!token.startsWith(prefixFileb)) return token;
       return token.slice(token.lastIndexOf("/") + 1);
     },
   },
@@ -199,11 +198,11 @@ const generators: Record<string, Fig.Generator> = {
 
       const lastSlashIndex = whatHasUserTyped.lastIndexOf("/");
 
-      if (!whatHasUserTyped.startsWith(_prefixS3)) {
+      if (!whatHasUserTyped.startsWith(prefixS3)) {
         // if whatHasUserTyped is neither s3:// or its substr permutations,
         // then we can assume that the filepath generator is in work
         // so do not return any s3 related filepaths
-        if (!_prefixS3.startsWith(whatHasUserTyped)) {
+        if (!prefixS3.startsWith(whatHasUserTyped)) {
           return undefined;
         }
 
@@ -221,11 +220,11 @@ const generators: Record<string, Fig.Generator> = {
         return [];
       }
 
-      if (out.trim() === _prefixS3) {
+      if (out.trim() === prefixS3) {
         return [
           {
-            name: _prefixS3,
-            insertValue: _prefixS3,
+            name: prefixS3,
+            insertValue: prefixS3,
           },
         ];
       }
@@ -255,7 +254,7 @@ const generators: Record<string, Fig.Generator> = {
           }
 
           const hasBackSlash =
-            s3Path.slice(_prefixS3.length).lastIndexOf("/") > -1;
+            s3Path.slice(prefixS3.length).lastIndexOf("/") > -1;
 
           // it is a file, do not append trailing '/'
           if (preFound && !hasBackSlash) {
@@ -283,11 +282,11 @@ const generators: Record<string, Fig.Generator> = {
       return sortSuggestions(lines as string[], true);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixS3);
+      return triggerPrefix(newToken, oldToken, prefixS3);
     },
 
     getQueryTerm: (token) => {
-      if (!token.startsWith(_prefixS3)) return token;
+      if (!token.startsWith(prefixS3)) return token;
       return token.slice(token.lastIndexOf("/") + 1);
     },
     cache: {
@@ -307,7 +306,7 @@ const generators: Record<string, Fig.Generator> = {
             return [];
           }
           return {
-            name: _prefixS3 + parts[parts.length - 1],
+            name: prefixS3 + parts[parts.length - 1],
           };
         }) as Fig.Suggestion[];
       } catch (error) {

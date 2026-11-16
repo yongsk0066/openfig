@@ -1,7 +1,3 @@
-// This is needed for objc
-#![allow(unexpected_cfgs)]
-#![allow(deprecated)]
-
 pub mod action;
 pub mod attribute;
 pub mod ui_element;
@@ -72,7 +68,7 @@ impl TreeWalker {
 
         if flow == TreeWalkerFlow::Continue {
             if let Ok(children) = root.attribute(&self.attr_children) {
-                for child in children.into_iter() {
+                for child in &children {
                     let child_flow = self.walk_one(&child, visitor);
 
                     if child_flow == TreeWalkerFlow::Exit {
@@ -175,6 +171,6 @@ impl TreeVisitor for ElementFinder {
     }
 
     fn exit_element(&self, _element: &AXUIElement) {
-        self.depth.set(self.depth.get() - 1)
+        self.depth.set(self.depth.get() - 1);
     }
 }

@@ -37,9 +37,10 @@ export async function read(path: string) {
   return null;
 }
 
-export async function list(path: string) {
+export async function list(path: string, appendDirectorySeparator = false) {
   const response = await sendContentsOfDirectoryRequest({
     directory: filePath({ path, expandTildeInPath: true }),
+    appendDirectorySeparator,
   });
   return response.fileNames;
 }

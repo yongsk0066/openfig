@@ -1,12 +1,8 @@
+import { readSettings } from "@fig/shared/settings";
 import { sleep } from "@fig/shared/utils";
 import type { Annotation } from "@fig/autocomplete-parser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  generatorCache,
-  runCachedGenerator,
-  haveContextForGenerator,
-  type GeneratorContext,
-} from "../helpers";
+import { createGeneratorCache, haveContextForGenerator, type GeneratorContext } from "../helpers";
 
 const context: GeneratorContext = {
   annotations: [] as Annotation[],
@@ -155,14 +151,12 @@ describe("runCachedGenerator", () => {
       const generator: Fig.Generator = {
         script: ["echo", "hello world"],
         cache: {
-          strategy: "stale-while-revalidate",
+          strategy: "max-age",
+          ttl: 1000,
         },
       };
 
-      const generators: Fig.Generator[] = [
-        generator,
-        { ...generator, cache: { strategy: "max-age", ttl: 1_000 } },
-      ];
+      const generators: Fig.Generator[] = [generator, generator];
 
       for (let i = 0; i < 2; i += 1) {
         await runCachedGenerator(
@@ -181,17 +175,14 @@ describe("runCachedGenerator", () => {
       const generator: Fig.Generator = {
         script: ["echo", "hello world"],
         cache: {
-          strategy: "stale-while-revalidate",
+          strategy: "max-age",
+          ttl: 1000,
         },
       };
 
-      const generators: Fig.Generator[] = [
-        generator,
-        { ...generator, cache: { strategy: "max-age", ttl: 1_000 } },
-      ];
+      const generators: Fig.Generator[] = [generator, generator];
 
       for (let i = 0; i < 2; i += 1) {
-        console.log(contexts[i]);
         await runCachedGenerator(
           generators[i],
           contexts[i],
@@ -209,17 +200,14 @@ describe("runCachedGenerator", () => {
       const generator: Fig.Generator = {
         custom: async () => [],
         cache: {
-          strategy: "stale-while-revalidate",
+          strategy: "max-age",
+          ttl: 1000,
         },
       };
 
-      const generators: Fig.Generator[] = [
-        generator,
-        { ...generator, cache: { strategy: "max-age", ttl: 1_000 } },
-      ];
+      const generators: Fig.Generator[] = [generator, generator];
 
       for (let i = 0; i < 2; i += 1) {
-        console.log(contexts[i]);
         await runCachedGenerator(generators[i], contexts[i], initialRun);
       }
 
@@ -227,7 +215,7 @@ describe("runCachedGenerator", () => {
     });
   });
 
-  describe("no cache strategy specified (max-age)", () => {
+  describe("no cache strategy specified (stale-while-revalidate)", () => {
     const generator: Fig.Generator = { cache: { ttl: 1_000 } };
 
     beforeEach(() => {
@@ -259,7 +247,7 @@ describe("runCachedGenerator", () => {
           () => Promise.resolve("fresher-data"),
           "command",
         ),
-      ).toEqual("fresher-data");
+      ).toEqual("stale-data");
     });
   });
 
@@ -327,7 +315,17 @@ describe("runCachedGenerator", () => {
           () => Promise.resolve("fresh-data"),
           "command",
         ),
-      ).toEqual("fresh-data");
+      ).toEqual("stale-data");
+      await vi.waitFor(() =>
+        expect(
+          generatorCache.runCachedGenerator(
+            generator,
+            context,
+            () => Promise.resolve("fresh-data"),
+            "command",
+          ),
+        ).resolves.toBe("fresh-data"),
+      );
       expect(
         await runCachedGenerator(
           generator,
@@ -339,3 +337,19 @@ describe("runCachedGenerator", () => {
     });
   });
 });
+
+it("isolates cached generators and terminal sessions even with identical tokens", async () => {
+  generatorCache.clear();
+  const a: Fig.Generator = { cache: { ttl: 1000 } },
+    b: Fig.Generator = { cache: { ttl: 1000 } };
+  const first = vi.fn(async () => "first"),
+    second = vi.fn(async () => "second");
+  expect(await runCachedGenerator(a, context, first)).toBe("first");
+  expect(await runCachedGenerator(b, context, second)).toBe("second");
+  expect(await runCachedGenerator(a, { ...context, sessionId: "other" }, second)).toBe("second");
+  expect(await runCachedGenerator(a, context, first)).toBe("first");
+  expect(first).toHaveBeenCalledOnce();
+});
+
+const generatorCache = createGeneratorCache(readSettings({}));
+const { runCachedGenerator } = generatorCache;

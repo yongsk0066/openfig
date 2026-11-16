@@ -12,31 +12,6 @@ const generalPreferences = [
         default: true,
         popular: false,
       },
-      // {
-      //   id: "app.preferredTerminal",
-      //   title: "Preferred Terminal",
-      //   description:
-      //     `Choose your preferred terminal for ${PRODUCT_NAME} to launch commands in.`,
-      //   type: "select",
-      //   options: [
-      //     "iTerm2",
-      //     "Hyper",
-      //     "Alacritty",
-      //     "Kitty",
-      //     "Terminal",
-      //   ],
-      //   default: "Terminal",
-      //   popular: false,
-      // },
-      // {
-      //   id: "app.disableAutolaunch",
-      //   title: "Open in new shells",
-      //   description: "Automatically launch when opening a new shell session",
-      //   type: "boolean",
-      //   default: true,
-      //   inverted: true,
-      //   popular: false,
-      // },
       {
         id: "app.hideMenubarIcon",
         title: "Display Menu Bar icon",

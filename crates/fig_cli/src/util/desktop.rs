@@ -45,6 +45,7 @@ pub fn desktop_app_running() -> bool {
     // Fallback to process name check
     let app_process_name = OsString::from(APP_PROCESS_NAME);
     let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));
+    let Ok(system) = system else { return false };
     let mut processes = system.processes_by_exact_name(&app_process_name);
     processes.next().is_some()
 }

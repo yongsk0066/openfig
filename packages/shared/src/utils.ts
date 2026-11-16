@@ -46,30 +46,42 @@ export function isOrHasValue(obj: string | Array<string>, valueToMatch: string) 
 
 export const TimeoutError = createErrorInstance("TimeoutError");
 
-export async function withTimeout<T>(time: number, promise: Promise<T>): Promise<T> {
-  return Promise.race<Promise<T>>([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => {
-        reject(new TimeoutError("Function timed out"));
-      }, time);
-    }),
-  ]);
+/** Stops observing on timeout/abort; callers own cancellation of the underlying operation. */
+export async function withTimeout<T>(
+  time: number,
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal?.reason);
+        if (signal?.aborted) {
+          onAbort();
+          return;
+        }
+        signal?.addEventListener("abort", onAbort, { once: true });
+        timer = setTimeout(() => reject(new TimeoutError("Function timed out")), time);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+  }
 }
 
-export const longestCommonPrefix = (strings: string[]): string => {
-  const sorted = strings.sort();
-
-  const { 0: firstItem, [sorted.length - 1]: lastItem } = sorted;
-  const firstItemLength = firstItem.length;
-
-  let i = 0;
-
-  while (i < firstItemLength && firstItem.charAt(i) === lastItem.charAt(i)) {
-    i += 1;
+export const longestCommonPrefix = (strings: readonly string[]): string => {
+  const first = strings[0] ?? "";
+  let length = first.length;
+  for (let n = 1; n < strings.length && length; n++) {
+    let i = 0;
+    while (i < length && first[i] === strings[n][i]) i++;
+    length = i;
   }
-
-  return firstItem.slice(0, i);
+  return first.slice(0, length);
 };
 
 export function findLast<T>(values: T[], predicate: (v: T) => boolean): T | undefined {
@@ -180,9 +192,9 @@ export const getCWDForFilesAndFolders = (cwd: string | null, searchTerm: string)
   return dirname.startsWith("~/") || dirname.startsWith("/") ? dirname : `${cwd}/${dirname}`;
 };
 
-export function localProtocol(domain: string, path: string) {
+export function localProtocol(domain: string, path: string, newUriFormat = true) {
   let modifiedDomain;
-  if (domain === "path" && !window.fig?.constants?.newUriFormat) {
+  if (domain === "path" && !newUriFormat) {
     modifiedDomain = "";
   } else {
     modifiedDomain = domain;

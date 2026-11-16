@@ -18,7 +18,12 @@ use core_graphics::window::CGWindowID;
 
 use crate::AXError;
 
-pub enum __AXUIElement {}
+// Opaque macOS object: only pointers cross the FFI boundary.
+#[repr(C)]
+pub struct __AXUIElement {
+    _private: (),
+    _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+}
 pub type AXUIElementRef = *mut __AXUIElement;
 
 declare_TCFType! {
@@ -26,7 +31,12 @@ declare_TCFType! {
 }
 impl_TCFType!(AXUIElement, AXUIElementRef, AXUIElementGetTypeID);
 
-pub enum __AXObserver {}
+// Opaque macOS object: only pointers cross the FFI boundary.
+#[repr(C)]
+pub struct __AXObserver {
+    _private: (),
+    _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+}
 pub type AXObserverRef = *mut __AXObserver;
 
 pub type AXCopyMultipleAttributeOptions = u32;

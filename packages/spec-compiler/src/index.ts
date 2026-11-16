@@ -59,14 +59,14 @@ async function generateIndex(outdir: string, srcdir: string, files: string[]) {
 
   const diffVersionedSpecNames = parsedFiles
     .filter(({ base }) => base === "index.ts")
-    .map(({ dir }) => strip(dir));
-  diffVersionedSpecNames.sort();
+    .map(({ dir }) => strip(dir))
+    .toSorted();
 
   const specNames = parsedFiles
     .filter(({ base, ext }) => base !== "index.ts" && ext === ".ts")
     .map((p) => strip(`${p.dir}/${p.name}`))
-    .concat(diffVersionedSpecNames);
-  specNames.sort();
+    .concat(diffVersionedSpecNames)
+    .toSorted();
 
   const modules = parsedFiles.map((p) => strip(`${p.dir}/${p.name}`));
 
@@ -128,7 +128,7 @@ export async function compileSpecs({
   // Upstream took whatever order fast-glob walked the tree in, which made
   // `dynamic/index.js` depend on the filesystem. Sorting makes the build
   // reproducible; every other output was already sorted.
-  files.sort();
+  const sortedFiles = files.toSorted();
 
   if (files.length === 0) {
     throw new Error(`no spec sources matched ${srcdir}/**/*.ts in ${process.cwd()}`);
@@ -137,7 +137,7 @@ export async function compileSpecs({
   const stubbed = new Set<string>();
   await Promise.all([
     build({
-      entryPoints: files,
+      entryPoints: sortedFiles,
       outdir,
       bundle: true,
       outbase: srcdir,
@@ -145,8 +145,8 @@ export async function compileSpecs({
       minify: true,
       plugins: [nodeBuiltinStubs(stubbed)],
     }),
-    generateIndex(outdir, srcdir, files),
+    generateIndex(outdir, srcdir, sortedFiles),
   ]);
 
-  return { count: files.length, stubbed: [...stubbed].sort() };
+  return { count: files.length, stubbed: [...stubbed].toSorted() };
 }

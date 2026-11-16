@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -15,6 +16,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     projects: [
+      {
+        resolve: {
+          alias: { "@": fileURLToPath(new URL("./packages/dashboard-app/src", import.meta.url)) },
+        },
+        test: { name: "dashboard-app", root: "packages/dashboard-app", environment: "jsdom" },
+      },
       { test: { name: "shared", root: "packages/shared" } },
       { test: { name: "shell-parser", root: "packages/shell-parser" } },
       { test: { name: "spec-generators", root: "packages/spec-generators" } },
@@ -24,7 +31,7 @@ export default defineConfig({
         test: {
           name: "autocomplete-parser",
           root: "packages/autocomplete-parser",
-          environment: "jsdom",
+          environment: "node",
         },
       },
       {

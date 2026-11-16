@@ -16,15 +16,6 @@ use accessibility_sys::{
     AXUIElementSetAttributeValue,
     pid_t,
 };
-use cocoa::base::{
-    id,
-    nil,
-};
-use cocoa::foundation::{
-    NSAutoreleasePool,
-    NSFastEnumeration,
-    NSString,
-};
 use core_foundation::array::CFArray;
 use core_foundation::base::{
     TCFType,
@@ -36,13 +27,9 @@ use core_foundation::{
     impl_CFTypeDescription,
     impl_TCFType,
 };
-use objc::rc::autoreleasepool;
-use objc::{
-    class,
-    msg_send,
-    sel,
-    sel_impl,
-};
+use objc2::rc::autoreleasepool;
+use objc2_app_kit::NSRunningApplication;
+use objc2_foundation::NSString;
 
 use crate::util::{
     ax_call,
@@ -67,23 +54,11 @@ impl AXUIElement {
     }
 
     pub fn application_with_bundle(bundle_id: &str) -> Result<Self, Error> {
-        unsafe {
-            autoreleasepool(|| {
-                let bundle_id_str = NSString::alloc(nil).init_str(bundle_id).autorelease();
-                let apps: id = msg_send![
-                    class![NSRunningApplication],
-                    runningApplicationsWithBundleIdentifier: bundle_id_str
-                ];
-
-                if let Some(app) = apps.iter().next() {
-                    let pid: pid_t = msg_send![app, processIdentifier];
-
-                    Ok(Self::wrap_under_create_rule(AXUIElementCreateApplication(pid)))
-                } else {
-                    Err(Error::NotFound)
-                }
-            })
-        }
+        autoreleasepool(|_| {
+            let apps = NSRunningApplication::runningApplicationsWithBundleIdentifier(&NSString::from_str(bundle_id));
+            let app = apps.firstObject().ok_or(Error::NotFound)?;
+            Ok(Self::application(app.processIdentifier()))
+        })
     }
 
     pub fn application_with_bundle_timeout(bundle_id: &str, timeout: Duration) -> Result<Self, Error> {

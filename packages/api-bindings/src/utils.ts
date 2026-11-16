@@ -10,7 +10,7 @@ export const b64ToBytes = (base64: string): Uint8Array => {
     return nativeFromBase64.call(Uint8Array, base64);
   }
 
-  const binaryString = window.atob(base64);
+  const binaryString = globalThis.atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i += 1) {

@@ -1,5 +1,9 @@
+use crate::application::ApplicationServices;
+mod delivery;
 pub mod menu;
 pub mod notification;
+pub(crate) mod page_epoch;
+mod runtime;
 pub mod url;
 pub mod window;
 pub mod window_id;
@@ -135,32 +139,11 @@ pub struct WebviewManager {
     fig_id_map: FigIdMap,
     window_id_map: WryIdMap,
     event_loop: EventLoop,
+    proxy: EventLoopProxy,
     shell_sessions: Arc<ShellSessions>,
     platform_state: Arc<PlatformState>,
     notifications_state: Arc<WebviewNotificationsState>,
-    api_state: Arc<ApiState>,
-}
-
-/// Everything the `api://` protocol handler needs, captured by its `wrap_custom_protocol`
-/// closure.
-///
-/// This used to be five `OnceLock` globals set in [`WebviewManager::new`], because the closure
-/// signature only carried an `Arc<fig_os_shim::Context>` and a `WindowId`. They made
-/// `protocol/api.rs` untestable — its own TODO said so.
-pub struct ApiState {
-    pub shell_sessions: Arc<ShellSessions>,
-    pub intercept_state: Arc<InterceptState>,
-    pub notifications_state: Arc<WebviewNotificationsState>,
-    pub proxy: Box<dyn EventSender>,
-    /// Serialises `positionWindowRequest`s.
-    ///
-    /// `wrap_custom_protocol` spawns a task per request, so without this every
-    /// `positionWindow` call — including the `dryRun` probes the app fires while it decides
-    /// whether the description pane fits — runs concurrently. The dead `window.ipc.postMessage`
-    /// path used to funnel exactly these through a single task; nothing replaced that when
-    /// `api://` took over, and `tokio`'s mutex hands the lock out in wait order, so this
-    /// restores the same one-at-a-time behaviour.
-    pub position_window: tokio::sync::Mutex<()>,
+    api_state: Arc<ApplicationServices>,
 }
 
 impl WebviewManager {
@@ -181,17 +164,19 @@ impl WebviewManager {
             event_loop.set_activation_policy(ActivationPolicy::Accessory);
         }
 
-        let proxy = event_loop.create_proxy();
+        let proxy = EventLoopProxy::new(event_loop.create_proxy());
 
         let shell_sessions = Arc::new(ShellSessions::default());
         let platform_state = Arc::new(PlatformState::new(proxy.clone()));
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
-        let api_state = Arc::new(ApiState {
+        let api_state = Arc::new(ApplicationServices {
+            page_epoch: Default::default(),
+            processes: Default::default(),
             shell_sessions: shell_sessions.clone(),
             intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
-            proxy: Box::new(proxy),
+            proxy: Box::new(proxy.clone()),
             position_window: Default::default(),
         });
 
@@ -199,6 +184,7 @@ impl WebviewManager {
             fig_id_map: Default::default(),
             window_id_map: Default::default(),
             event_loop,
+            proxy,
             shell_sessions,
             platform_state,
             notifications_state,
@@ -215,14 +201,17 @@ impl WebviewManager {
         enabled: bool,
         url: Url,
     ) {
-        let webview_arc = Rc::new(WindowState::new(
+        let mut window_state = WindowState::new(
             window,
             window_id.clone(),
             webview,
             context,
             enabled,
             url,
-        ));
+            self.proxy.clone(),
+        );
+        window_state.page_epoch = self.api_state.page_epoch.clone();
+        let webview_arc = Rc::new(window_state);
         self.fig_id_map.insert(window_id, webview_arc.clone());
         self.window_id_map.insert(webview_arc.window.id(), webview_arc);
     }
@@ -230,7 +219,7 @@ impl WebviewManager {
     pub fn build_webview<T>(
         &mut self,
         window_id: WindowId,
-        builder: impl Fn(Arc<ApiState>, &mut WebContext, &EventLoop, T) -> anyhow::Result<(Window, WebView)>,
+        builder: impl Fn(Arc<ApplicationServices>, &mut WebContext, &EventLoop, T) -> anyhow::Result<(Window, WebView)>,
         options: T,
         enabled: bool,
         url_fn: impl Fn() -> Url,
@@ -260,7 +249,7 @@ impl WebviewManager {
             let platform_state = self.platform_state.clone();
             let shell_sessions = self.shell_sessions.clone();
             let notifications_state = self.notifications_state.clone();
-            let event_loop = self.event_loop.create_proxy();
+            let event_loop = self.proxy.clone();
             tokio::spawn(async move {
                 match local_ipc::start_local_ipc(platform_state, shell_sessions, notifications_state, event_loop).await
                 {
@@ -272,8 +261,7 @@ impl WebviewManager {
 
         let shell_hook = ShellHook {
             notifications_state: self.notifications_state.clone(),
-            proxy: self.event_loop.create_proxy(),
-            last_sent: Default::default(),
+            proxy: self.proxy.clone(),
         };
 
         // zsh shells that report through `fig.zsh`; `doctor` asks it whether it answers.
@@ -290,9 +278,9 @@ impl WebviewManager {
             });
         }
 
-        file_watcher::setup_listeners(self.notifications_state.clone(), self.event_loop.create_proxy()).await;
+        file_watcher::setup_listeners(self.notifications_state.clone(), self.proxy.clone()).await;
 
-        init_webview_notification_listeners(self.event_loop.create_proxy()).await;
+        init_webview_notification_listeners(self.proxy.clone()).await;
 
         // The tray icon is created inside the loop, at `StartCause::Init`, not here: tray-icon
         // (0.24) requires the macOS event loop to be running on the main thread when the status
@@ -304,7 +292,7 @@ impl WebviewManager {
         let menu_bar = menu_bar();
         menu_bar.init_for_nsapp();
 
-        let proxy = self.event_loop.create_proxy();
+        let proxy = self.proxy.clone();
         proxy
             .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::InitializePostRun))
             .expect("Failed to send post init event");
@@ -313,7 +301,7 @@ impl WebviewManager {
         // on *every* iteration of the event loop — measured at 25,391 iterations over seven
         // minutes — and made menu handling depend on some other event arriving to wake the loop.
         {
-            let menu_proxy = self.event_loop.create_proxy();
+            let menu_proxy = self.proxy.clone();
             MenuEvent::set_event_handler(Some(move |menu_event: MenuEvent| {
                 info!(?menu_event, "Menu Event");
                 menu::handle_event(&menu_event, &menu_proxy);
@@ -323,6 +311,7 @@ impl WebviewManager {
 
         self.event_loop.run(move |event, window_target, control_flow| {
             *control_flow = ControlFlow::Wait;
+            let _event_measure = crate::latency::Measure::new(event_stage(&event));
             trace!(?event, "Main loop event");
 
             match event {
@@ -340,6 +329,7 @@ impl WebviewManager {
                 },
                 WryEvent::WindowEvent { event, window_id, .. } => {
                     if let Some(window_state) = self.window_id_map.get(&window_id) {
+                        window_state.invalidate_geometry_screen();
                         match event {
                             WryWindowEvent::CloseRequested => {
                                 // This is async so we need to pass 'visible' explicitly
@@ -386,7 +376,74 @@ impl WebviewManager {
                     }
                 },
                 WryEvent::UserEvent(event) => {
+                    let event = match event {
+                        Event::PageEvent { epoch, event } if epoch == self.api_state.page_epoch.current() => *event,
+                        Event::PageEvent { .. } => return,
+                        event => event,
+                    };
                     match event {
+                        Event::PageEvent { .. } => unreachable!("page events are wrapped only once"),
+                        Event::EditBuffer(pending) => {
+                            let batch = pending.lock().take();
+                            if let Some(batch) = batch {
+                                tracing::trace!(session = %batch.session, queue_us = batch.received.elapsed().as_micros(), "input queue latency");
+                                let trace_revision = batch.deliveries.iter().find(|d| d.window == AUTOCOMPLETE_ID).and_then(|d| d.notification.context.as_ref().and_then(|c| c.input_revision));
+                                let had_deliveries = !batch.deliveries.is_empty();
+                                let mut delivered = false;
+                                for delivery in batch.deliveries {
+                                    if crate::latency::enabled() && delivery.window == AUTOCOMPLETE_ID {
+                                        crate::latency::record("main-queue", &batch.session.to_string(), delivery.notification.context.as_ref().and_then(|c| c.input_revision), Some(batch.received.elapsed().as_secs_f64() * 1000.0), None);
+                                    }
+                                    tracing::trace!(session = %batch.session, epoch = self.api_state.page_epoch.current(), revision = ?delivery.notification.context.as_ref().and_then(|c| c.input_revision), queue_us = batch.received.elapsed().as_micros(), "input queue delivery");
+                                    let current = self
+                                        .notifications_state
+                                        .subscriptions
+                                        .get(&delivery.window)
+                                        .is_some_and(|state| {
+                                            state.is_current_edit_subscription(delivery.channel, delivery.generation)
+                                        });
+                                    if !current {
+                                        continue;
+                                    }
+                                    delivered = true;
+                                    if let Some(window) = self.fig_id_map.get(&delivery.window) {
+                                        window.emit_edit_buffer(delivery.channel, delivery.notification);
+                                    }
+                                }
+                                if had_deliveries && !delivered {
+                                    return;
+                                }
+                                let caret_started = std::time::Instant::now();
+                                if !batch.empty
+                                    && let Err(err) = self.platform_state.handle(
+                                        PlatformBoundEvent::EditBufferChanged,
+                                        window_target,
+                                        &self.fig_id_map,
+                                        &self.notifications_state,
+                                    )
+                                {
+                                    debug!(%err, "Failed to handle edit buffer position update");
+                                }
+                                if crate::latency::enabled() {
+                                    crate::latency::record("caret-update", &batch.session.to_string(), trace_revision, Some(caret_started.elapsed().as_secs_f64() * 1000.0), None);
+                                }
+                                if let Some(window) = self.fig_id_map.get(&AUTOCOMPLETE_ID)
+                                    && (window.enabled() || batch.empty)
+                                {
+                                    window.handle(
+                                        if batch.empty {
+                                            WindowEvent::Hide
+                                        } else {
+                                            WindowEvent::Show
+                                        },
+                                        &self.shell_sessions,
+                                        &self.platform_state,
+                                        &self.notifications_state,
+                                        window_target,
+                                    );
+                                }
+                            }
+                        },
                         Event::WindowEvent {
                             window_id,
                             window_event,
@@ -533,7 +590,15 @@ impl WebviewManager {
                         window_event: WindowEvent::Show,
                     });
                 },
-                WryEvent::MainEventsCleared | WryEvent::NewEvents(StartCause::WaitCancelled { .. }) => {},
+                WryEvent::MainEventsCleared => {
+                    for window in self.fig_id_map.values() {
+                        window.flush_geometry(&self.platform_state);
+                        window.invalidate_geometry_screen();
+                    }
+                },
+                WryEvent::NewEvents(_) => {
+                    for window in self.fig_id_map.values() { window.invalidate_geometry_screen(); }
+                },
                 // tao raises these from a global `NSEvent` monitor and offers no way to turn
                 // them off; 2,090 of them in a seven-minute log, each one preparing a `trace!`
                 // record nothing wants.
@@ -578,7 +643,7 @@ pub struct DashboardOptions {
 }
 
 pub fn build_dashboard(
-    state: Arc<ApiState>,
+    state: Arc<ApplicationServices>,
     web_context: &mut WebContext,
     event_loop: &EventLoop,
     DashboardOptions {
@@ -638,7 +703,7 @@ pub fn build_dashboard(
 pub struct AutocompleteOptions;
 
 pub fn build_autocomplete(
-    state: Arc<ApiState>,
+    state: Arc<ApplicationServices>,
     web_context: &mut WebContext,
     event_loop: &EventLoop,
     _autocomplete_options: AutocompleteOptions,
@@ -663,6 +728,7 @@ pub fn build_autocomplete(
 
     let window = window_builder.build(event_loop)?;
 
+    let runtime_state = state.clone();
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(self::url::autocomplete().as_str())
         .with_asynchronous_custom_protocol(
@@ -699,7 +765,7 @@ pub fn build_autocomplete(
         .with_hotkeys_zoom(true)
         .with_accept_first_mouse(true);
 
-    let webview = webview_builder.build(&window)?;
+    let webview = crate::platform::webview_host::configure(webview_builder, runtime_state).build(&window)?;
 
     Ok((window, webview))
 }
@@ -708,30 +774,28 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
     #[allow(unused_macros)]
     macro_rules! watcher {
         ($type:ident, $name:expr, $on_update:expr) => {{
-            paste::paste! {
-                let proxy = proxy.clone();
-                tokio::spawn(async move {
-                    let mut rx = NOTIFICATION_BUS.[<subscribe_ $type>]($name.into());
-                    loop {
-                        let res = rx.recv().await;
-                        match res {
-                            Ok(val) => {
-                                #[allow(clippy::redundant_closure_call)]
-                                ($on_update)(val, &proxy);
-                            },
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                warn!("Notification bus '{}' lagged by {n} messages", $name);
-                            },
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                        }
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                let mut rx = NOTIFICATION_BUS.$type($name.into());
+                loop {
+                    let res = rx.recv().await;
+                    match res {
+                        Ok(val) => {
+                            #[allow(clippy::redundant_closure_call)]
+                            ($on_update)(val, &proxy);
+                        },
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            warn!("Notification bus '{}' lagged by {n} messages", $name);
+                        },
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
-                });
-            }
+                }
+            });
         };};
     }
 
     watcher!(
-        settings,
+        subscribe_settings,
         "autocomplete.disable",
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let enabled =
@@ -745,7 +809,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
     );
 
     watcher!(
-        settings,
+        subscribe_settings,
         "app.theme",
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let theme = notification.as_string().as_deref().and_then(map_theme);
@@ -757,7 +821,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
     );
 
     watcher!(
-        settings,
+        subscribe_settings,
         "app.hideMenubarIcon",
         |notification: JsonNotification, proxy: &EventLoopProxy| {
             let enabled = !notification.as_bool().unwrap_or(false);
@@ -767,7 +831,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
     );
 
     watcher!(
-        settings,
+        subscribe_settings,
         "developer.dashboard.host",
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
             let url = self::url::dashboard();
@@ -780,7 +844,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
     );
 
     watcher!(
-        settings,
+        subscribe_settings,
         "developer.autocomplete.host",
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
             let url = self::url::autocomplete();
@@ -791,6 +855,40 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             });
         }
     );
+}
+
+/// Static categories only: no event Debug output or terminal contents in diagnostics.
+fn event_stage(event: &WryEvent<'_, Event>) -> &'static str {
+    fn user(event: &Event) -> &'static str {
+        match event {
+            Event::PageEvent { event, .. } => user(event),
+            Event::EditBuffer(_) => "loop-input",
+            Event::PlatformBoundEvent(event) => match event {
+                PlatformBoundEvent::ExternalWindowFocusChanged { .. } => "loop-focus",
+                PlatformBoundEvent::FrameWatchTick => "loop-frame-watch",
+                PlatformBoundEvent::CaretPositionUpdateRequested | PlatformBoundEvent::EditBufferChanged => {
+                    "loop-caret"
+                },
+                PlatformBoundEvent::WindowDestroyed { .. } => "loop-destroyed",
+                PlatformBoundEvent::WindowFocusValidated { .. } => "loop-focus-result",
+                PlatformBoundEvent::FullscreenStateUpdated { .. } => "loop-fullscreen",
+                PlatformBoundEvent::AccessibilityUpdated { .. } | PlatformBoundEvent::AccessibilityUpdateRequested => {
+                    "loop-accessibility"
+                },
+                PlatformBoundEvent::AppWindowFocusChanged { .. } => "loop-own-focus",
+                _ => "loop-platform",
+            },
+            Event::WindowEvent { .. } | Event::WindowEventAll { .. } => "loop-window",
+            _ => "loop-other",
+        }
+    }
+    match event {
+        WryEvent::UserEvent(event) => user(event),
+        WryEvent::MainEventsCleared => "loop-flush",
+        WryEvent::WindowEvent { .. } => "loop-native-window",
+        WryEvent::DeviceEvent { .. } => "loop-device",
+        _ => "loop-lifecycle",
+    }
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ import type { PlatformInfo } from "@/types/preferences";
 type KV = Record<string, unknown>;
 
 export interface Data {
+  error: string | undefined;
   settings: KV | undefined;
   state: KV | undefined;
   platformInfo: PlatformInfo | undefined;
@@ -27,95 +28,159 @@ export type State = Data & Actions;
 
 export type Store = ReturnType<typeof createStore>;
 
-export const createStore = () => {
-  const store = create<State>()((set, get) => ({
+export type DashboardPorts = {
+  settings: Pick<typeof ApiSettings, "current" | "set" | "didChange">;
+  state: Pick<typeof ApiState, "current" | "set" | "didChange">;
+  install: Pick<typeof Install, "isInstalled" | "installStatus">;
+  platform: Pick<typeof Platform, "getPlatformInfo">;
+};
+export const createStore = (
+  ports: DashboardPorts = {
+    settings: ApiSettings,
+    state: ApiState,
+    install: Install,
+    platform: Platform,
+  },
+) => {
+  let generation = 0;
+  let stop: (() => void) | undefined;
+  const versions = new Map<string, number>();
+  const confirmed = new Map<string, unknown>();
+  const pending = new Map<string, Promise<void>>();
+  const revisions = { settings: 0, state: 0 };
+  const save = async (kind: "settings" | "state", key: string, value: unknown) => {
+    const scope = generation;
+    const id = `${kind}:${key}`;
+    const version = (versions.get(id) ?? 0) + 1;
+    versions.set(id, version);
+    revisions[kind]++;
+    if (!pending.has(id)) confirmed.set(id, store.getState()[kind]?.[key]);
+    store.setState((s) => ({ [kind]: { ...s[kind], [key]: value }, error: undefined }));
+    // Preserve server write order per key while keeping the UI optimistic.
+    const previous = pending.get(id) ?? Promise.resolve();
+    const write = previous.then(async () => {
+      if (scope !== generation) return;
+      try {
+        await ports[kind].set(key, value);
+        if (scope === generation) confirmed.set(id, value);
+      } catch (error) {
+        if (scope === generation && versions.get(id) === version)
+          store.setState((s) => ({
+            [kind]: { ...s[kind], [key]: confirmed.get(id) },
+            error: String(error),
+          }));
+      }
+    });
+    pending.set(id, write);
+    await write;
+    if (pending.get(id) === write) {
+      pending.delete(id);
+      confirmed.delete(id);
+    }
+  };
+  const refresh = async <T>(read: () => Promise<T>, apply: (value: T) => Partial<Data>) => {
+    const scope = generation;
+    try {
+      const value = await read();
+      if (scope === generation) store.setState(apply(value));
+    } catch (error) {
+      if (scope === generation) store.setState({ error: String(error) });
+    }
+  };
+  const store = create<State>()((_set, get) => ({
+    error: undefined,
     settings: undefined,
     state: undefined,
+    platformInfo: undefined,
     accessibilityIsInstalled: undefined,
     dotfilesIsInstalled: undefined,
-    platformInfo: undefined,
-    setSetting: async (key, value) => {
-      set((s) => ({ settings: { ...s.settings, [key]: value } }));
-      await ApiSettings.set(key, value);
-    },
-    setState: async (key, value) => {
-      set((s) => ({ state: { ...s.state, [key]: value } }));
-      await ApiState.set(key, value);
-    },
-    refreshAccessibilityIsInstalled: async () => {
-      const accessibilityIsInstalled = await Install.isInstalled("accessibility");
-      set(() => ({ accessibilityIsInstalled }));
-    },
-    refreshDotfilesIsInstalled: async () => {
-      const shellIsInstalled = await Install.isInstalled("dotfiles");
-      set(() => ({ dotfilesIsInstalled: shellIsInstalled }));
-    },
-    refreshLocalState: async () => {
-      const state = await ApiState.current();
-      set(() => ({ state }));
-    },
+    setSetting: (key, value) => save("settings", key, value),
+    setState: (key, value) => save("state", key, value),
+    refreshAccessibilityIsInstalled: () =>
+      refresh(
+        () => ports.install.isInstalled("accessibility"),
+        (accessibilityIsInstalled) => ({ accessibilityIsInstalled }),
+      ),
+    refreshDotfilesIsInstalled: () =>
+      refresh(
+        () => ports.install.isInstalled("dotfiles"),
+        (dotfilesIsInstalled) => ({ dotfilesIsInstalled }),
+      ),
+    refreshLocalState: () => refresh(ports.state.current, (state) => ({ state })),
     isLoading: () => {
-      const { state, settings, platformInfo } = get();
-      // return true if any of the values are undefined
-      return state === undefined || settings === undefined || platformInfo === undefined;
+      const s = get();
+      return s.state === undefined || s.settings === undefined || s.platformInfo === undefined;
     },
   }));
-
-  ApiSettings.current()
-    .then((settings) => {
-      store.setState({ settings });
-    })
-    .catch((err) => {
-      console.error(err);
-      store.setState({ settings: {} });
-    });
-
-  ApiState.current()
-    .then((state) => {
-      store.setState({ state });
-    })
-    .catch((err) => {
-      console.error(err);
-      store.setState({ state: {} });
-    });
-
-  Platform.getPlatformInfo()
-    .then((platformInfo) => {
-      store.setState({ platformInfo });
-    })
-    .catch((err) => {
-      console.error(err);
-      store.setState({ platformInfo: undefined });
-    });
-
-  ApiSettings.didChange.subscribe((notification) => {
-    const json = JSON.parse(notification.jsonBlob ?? "{}");
-    store.setState({
-      settings: json,
-    });
-    return { unsubscribe: false };
-  });
-
-  ApiState.didChange.subscribe((notification) => {
-    const json = JSON.parse(notification.jsonBlob ?? "{}");
-    store.setState({
-      state: json,
-    });
-    return { unsubscribe: false };
-  });
-
-  Install.isInstalled("accessibility").then((isInstalled) => {
-    store.setState({ accessibilityIsInstalled: isInstalled });
-  });
-
-  Install.isInstalled("dotfiles").then((isInstalled) => {
-    store.setState({ dotfilesIsInstalled: isInstalled });
-  });
-
-  Install.installStatus.subscribe("accessibility", (isInstalled) => {
-    store.setState({ accessibilityIsInstalled: isInstalled });
-    return { unsubscribe: false };
-  });
-
-  return store;
+  const start = () => {
+    stop?.();
+    const scope = ++generation;
+    const active = () => scope === generation;
+    const cleanups: (() => void)[] = [];
+    const fail = (error: unknown) => {
+      if (active()) store.setState({ error: String(error) });
+    };
+    const update = (value: Partial<Data>) => {
+      if (active()) store.setState(value);
+    };
+    store.setState({ error: undefined });
+    const subscribe = (request: Promise<{ unsubscribe(): void }> | undefined) => {
+      void request?.then((subscription) => {
+        if (active()) cleanups.push(() => subscription.unsubscribe());
+        else subscription.unsubscribe();
+      }, fail);
+    };
+    for (const kind of ["settings", "state"] as const) {
+      const revision = revisions[kind];
+      void ports[kind].current().then((value) => {
+        if (revision === revisions[kind]) update({ [kind]: value });
+      }, fail);
+      subscribe(
+        ports[kind].didChange.subscribe((notification) => {
+          if (active())
+            try {
+              const value: unknown = JSON.parse(notification.jsonBlob ?? "{}");
+              if (!value || typeof value !== "object" || Array.isArray(value))
+                throw new Error(`Invalid ${kind} snapshot`);
+              const snapshot = { ...value } as KV;
+              revisions[kind]++;
+              // A notification can describe an earlier write while a newer write is pending.
+              for (const id of pending.keys())
+                if (id.startsWith(`${kind}:`)) {
+                  const key = id.slice(kind.length + 1);
+                  snapshot[key] = store.getState()[kind]?.[key];
+                }
+              update({ [kind]: snapshot });
+            } catch (error) {
+              fail(error);
+            }
+          return { unsubscribe: !active() };
+        }),
+      );
+    }
+    void ports.platform.getPlatformInfo().then((platformInfo) => update({ platformInfo }), fail);
+    let statusChanged = false;
+    void ports.install.isInstalled("accessibility").then((accessibilityIsInstalled) => {
+      if (!statusChanged) update({ accessibilityIsInstalled });
+    }, fail);
+    void ports.install
+      .isInstalled("dotfiles")
+      .then((dotfilesIsInstalled) => update({ dotfilesIsInstalled }), fail);
+    subscribe(
+      ports.install.installStatus.subscribe("accessibility", (accessibilityIsInstalled) => {
+        statusChanged = true;
+        update({ accessibilityIsInstalled });
+        return { unsubscribe: !active() };
+      }),
+    );
+    const dispose = () => {
+      if (!active()) return;
+      generation++;
+      cleanups.forEach((cleanup) => cleanup());
+      stop = undefined;
+    };
+    stop = dispose;
+    return dispose;
+  };
+  return Object.assign(store, { start, dispose: () => stop?.() });
 };

@@ -1,6 +1,7 @@
+import { recordCommit } from "./telemetry";
 import { WindowPosition, Settings } from "@fig/api-bindings";
 import { SETTINGS } from "@fig/api-bindings/wrappers";
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import type { RowComponentProps } from "react-window";
 
 import logger from "loglevel";
@@ -8,12 +9,9 @@ import { getCWDForFilesAndFolders } from "@fig/shared/utils";
 import * as jsxRuntime from "react/jsx-runtime";
 import * as figApiBindings from "@fig/api-bindings";
 import { getMaxHeight, getMaxWidth, POPOUT_WIDTH } from "./window";
-import { useParseArgumentsEffect } from "./parser/hooks";
-import { loadHistory } from "./history";
-import "./index.css";
 import AutoSizedList, { type AutoSizedHandleRef } from "./components/AutoSizedList";
 
-import { useFigKeypress, useFigAutocomplete, useFigSettings, useFigClearCache } from "./fig/hooks";
+import { useFigKeypress } from "./fig/hooks";
 
 import { getCommonSuggestionPrefix } from "./suggestions/helpers";
 
@@ -22,7 +20,6 @@ import { useShallow } from "zustand/shallow";
 import { useAutocompleteStore } from "./state";
 import { Visibility } from "./state/types";
 import { useAutocompleteKeypressCallback, Direction } from "./hooks/keypress";
-import { applyEffect, interceptKeystrokesEffect } from "./state/effects";
 import { useShake, useDynamicResizeObserver, useSystemTheme } from "./hooks/helpers";
 
 import Suggestion from "./components/Suggestion";
@@ -52,6 +49,7 @@ type SuggestionRowProps = Omit<SuggestionProps, "style" | "suggestion" | "isActi
 };
 
 function SuggestionRow({
+  ariaAttributes,
   index,
   style,
   suggestions,
@@ -65,6 +63,7 @@ function SuggestionRow({
 }: RowComponentProps<SuggestionRowProps>) {
   return (
     <Suggestion
+      ariaAttributes={ariaAttributes}
       style={style}
       suggestion={suggestions[index]}
       commonPrefix={commonPrefix}
@@ -90,6 +89,9 @@ function App() {
   // store write. `useShallow` narrows that to the values actually rendered.
   const {
     generatorStates,
+    traceContext,
+    parsedInput,
+    parsing,
     suggestions,
     selectedIndex,
     visibleState,
@@ -102,6 +104,9 @@ function App() {
   } = useAutocompleteStore(
     useShallow((state) => ({
       generatorStates: state.generatorStates,
+      traceContext: state.figState.shellContext,
+      parsedInput: state.parsedInput,
+      parsing: state.parsing,
       suggestions: state.suggestions,
       selectedIndex: state.selectedIndex,
       visibleState: state.visibleState,
@@ -114,17 +119,27 @@ function App() {
     })),
   );
 
-  // Actions never change identity, so each gets its own no-op subscription.
-  const setSettings = useAutocompleteStore((state) => state.setSettings);
-  const insertTextForItem = useAutocompleteStore((state) => state.insertTextForItem);
-  const setUserFuzzySearchEnabled = useAutocompleteStore(
-    (state) => state.setUserFuzzySearchEnabled,
+  const currentInput =
+    !parsing &&
+    parsedInput?.inputRevision === traceContext?.inputRevision &&
+    parsedInput?.sessionId === traceContext?.sessionId;
+  const settled = currentInput && generatorStates.every((generator) => !generator.loading);
+  useLayoutEffect(
+    () =>
+      recordCommit(traceContext, settled, {
+        current: currentInput,
+        visible: visibleState === Visibility.VISIBLE,
+        suggestionCount: suggestions.length,
+      }),
+    [suggestions, buffer, traceContext, settled, currentInput, visibleState],
   );
-  const setFigState = useAutocompleteStore((state) => state.setFigState);
+
+  // Actions never change identity, so each gets its own no-op subscription.
+  const insertTextForItem = useAutocompleteStore((state) => state.insertTextForItem);
 
   const [systemTheme] = useSystemTheme();
   const [isShaking, shake] = useShake();
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const isLoadingSuggestions = useAutocompleteStore((state) => state.parsing);
   const [windowState, setWindowState] = useState({
     isDescriptionSeparate: false,
     isAboveCursor: true,
@@ -132,7 +147,6 @@ function App() {
   });
   const {
     [SETTINGS.THEME]: theme,
-    [SETTINGS.FUZZY_SEARCH]: userFuzzySearch,
     [SETTINGS.FONT_FAMILY]: fontFamily,
     [SETTINGS.FONT_SIZE]: settingsFontSize,
     [SETTINGS.WIDTH]: settingsWidth,
@@ -158,11 +172,7 @@ function App() {
     }));
   }, [settingsHeight, settingsWidth]);
 
-  // useEffect(() => {
-  //   loadPrivateSpecs(authClient).catch(captureError);
-  // }, []);
-
-  const isLoading = isLoadingSuggestions;
+  const isLoading = isLoadingSuggestions || generatorStates.some(({ loading }) => loading);
 
   useEffect(() => {
     // Default font-size is 12.8px (0.8em) and default row size is 20px = 12.8 * 1.5625
@@ -232,61 +242,18 @@ function App() {
     changeSize,
   );
 
-  useEffect(() => {
-    window.globalCWD = "";
-    window.globalTerminalSessionId = "";
-    window.globalSSHString = "";
-  }, []);
-
-  useFigAutocomplete(setFigState);
-  useParseArgumentsEffect(setIsLoadingSuggestions);
-  useFigSettings(setSettings);
   useFigKeypress(keypressCallback);
-  useFigClearCache();
-
-  useEffect(() => {
-    Settings.get(SETTINGS.DISABLE_HISTORY_LOADING)
-      .catch(() => undefined)
-      .then((res) => {
-        if (!JSON.parse(res?.jsonBlob ?? "false")) {
-          loadHistory({});
-        }
-      });
-  }, []);
-
-  useEffect(() => {
-    let isMostRecentEffect = true;
-    if (generatorStates.some(({ loading }) => loading)) {
-      setTimeout(() => {
-        if (isMostRecentEffect) {
-          setIsLoadingSuggestions(true);
-        }
-      }, 200);
-    } else {
-      setIsLoadingSuggestions(false);
-    }
-    return () => {
-      isMostRecentEffect = false;
-    };
-  }, [generatorStates]);
 
   // Make sure fig dimensions align with our desired dimensions.
   const isHidden = visibleState !== Visibility.VISIBLE;
 
-  // The store sends every later change of keystroke interception itself (`storeEffects`);
-  // this sends the initial state once, as the effect it replaced did on mount.
   useEffect(() => {
-    applyEffect(interceptKeystrokesEffect(useAutocompleteStore.getState()));
-  }, []);
-  useEffect(() => {
-    setTheme(systemTheme, theme as string);
+    void setTheme(systemTheme, theme as string).catch((error) => logger.warn("Theme", error));
   }, [theme, systemTheme]);
   useEffect(() => {
     setFontSize(size.fontSize);
   }, [size.fontSize]);
-  useEffect(() => {
-    setUserFuzzySearchEnabled((userFuzzySearch ?? false) as boolean);
-  }, [setUserFuzzySearchEnabled, userFuzzySearch]);
+
   useEffect(() => {
     setFontFamily(fontFamily as string);
   }, [fontFamily]);
@@ -346,8 +313,16 @@ function App() {
   const hasSpecialArgDescription =
     suggestions.length === 0 && Boolean(currentArg?.name || currentArg?.description);
 
+  const resizeRevision = useRef(0);
+  useEffect(
+    () => () => {
+      resizeRevision.current++;
+    },
+    [],
+  );
   const onResize: (size: { height?: number; width?: number }) => void = useCallback(
     ({ height, width }) => {
+      const revision = ++resizeRevision.current;
       const onLeft = !hasSpecialArgDescription && windowState.descriptionPosition === "left";
 
       const frame = {
@@ -359,6 +334,7 @@ function App() {
       logger.debug("Setting window position", { frame });
       WindowPosition.setFrame(frame)
         .then(({ isClipped, isAbove }) => {
+          if (revision !== resizeRevision.current) return;
           setWindowState((state) =>
             state.isDescriptionSeparate ||
             devMode ||
@@ -385,10 +361,6 @@ function App() {
       suggestions[selectedIndex]?.previewComponent,
     ],
   );
-
-  useEffect(() => {
-    onResize({});
-  }, [onResize]);
 
   const { ref: autocompleteWindowRef } = useDynamicResizeObserver({ onResize });
 
@@ -437,7 +409,9 @@ function App() {
             type="button"
             className="text-xs underline"
             onClick={() => {
-              Settings.set("autocomplete.developerModeNPM", false);
+              void Settings.set("autocomplete.developerModeNPM", false).catch((error) =>
+                logger.warn("Setting", error),
+              );
             }}
           >
             Click to disable

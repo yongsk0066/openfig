@@ -3,7 +3,7 @@ const remote: Fig.Arg = {
   name: "remote:",
   generators: {
     script: ["rclone", "listremotes"],
-    postProcess: (list) => list.split("\n").map((remote) => ({ name: remote })),
+    postProcess: (list) => list.split("\n").map((remoteName) => ({ name: remoteName })),
   },
 };
 const hashes = [

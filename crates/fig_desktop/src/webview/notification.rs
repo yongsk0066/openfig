@@ -1,3 +1,8 @@
+use std::sync::atomic::{
+    AtomicU64,
+    Ordering,
+};
+
 use anyhow::Result;
 use base64::prelude::*;
 use bytes::BytesMut;
@@ -10,7 +15,9 @@ use fig_proto::fig::{
 };
 use fig_proto::prost::Message;
 use fnv::FnvBuildHasher;
+use parking_lot::Mutex;
 use tracing::debug;
+use uuid::Uuid;
 
 use crate::EventLoopProxy;
 use crate::event::{
@@ -21,13 +28,44 @@ use crate::event::{
 use crate::webview::WindowId;
 
 #[derive(Debug, Default)]
-pub struct WebviewNotificationWindowState(pub DashMap<NotificationType, i64, FnvBuildHasher>);
+pub struct WebviewNotificationWindowState {
+    generation: AtomicU64,
+    channels: DashMap<NotificationType, i64, FnvBuildHasher>,
+    // This belongs to the subscription, not the window: a reloaded page has lost its
+    // environment even when it reuses the same window, shell session and message id.
+    last_edit_buffer_session: Mutex<Option<Uuid>>,
+}
 
 impl std::ops::Deref for WebviewNotificationWindowState {
     type Target = DashMap<NotificationType, i64, FnvBuildHasher>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.channels
+    }
+}
+
+impl WebviewNotificationWindowState {
+    pub fn reset_edit_buffer_context(&self) {
+        *self.last_edit_buffer_session.lock() = None;
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn is_current_edit_subscription(&self, channel: i64, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
+            && self
+                .channels
+                .get(&NotificationType::NotifyOnEditbuffferChange)
+                .is_some_and(|value| *value == channel)
+    }
+
+    pub fn edit_buffer_subscription(&self, session: Uuid, context_changed: bool) -> Option<(i64, bool, u64)> {
+        let channel = self.channels.get(&NotificationType::NotifyOnEditbuffferChange)?;
+        let changed = self.last_edit_buffer_session.lock().replace(session) != Some(session);
+        Some((
+            *channel,
+            context_changed || changed,
+            self.generation.load(Ordering::SeqCst),
+        ))
     }
 }
 
@@ -79,8 +117,8 @@ impl serde::Serialize for WebviewNotificationWindowState {
     {
         use serde::ser::SerializeMap;
 
-        let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for subscription in self.0.iter() {
+        let mut map = serializer.serialize_map(Some(self.channels.len()))?;
+        for subscription in self.channels.iter() {
             map.serialize_entry(subscription.key(), &subscription.value())?;
         }
         map.end()

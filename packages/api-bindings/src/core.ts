@@ -1,3 +1,16 @@
+declare global {
+  interface Window {
+    figRuntime?: {
+      nonce: string;
+      epoch?: string;
+      ready: Promise<string>;
+      hello(): void;
+      fatal(): void;
+      bind(nonce: string, epoch: string): void;
+    };
+    figReceiveMessage?: (raw: string) => void;
+  }
+}
 import {
   type ServerOriginatedMessage,
   type ClientOriginatedMessage,
@@ -25,6 +38,7 @@ let messageId = 0;
 const handlers: Record<string, APIResponseHandler> = {};
 
 export function setHandlerForId(handler: APIResponseHandler, id: string) {
+  setupEventListeners();
   handlers[id] = handler;
 }
 
@@ -47,6 +61,12 @@ const receivedMessage = (response: ServerOriginatedMessage): void => {
   }
 };
 
+const receive = (raw: string) => {
+  const bytes = b64ToBytes(raw);
+  const message = fromBinary(ServerOriginatedMessageSchema, bytes);
+  receivedMessage(message);
+};
+
 // The request never produced a response: settle its handler with an error so the promise
 // wrapped around it rejects instead of waiting forever, and forget the handler.
 const failRequest = (id: string, err: unknown) => {
@@ -64,6 +84,7 @@ export function sendMessage(
   submessage: ClientOriginatedMessage["submessage"],
   handler?: APIResponseHandler,
 ) {
+  setupEventListeners();
   const request: ClientOriginatedMessage = create(ClientOriginatedMessageSchema, {
     id: BigInt((messageId += 1)),
     submessage,
@@ -85,13 +106,18 @@ export function sendMessage(
     }
 
     const id = String(request.id);
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/fig-api",
-      },
-      body: buffer,
-    })
+    void (async () => {
+      const epoch = window.figRuntime ? await window.figRuntime.ready : undefined;
+      return fetch(url, {
+        signal: AbortSignal.timeout(65_000),
+        method: "POST",
+        headers: {
+          "content-type": "application/fig-api",
+          ...(epoch ? { "x-fig-view-epoch": epoch } : {}),
+        },
+        body: buffer,
+      });
+    })()
       .then(async (res) => {
         // A 405/415 body is plain text; decoding it would yield garbage or throw.
         if (!res.ok) {
@@ -120,22 +146,17 @@ export function sendMessage(
   console.error("Cannot send request. Fig.js is not supported in this browser.");
 }
 
+const documents = new WeakSet<Document>();
 const setupEventListeners = (): void => {
+  if (typeof document === "undefined" || documents.has(document)) return;
+  documents.add(document);
   document.addEventListener(FigGlobalErrorOccurred, (event: Event) => {
     const response = (event as CustomEvent).detail as GlobalAPIError;
     console.error(response.error);
   });
-
+  // Native delivery calls directly: decode/handler errors must reach the NACK boundary.
+  window.figReceiveMessage = receive;
   document.addEventListener(FigProtoMessageReceived, (event: Event) => {
-    const raw = (event as CustomEvent).detail as string;
-    const bytes = b64ToBytes(raw);
-    const message = fromBinary(ServerOriginatedMessageSchema, bytes);
-    receivedMessage(message);
+    receive((event as CustomEvent).detail as string);
   });
 };
-
-// We want this to be run automatically
-if (!window?.fig?.quiet) {
-  console.log("[fig] setting up event listeners...");
-}
-setupEventListeners();

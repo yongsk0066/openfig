@@ -7,7 +7,8 @@ import { expect, it, beforeAll, describe, beforeEach, vi, Mock, afterEach } from
 
 const { importSpecFromFile } = loadHelpers;
 
-vi.mock("../src/loadHelpers", () => ({
+vi.mock("../src/loadHelpers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/loadHelpers")>()),
   importSpecFromFile: vi.fn().mockResolvedValue({ default: { name: "loadFromFile" } }),
   getPrivateSpec: vi.fn().mockReturnValue(undefined),
   isDiffVersionedSpec: vi.fn(),
@@ -101,7 +102,7 @@ describe("getSpecPath", () => {
 });
 
 describe("loadFigSubcommand", () => {
-  window.URL.createObjectURL = vi.fn();
+  URL.createObjectURL = vi.fn();
 
   beforeEach(() => {
     (loadHelpers.isDiffVersionedSpec as Mock).mockResolvedValue(false);

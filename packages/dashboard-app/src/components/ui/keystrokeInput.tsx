@@ -24,7 +24,9 @@ export function Keystroke({ keybinding }: { keybinding: string }) {
 
   return (
     <button
-      onClick={() => setSetting("ignore")}
+      onClick={() => {
+        void setSetting("ignore");
+      }}
       className="text-white/50 italic text-center text-xs flex justify-center gap-[2px] py-1 pl-[2px] group hover:bg-black dark:hover-bg-dusk-800 hover:text-white rounded-md p-1 px-2 items-center pr-0 hover:pr-2 transition-all"
     >
       {keybinding
@@ -64,7 +66,7 @@ export function Input({
 
     if (invalid) return;
 
-    setSetting(command);
+    void setSetting(command);
     cancel();
   }
 
@@ -110,11 +112,34 @@ export default function KeystrokeGroup({ id, defaults }: { id: string; defaults:
 
   const keybindings = useKeybindings(command, defaults);
   const { listening, setListening } = useContext(ListenerContext);
+  const inputOpen = listening === id;
+  return (
+    <KeystrokeEditor
+      key={`${id}:${inputOpen}`}
+      command={command}
+      keybindings={keybindings}
+      inputOpen={inputOpen}
+      openInput={() => setListening(id)}
+      closeInput={() => setListening(null)}
+    />
+  );
+}
+
+function KeystrokeEditor({
+  command,
+  keybindings,
+  inputOpen,
+  openInput,
+  closeInput,
+}: {
+  command: string;
+  keybindings: string[];
+  inputOpen: boolean;
+  openInput: () => void;
+  closeInput: () => void;
+}) {
   const [inputValue, setInputValue] = useState<string[] | null>(null);
   const [isInvalid, setIsInvalid] = useState(false);
-
-  const inputOpen = listening === id;
-
   type keypressEvent = {
     key: string;
     keyCode: number;
@@ -146,13 +171,6 @@ export default function KeystrokeGroup({ id, defaults }: { id: string; defaults:
   }, []);
 
   useEffect(() => {
-    if (inputOpen) return;
-
-    setIsInvalid(false);
-    setInputValue(null);
-  }, [inputOpen]);
-
-  useEffect(() => {
     if (!inputOpen) return;
     // attach the event listener
     document.addEventListener("keydown", handleKeyPress);
@@ -165,11 +183,7 @@ export default function KeystrokeGroup({ id, defaults }: { id: string; defaults:
 
   function cancelKeystroke() {
     setInputValue(null);
-    setListening(null);
-  }
-
-  function openInput() {
-    setListening(id);
+    closeInput();
   }
 
   return (

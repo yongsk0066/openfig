@@ -73,7 +73,7 @@ function collectPackages() {
     visit(project.dependencies);
     visit(project.optionalDependencies);
   }
-  return [...found.values()].sort((a, b) =>
+  return [...found.values()].toSorted((a, b) =>
     a.name === b.name ? a.version.localeCompare(b.version) : a.name.localeCompare(b.name),
   );
 }

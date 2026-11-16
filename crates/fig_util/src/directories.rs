@@ -13,15 +13,10 @@ use crate::{
 };
 
 macro_rules! utf8_dir {
-    ($name:ident, $($arg:ident: $type:ty),*) => {
-        paste::paste! {
-            pub fn [<$name _utf8>]($($arg: $type),*) -> Result<Utf8PathBuf> {
-                Ok($name($($arg),*)?.try_into()?)
-            }
+    ($name:ident, $utf8_name:ident) => {
+        pub fn $utf8_name() -> Result<Utf8PathBuf> {
+            Ok($name()?.try_into()?)
         }
-    };
-    ($name:ident) => {
-        utf8_dir!($name,);
     };
 }
 
@@ -212,11 +207,11 @@ pub fn settings_path() -> Result<PathBuf> {
     Ok(fig_data_dir()?.join("settings.json"))
 }
 
-utf8_dir!(home_dir);
-utf8_dir!(fig_data_dir);
-utf8_dir!(sockets_dir);
-utf8_dir!(backups_dir);
-utf8_dir!(logs_dir);
+utf8_dir!(home_dir, home_dir_utf8);
+utf8_dir!(fig_data_dir, fig_data_dir_utf8);
+utf8_dir!(sockets_dir, sockets_dir_utf8);
+utf8_dir!(backups_dir, backups_dir_utf8);
+utf8_dir!(logs_dir, logs_dir_utf8);
 
 #[cfg(test)]
 mod tests {

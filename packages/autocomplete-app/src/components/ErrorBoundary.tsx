@@ -21,10 +21,7 @@ class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
 
-    // Reload the page in 5 seconds
-    setTimeout(() => {
-      window.location.reload();
-    }, 5000);
+    window.figRuntime?.fatal();
   }
 
   public render() {

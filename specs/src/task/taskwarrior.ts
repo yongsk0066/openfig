@@ -263,14 +263,14 @@ const filters: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
     const tasks: ExportedTask[] = JSON.parse(output);
-    const filters = [
+    const suggestions = [
       ...buildProjectSuggestions(tasks),
       ...buildTagSuggestions(tasks),
       ...buildDefaultTagSuggestions(),
       ...buildPrioritiesSuggestions(),
       ...buildDateSuggestions(),
     ];
-    return filters;
+    return suggestions;
   },
 };
 
@@ -279,7 +279,7 @@ const modifications: Fig.Generator = {
   script: ["task", "export"],
   postProcess: (output) => {
     const tasks: ExportedTask[] = JSON.parse(output);
-    const filters = [
+    const suggestions = [
       ...buildProjectSuggestions(tasks),
       ...buildTagSuggestions(tasks),
       ...buildUnTagSuggestions(tasks),
@@ -288,7 +288,7 @@ const modifications: Fig.Generator = {
       ...buildDateSuggestions(),
       ...buildRecurringSuggestions(),
     ];
-    return filters;
+    return suggestions;
   },
 };
 

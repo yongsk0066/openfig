@@ -156,6 +156,8 @@ declare namespace Fig {
   };
 
   type GeneratorContext = ShellContext & {
+    /** Optional host adapter. Directory names end in /; names are never newline-delimited. */
+    listDirectory?: (path: string) => Promise<string[]>;
     isDangerous?: boolean;
     searchTerm: string;
   };

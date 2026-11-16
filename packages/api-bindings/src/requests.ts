@@ -4,15 +4,14 @@
 
 import type {
   AppendToFileRequest,
+  CancelProcessRequest,
   ContentsOfDirectoryRequest,
   ContentsOfDirectoryResponse,
   CreateDirectoryRequest,
   DestinationOfSymbolicLinkRequest,
   DestinationOfSymbolicLinkResponse,
-  DragWindowRequest,
   GetLocalStateRequest,
   GetLocalStateResponse,
-  GetPlatformInfoRequest,
   GetPlatformInfoResponse,
   GetSettingsPropertyRequest,
   GetSettingsPropertyResponse,
@@ -36,6 +35,7 @@ import type {
 } from "@fig/proto/fig";
 import {
   AppendToFileRequestSchema,
+  CancelProcessRequestSchema,
   ContentsOfDirectoryRequestSchema,
   CreateDirectoryRequestSchema,
   DestinationOfSymbolicLinkRequestSchema,
@@ -269,7 +269,7 @@ export async function sendHistoryQueryRequest(
 }
 
 export async function sendGetPlatformInfoRequest(
-  request: Omit<GetPlatformInfoRequest, "$typeName" | "$unknown">,
+  request: Record<string, never>,
 ): Promise<GetPlatformInfoResponse> {
   return new Promise((resolve, reject) => {
     sendMessage(
@@ -483,6 +483,28 @@ export async function sendUpdateLocalStateRequest(
   });
 }
 
+export async function sendCancelProcessRequest(
+  request: Omit<CancelProcessRequest, "$typeName" | "$unknown">,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sendMessage(
+      { case: "cancelProcessRequest", value: create(CancelProcessRequestSchema, request) },
+      (response) => {
+        switch (response?.case) {
+          case "success":
+            resolve();
+            break;
+          case "error":
+            reject(Error(response.value));
+            break;
+          default:
+            reject(Error(`Invalid response '${response?.case}' for 'CancelProcessRequest'`));
+        }
+      },
+    );
+  });
+}
+
 export async function sendCreateDirectoryRequest(
   request: Omit<CreateDirectoryRequest, "$typeName" | "$unknown">,
 ): Promise<void> {
@@ -505,9 +527,7 @@ export async function sendCreateDirectoryRequest(
   });
 }
 
-export async function sendDragWindowRequest(
-  request: Omit<DragWindowRequest, "$typeName" | "$unknown">,
-): Promise<void> {
+export async function sendDragWindowRequest(request: Record<string, never>): Promise<void> {
   return new Promise((resolve, reject) => {
     sendMessage(
       { case: "dragWindowRequest", value: create(DragWindowRequestSchema, request) },

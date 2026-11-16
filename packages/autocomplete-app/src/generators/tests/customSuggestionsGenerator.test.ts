@@ -1,7 +1,9 @@
 import type { Annotation } from "@fig/autocomplete-parser";
 import { type MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { getCustomSuggestions } from "../customSuggestionsGenerator";
-import * as helpers from "../helpers";
+import { getCustomSuggestions as customSuggestions } from "../customSuggestionsGenerator";
+import { services } from "./services";
+const getCustomSuggestions = (generator: Fig.Generator, context: GeneratorContext) =>
+  customSuggestions(generator, context, undefined, services);
 import type { GeneratorContext } from "../helpers";
 
 const context: GeneratorContext = {
@@ -18,7 +20,7 @@ describe("getCustomSuggestions", () => {
   let runCachedGenerator: MockInstance;
 
   beforeAll(() => {
-    runCachedGenerator = vi.spyOn(helpers, "runCachedGenerator");
+    runCachedGenerator = vi.spyOn(services, "cached");
   });
 
   afterEach(() => {

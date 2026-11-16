@@ -12,9 +12,9 @@
   "dependencies": {
     "@fig/spec-generators": "workspace:^",
     "@fig/spec-helpers": "workspace:^",
-    "semver": "^7.8.5",
-    "strip-json-comments": "^5.0.3",
-    "yaml": "^2.9.0"
+    "semver": "^7.8.6",
+    "strip-json-comments": "^5.1.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@fig/config": "workspace:^",

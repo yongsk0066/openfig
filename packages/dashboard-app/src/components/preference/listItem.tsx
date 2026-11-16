@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Switch } from "../ui/switch";
-import type { Pref, PrefDefault } from "@/types/preferences";
+import type { Pref } from "@/types/preferences";
 import {
   Select,
   SelectContent,
@@ -17,7 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import Keystroke from "../ui/keystrokeInput";
+import KeystrokeGroup from "../ui/keystrokeInput";
 import { interpolateSettingBoolean } from "@/lib/utils";
 import { useSetting } from "@/hooks/store";
 import { parseBackticksToCode } from "@/lib/strings";
@@ -25,16 +24,7 @@ import IntegrationCard from "../installs/integrations";
 
 export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) {
   const [setting, setSetting] = useSetting(data.id);
-  const [inputValue, setInputValue] = useState<PrefDefault>(setting ?? data.default);
-
-  // see if this specific setting is set in config file, then synchronize the initial state
-  useEffect(() => {
-    if (setting == undefined) {
-      setInputValue(data.default);
-    } else {
-      setInputValue(setting);
-    }
-  }, [setting, data.default]);
+  const inputValue = setting ?? data.default;
 
   const localValue =
     data.type === "boolean"
@@ -44,24 +34,22 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
   const multiSelectValue = inputValue as string[];
 
   function toggleSwitch() {
-    setSetting(!inputValue);
+    void setSetting(!inputValue);
   }
 
   function setSelection(value: string) {
-    setSetting(value);
+    void setSetting(value);
   }
 
   function toggleMultiSelect(option: string) {
     if (multiSelectValue.includes(option)) {
-      const index = multiSelectValue.indexOf(option);
-      multiSelectValue.splice(index, 1);
-      const updatedArray = multiSelectValue;
-      setSetting(updatedArray);
+      const updatedArray = multiSelectValue.filter((value) => value !== option);
+      void setSetting(updatedArray);
       return;
     }
 
     const updatedArray = [...multiSelectValue, option];
-    setSetting(updatedArray);
+    void setSetting(updatedArray);
   }
 
   if (data.id.split(".")[0] === "integrations") {
@@ -85,12 +73,7 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
       )}
       <div className="flex flex-col gap-1">
         <h3 className="font-medium leading-none">{data.title}</h3>
-        {data.description && (
-          <p className="font-light text-sm">
-            {/* {parseBracketsToKbd(data.description, 'py-[1px] text-xs -top-[1px]')} */}
-            {data.description}
-          </p>
-        )}
+        {data.description && <p className="font-light text-sm">{data.description}</p>}
         {data.example && (
           <p className="font-light leading-tight text-sm">
             {typeof data.example === "string"
@@ -157,7 +140,7 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
                 value={typeof localValue === "number" ? localValue : ""}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setSetting(value === "" ? 0 : Number(value));
+                  void setSetting(value === "" ? 0 : Number(value));
                 }}
               />
             )}
@@ -172,7 +155,7 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
                 onChange={(e) => {
                   // replace all whitespace
                   const value = e.target.value;
-                  setSetting(value === "" ? undefined : value.split(",").map((v) => v.trim()));
+                  void setSetting(value === "" ? undefined : value.split(",").map((v) => v.trim()));
                 }}
               />
             )}
@@ -187,13 +170,13 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
                 value={typeof setting === "string" ? setting : ""}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setSetting(value === "" ? undefined : value);
+                  void setSetting(value === "" ? undefined : value);
                 }}
               />
             )}
             {/* multi-keystroke value input */}
             {data.type === "keystrokes" && (
-              <Keystroke id={data.id} defaults={data.default as string[]} />
+              <KeystrokeGroup id={data.id} defaults={data.default as string[]} />
             )}
           </div>
         )}

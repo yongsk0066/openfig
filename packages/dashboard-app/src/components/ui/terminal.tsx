@@ -52,7 +52,9 @@ function Terminal({ title, tabNames, className, children }: TerminalProps) {
             }}
           >
             {tabNames.map((name, index) => (
-              <div
+              <button
+                type="button"
+                aria-pressed={activeTab === index}
                 key={`${name}-${index}`}
                 className={cn(
                   "text-zinc-400 text-center p-1 transition-colors font-mono cursor-default text-[0.675rem]",
@@ -64,7 +66,7 @@ function Terminal({ title, tabNames, className, children }: TerminalProps) {
                 onClick={() => setActiveTab(index)}
               >
                 {name}
-              </div>
+              </button>
             ))}
           </div>
         )}

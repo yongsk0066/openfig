@@ -2,6 +2,7 @@
 name = "fig_log"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 publish.workspace = true
 version.workspace = true
@@ -19,7 +20,7 @@ default = []
 fig_os_shim.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-appender = "0.2.2"
+tracing-appender = "0.2.5"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]

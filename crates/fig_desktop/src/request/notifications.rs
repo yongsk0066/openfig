@@ -47,6 +47,9 @@ fn subscribe(
         return RequestResult::error(format!("Already subscribed to notification type {notification_type:?}",));
     }
 
+    if notification_type == NotificationType::NotifyOnEditbuffferChange {
+        entry.reset_edit_buffer_context();
+    }
     entry.insert(notification_type, channel);
 
     RequestResult::success()
@@ -70,6 +73,9 @@ fn unsubscribe(
         },
         Some(subscriptions) => {
             subscriptions.remove(&notification_type);
+            if notification_type == NotificationType::NotifyOnEditbuffferChange {
+                subscriptions.reset_edit_buffer_context();
+            }
         },
     }
 
@@ -79,6 +85,7 @@ fn unsubscribe(
 fn unsubscribe_all(window_id: &WindowId, state: &WebviewNotificationsState) -> RequestResult {
     if let Some(subscriptions) = state.subscriptions.get(window_id) {
         subscriptions.clear();
+        subscriptions.reset_edit_buffer_context();
     }
 
     RequestResult::success()
@@ -155,6 +162,64 @@ mod tests {
             state.subscriptions.get(&WindowId("test".into())).unwrap().len(),
             1,
             "the known type must actually be recorded"
+        );
+    }
+
+    #[test]
+    fn a_reloaded_page_gets_the_environment_again_even_with_the_same_channel_id() {
+        let state = WebviewNotificationsState::default();
+        let window = WindowId("autocomplete".into());
+        let kind = NotificationType::NotifyOnEditbuffferChange;
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        let needs_full = |session, changed| {
+            state
+                .subscriptions
+                .get(&window)
+                .unwrap()
+                .edit_buffer_subscription(session, changed)
+                .unwrap()
+                .1
+        };
+        subscribe(window.clone(), 7, kind, &state).unwrap();
+        assert!(needs_full(a, false));
+        assert!(!needs_full(a, false), "ordinary keystrokes still send a lean context");
+        assert!(needs_full(b, false), "switching tabs restores that tab's environment");
+        assert!(needs_full(a, false));
+        assert!(needs_full(a, true), "a changed environment is always delivered");
+
+        unsubscribe_all(&window, &state).unwrap();
+        subscribe(window.clone(), 7, kind, &state).unwrap();
+        assert!(needs_full(a, false), "the new page has no environment yet");
+        assert!(!needs_full(a, false));
+    }
+    #[test]
+    fn queued_deliveries_are_invalid_after_reload_even_if_channel_is_reused() {
+        let state = WebviewNotificationsState::default();
+        let window = WindowId("autocomplete".into());
+        let kind = NotificationType::NotifyOnEditbuffferChange;
+        subscribe(window.clone(), 7, kind, &state).unwrap();
+        let (_, _, generation) = state
+            .subscriptions
+            .get(&window)
+            .unwrap()
+            .edit_buffer_subscription(uuid::Uuid::new_v4(), false)
+            .unwrap();
+        assert!(
+            state
+                .subscriptions
+                .get(&window)
+                .unwrap()
+                .is_current_edit_subscription(7, generation)
+        );
+        unsubscribe_all(&window, &state).unwrap();
+        subscribe(window.clone(), 7, kind, &state).unwrap();
+        assert!(
+            !state
+                .subscriptions
+                .get(&window)
+                .unwrap()
+                .is_current_edit_subscription(7, generation)
         );
     }
 }

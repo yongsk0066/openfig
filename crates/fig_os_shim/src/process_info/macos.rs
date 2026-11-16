@@ -21,12 +21,12 @@ pub(crate) fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
     // `PROC_PIDTBSDINFO`, should be `sizeof(struct proc_bsdinfo)`. The call returns the number
     // of bytes actually written, or 0/-1 on error; it writes nothing on error.
     // Evidence:
-    // - `info` is a live `MaybeUninit<proc_bsdinfo>` local; `as_mut_ptr().cast()` is non-null, aligned
-    //   for `proc_bsdinfo` (`MaybeUninit<T>` has `T`'s layout, std) and writable for exactly
-    //   `size_of::<proc_bsdinfo>()` bytes — the same value passed as `buffersize`.
+    // - `info` is a live `MaybeUninit<proc_bsdinfo>` local; `as_mut_ptr().cast()` is non-null,
+    //   aligned for `proc_bsdinfo` (`MaybeUninit<T>` has `T`'s layout, std) and writable for
+    //   exactly `size_of::<proc_bsdinfo>()` bytes — the same value passed as `buffersize`.
     // - `pid` is a plain `i32`; an unknown pid yields an error return, not UB.
-    // - The zero-fill (`MaybeUninit::zeroed`) happens before the call, so the storage is already fully
-    //   initialized regardless of what the kernel writes.
+    // - The zero-fill (`MaybeUninit::zeroed`) happens before the call, so the storage is already
+    //   fully initialized regardless of what the kernel writes.
     let ret = unsafe {
         nix::libc::proc_pidinfo(
             pid,
@@ -43,12 +43,12 @@ pub(crate) fn parent(ctx: Weak<Context>, pid: &RawPid) -> Option<Box<Pid>> {
     // Operation: `MaybeUninit::<proc_bsdinfo>::assume_init`.
     // Contract (std): the memory must be initialized with a valid value of the type.
     // Evidence, two independent arguments, either of which suffices:
-    // - The storage was created with `MaybeUninit::zeroed`, and `proc_bsdinfo` is a `#[repr(C)]` struct
-    //   of unsigned integers and `u8` arrays. Every bit pattern is a valid value of each field (Rust
-    //   Reference, integer validity), so all-zero is a valid `proc_bsdinfo` even if the kernel wrote
-    //   nothing.
-    // - The `ret as usize != size_of::<proc_bsdinfo>()` guard immediately above returned early unless
-    //   the kernel wrote exactly the whole struct.
+    // - The storage was created with `MaybeUninit::zeroed`, and `proc_bsdinfo` is a `#[repr(C)]`
+    //   struct of unsigned integers and `u8` arrays. Every bit pattern is a valid value of each
+    //   field (Rust Reference, integer validity), so all-zero is a valid `proc_bsdinfo` even if the
+    //   kernel wrote nothing.
+    // - The `ret as usize != size_of::<proc_bsdinfo>()` guard immediately above returned early
+    //   unless the kernel wrote exactly the whole struct.
     // Postcondition: `info` is an owned, initialized `proc_bsdinfo`; the `MaybeUninit` is
     // consumed, so there is no double-read concern.
     let info = unsafe { info.assume_init() };

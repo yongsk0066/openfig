@@ -768,8 +768,8 @@ mod test {
 
         let env = Env::from_slice(&[("HOME", home.path().to_str().unwrap())]);
         let backups = home.path().join("backups");
-        // Only the rc files: the scripts live in the real data directory, which `HOME` here does not
-        // redirect, so `uninstall_legacy_bash` itself would delete this machine's.
+        // Only the rc files: the scripts live in the real data directory, which `HOME` here does
+        // not redirect, so `uninstall_legacy_bash` itself would delete this machine's.
         let found = strip_legacy_bash_dotfiles(&env, Some(&backups)).unwrap();
 
         assert!(found);

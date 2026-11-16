@@ -53,8 +53,7 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
 
 pub fn build_tray() -> tray_icon::Result<TrayIcon> {
     TrayIconBuilder::new()
-        .with_icon(get_icon())
-        .with_icon_as_template(true)
+        .with_icon_templated(get_icon())
         .with_menu(Box::new(get_context_menu()))
         .build()
 }

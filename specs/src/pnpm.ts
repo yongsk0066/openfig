@@ -1007,7 +1007,7 @@ const completionSpec: Fig.Spec = {
       ?.filter((e) => e !== null)
       .map(({ name }) => name as string);
 
-    const subcommands = packages
+    const packageSubcommands = packages
       ?.filter((name) => nodeClis.has(name))
       .map((name) => ({
         name,
@@ -1017,7 +1017,7 @@ const completionSpec: Fig.Spec = {
 
     return {
       name: "pnpm",
-      subcommands,
+      subcommands: packageSubcommands,
     } as Fig.Spec;
   },
   subcommands,

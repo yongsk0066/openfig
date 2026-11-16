@@ -74,7 +74,7 @@ const dependencyGenerator: Fig.Generator = {
     return data.dependencies.values
       .flatMap(({ values }) => values)
       .filter(({ id }) => !seen.has(id))
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .toSorted((a, b) => a.name.localeCompare(b.name))
       .map((dependency) => ({
         name: dependency.id,
         displayName: dependency.name,

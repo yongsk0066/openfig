@@ -15,13 +15,13 @@ describe("fs api tests", () => {
 
   it("list files", async () => {
     const nestedDir = `${tempDir}/list_files_test`;
-    const files = ["a", "b", "c"].sort();
+    const files = ["a", "b", "c"].toSorted();
 
     nodeFs.mkdirSync(nestedDir);
     files.forEach((file) => nodeFs.writeFileSync(`${nestedDir}/${file}`, ""));
 
     const result = await figFs.list(nestedDir);
-    expect(result.sort()).toEqual(files);
+    expect(result.toSorted()).toEqual(files);
   });
 
   it("read file", async () => {

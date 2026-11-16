@@ -206,11 +206,14 @@ impl SystemInfo {
         let mut hardware_info = SystemInfo {
             os: os_version().cloned(),
             chip: None,
-            total_cores: System::physical_core_count(),
-            memory: Some(format!("{:0.2} GB", system.total_memory() as f32 / 2.0_f32.powi(30))),
+            total_cores: System::physical_core_count().ok(),
+            memory: system
+                .as_ref()
+                .ok()
+                .map(|system| format!("{:0.2} GB", system.total_memory() as f32 / 2.0_f32.powi(30))),
         };
 
-        if let Some(processor) = system.cpus().first() {
+        if let Some(processor) = system.as_ref().ok().and_then(|system| system.cpus().first()) {
             hardware_info.chip = Some(processor.brand().into());
         }
 

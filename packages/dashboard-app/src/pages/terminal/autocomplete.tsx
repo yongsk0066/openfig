@@ -14,7 +14,7 @@ export default function Page() {
     <UserPrefView array={settings} intro={intro}>
       <section className="flex flex-col pt-4">
         <SectionHeading index={settings.length}>Popular</SectionHeading>
-        {popular.sort(alphaByTitlePrioritized).map((p, i) => (
+        {popular.toSorted(alphaByTitlePrioritized).map((p, i) => (
           <Setting data={p} key={i} />
         ))}
       </section>

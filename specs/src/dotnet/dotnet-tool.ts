@@ -48,7 +48,7 @@ const versionSearchGenerator: Fig.Generator = {
   postProcess(out) {
     const searchResults: string[] = JSON.parse(out).versions;
 
-    return searchResults.reverse().map<Fig.Suggestion>((value) => {
+    return searchResults.toReversed().map<Fig.Suggestion>((value) => {
       return {
         name: value,
       };

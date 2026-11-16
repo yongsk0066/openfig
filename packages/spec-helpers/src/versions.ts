@@ -28,7 +28,7 @@ const diffSimpleObject = <T>(original: T, updated: T): T => {
   }
   return diff;
 };
-const mergeSimpleObject = <T>(original: T, diff: Diff<T>): T => ({
+const mergeSimpleObject = <T extends object>(original: T, diff: Partial<T>): T => ({
   ...original,
   ...diff,
 });
@@ -136,10 +136,6 @@ const mergeOrderedArrays = <TDiff, T extends TDiff>(
     .map((diff, idx) => mergeFn(current[idx], diff))
     .filter((merged): merged is T => merged !== null);
 
-type Diff<T> = {
-  [key in keyof T]?: unknown;
-};
-
 type Processor<TDiff, T> = {
   diff: (t1: T, t2: T) => TDiff | null;
   merge: (t: T, tdiff: TDiff | null) => T;
@@ -149,12 +145,11 @@ type ProcessorMapping<T, U> = {
   [key in keyof T & keyof U]?: Processor<U[key], T[key]>;
 };
 
-type IsDiff<U, T extends U> = U extends Diff<T> ? U : never;
 const makeNamedProcessor = <TDiff extends NamedObject, T extends TDiff>(
   propertyMapping: ProcessorMapping<T, TDiff>,
-): Processor<IsDiff<TDiff, T>, T> => ({
+): Processor<TDiff, T> => ({
   diff: (previous, updated) => {
-    const diff = { ...updated } as TDiff extends Diff<T> ? TDiff : never;
+    const diff = { ...updated } as TDiff;
     for (const key in diff) {
       if (key !== "name") {
         if (key in propertyMapping) {
@@ -250,7 +245,7 @@ export const getVersionFromVersionedSpec = (
   versions: Fig.VersionDiffMap,
   target?: string,
 ): { version: string; spec: Fig.Subcommand } => {
-  const versionNames = Object.keys(versions).sort(semver.compare);
+  const versionNames = Object.keys(versions).toSorted(semver.compare);
   const versionIndex = getBestVersionIndex(versionNames, target);
   const spec = versionNames
     .slice(0, versionIndex + 1)
@@ -262,7 +257,7 @@ export const getVersionFromVersionedSpec = (
 export const createVersionedSpec =
   (specName: string, versionFiles: string[]): Fig.Spec =>
   async (version?: string) => {
-    const versionNames = versionFiles.sort(semver.compare);
+    const versionNames = versionFiles.toSorted(semver.compare);
     const versionFileIndex = getBestVersionIndex(versionNames, version);
     const versionFile = versionNames[versionFileIndex];
     return {

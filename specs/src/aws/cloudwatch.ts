@@ -1,3 +1,6 @@
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 const statistics = ["SampleCount", "Average", "Sum", "Minimum", "Maximum"];
 const alarmStates = ["OK", "ALARM", "INSUFFICIENT_DATA"];
 const metricTypes = ["CompositeAlarm", "MetricAlarm"];
@@ -297,7 +300,7 @@ const getResultList = async (
   });
   return JSON.parse(stdout)[key];
 };
-const _prefixFile = "file://";
+const prefixFile = "file://";
 const appendFolderPath = (tokens: string[], prefix: string): string[] => {
   const baseLsCommand = ["ls", "-1ApL"];
   let whatHasUserTyped = tokens[tokens.length - 1];
@@ -325,23 +328,6 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
       },
     ];
   }
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
-    const dotsArr: string[] = [];
-    const otherArr: string[] = [];
-    arr.map((elm) => {
-      if (elm.toLowerCase() == ".ds_store") return;
-      if (elm.slice(0, 1) === ".") dotsArr.push(elm);
-      else otherArr.push(elm);
-    });
-    return [
-      ...otherArr.sort(sortFnStrings),
-      "../",
-      ...dotsArr.sort(sortFnStrings),
-    ];
-  };
   const tempArr = alphabeticalSortFilesAndFolders(out.split("\n"));
   const finalArr: Fig.Suggestion[] = [];
   tempArr.forEach((item) => {
@@ -379,16 +365,16 @@ const filterWithPrefix = (token: string, prefix: string): string => {
 const generators: Record<string, Fig.Generator> = {
   listFiles: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFile);
+      return appendFolderPath(tokens, prefixFile);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFile);
+      return filterWithPrefix(token, prefixFile);
     },
   },
   listAlarms: {
@@ -3306,3 +3292,17 @@ const completionSpec: Fig.Spec = {
   ],
 };
 export default completionSpec;
+const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const dotsArr: string[] = [];
+  const otherArr: string[] = [];
+  arr.map((elm) => {
+    if (elm.toLowerCase() == ".ds_store") return;
+    if (elm.slice(0, 1) === ".") dotsArr.push(elm);
+    else otherArr.push(elm);
+  });
+  return [
+    ...otherArr.toSorted(sortFnStrings),
+    "../",
+    ...dotsArr.toSorted(sortFnStrings),
+  ];
+};

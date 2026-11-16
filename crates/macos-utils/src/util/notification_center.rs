@@ -64,11 +64,11 @@ impl NotificationCenter {
         // valid object pointer.
         // Evidence:
         // - The receiver is a `Retained<NSNotificationCenter>` /
-        //   `Retained<NSDistributedNotificationCenter>` held by `self.inner`, so it is live for `&self`
-        //   (TYPE FACT of `Retained`).
+        //   `Retained<NSDistributedNotificationCenter>` held by `self.inner`, so it is live for
+        //   `&self` (TYPE FACT of `Retained`).
         // - `observer` is a `&AnyObject`; Rust reference validity gives liveness for the call.
-        // - `NSNotificationCenter` is documented thread-safe, so no synchronization obligation is left to
-        //   the caller.
+        // - `NSNotificationCenter` is documented thread-safe, so no synchronization obligation is
+        //   left to the caller.
         match &self.inner {
             Inner::NotificationCenter(i) => i.removeObserver(observer),
             Inner::DistributedNotificationCenter(i) => i.removeObserver(observer),
@@ -131,14 +131,15 @@ impl NotificationCenter {
         // - Block lifetime: `StackBlock` lives on this stack frame, but Apple documents
         //   `-addObserverForName:object:queue:usingBlock:` as *copying* the block to the heap
         //   (`Block_copy`) before returning. block2 0.6 models this by accepting `&StackBlock` for
-        //   parameters the callee copies. That copy is what makes the stack block sound here — the original
-        //   comment ("addObserverForName copies block for us") is right, this spells out why it is
-        //   sufficient.
-        // - `F: Fn(NonNull<NSNotification>) + Clone + 'static` — `'static` rules out the block capturing
-        //   anything that could dangle after this frame returns, and `Clone` is what block2 requires to
-        //   produce the heap copy.
+        //   parameters the callee copies. That copy is what makes the stack block sound here — the
+        //   original comment ("addObserverForName copies block for us") is right, this spells out
+        //   why it is sufficient.
+        // - `F: Fn(NonNull<NSNotification>) + Clone + 'static` — `'static` rules out the block
+        //   capturing anything that could dangle after this frame returns, and `Clone` is what
+        //   block2 requires to produce the heap copy.
         // - Thread: the block runs on `queue` if given, else on the posting thread. The one caller
-        //   (`fig_desktop`'s accessibility watcher) only sends on an `EventLoopProxy`, which is `Send`.
+        //   (`fig_desktop`'s accessibility watcher) only sends on an `EventLoopProxy`, which is
+        //   `Send`.
         // Leak note: the returned opaque observer token is discarded, so this registration can
         // never be removed. That is intentional for a process-lifetime watcher, but it means
         // `remove_observer` cannot undo it.
@@ -155,36 +156,11 @@ impl NotificationCenter {
     }
 }
 
-/// The `NSRunningApplication` carried by an `NSWorkspace` application notification.
-///
-/// # Safety
-///
-/// The caller must ensure that `notification` is one of the `NSWorkspace` notifications that
-/// Apple documents as carrying an `NSRunningApplication` under the `NSWorkspaceApplicationKey`
-/// key — `NSWorkspaceDidLaunchApplicationNotification`,
-/// `NSWorkspaceDidActivateApplicationNotification`,
-/// `NSWorkspaceDidTerminateApplicationNotification`, and their siblings.
-///
-/// The cast below is **unchecked**: any other notification whose `userInfo` happens to hold a
-/// different object under that key would be reinterpreted as an `NSRunningApplication`, and the
-/// caller would then message it with selectors it may not implement.
-pub unsafe fn get_app_from_notification(notification: &NSNotification) -> Option<Retained<NSRunningApplication>> {
-    let user_info = notification.userInfo()?;
-    let bundle_id_str = ns_string!("NSWorkspaceApplicationKey");
-    let app = user_info.objectForKey(bundle_id_str);
-    // SAFETY:
-    // Operation: `Retained::<AnyObject>::cast::<NSRunningApplication>`.
-    // Contract (objc2 0.6, `cast` is the deprecated alias of `cast_unchecked`): "you must
-    // ensure that the object can be reinterpreted as the given type", and any safety invariant
-    // of the new type must hold. Both types are `'static` class types, so the lifetime clause
-    // of that contract is vacuous.
-    // Evidence: this function's own `# Safety` precondition plus the Apple documentation lemma
-    // that `NSWorkspaceApplicationKey` maps to an `NSRunningApplication`.
-    // UNPROVEN-BUT-LIKELY — see docs/13-unsafe-review.md #5. The premise is documentation about
-    // a value crossing an FFI boundary, with no runtime check. objc2 0.6 provides the checked
-    // `Retained::downcast`, which would turn this into a proved obligation; the crate-level
-    // `#![allow(deprecated)]` currently suppresses the warning that points at it.
-    // Postcondition: the `+1` held by `app` is transferred to the returned
-    // `Retained<NSRunningApplication>`; no retain count changes.
-    app.map(|app| Retained::<AnyObject>::cast(app))
+/// Read an application notification using a checked Objective-C downcast.
+pub fn get_app_from_notification(notification: &NSNotification) -> Option<Retained<NSRunningApplication>> {
+    notification
+        .userInfo()?
+        .objectForKey(ns_string!("NSWorkspaceApplicationKey"))?
+        .downcast()
+        .ok()
 }

@@ -2,6 +2,7 @@
 name = "fig_settings"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 publish.workspace = true
 version.workspace = true

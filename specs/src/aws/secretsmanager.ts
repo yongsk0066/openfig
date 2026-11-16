@@ -1,4 +1,7 @@
 import awsRegions from "./regions";
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 const ttl = 30000;
 const appendFolderPath = (tokens: string[], prefix: string): string[] => {
   const baseLsCommand = ["ls", "-1ApL"];
@@ -27,23 +30,6 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
       },
     ];
   }
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
-    const dots_arr: string[] = [];
-    const other_arr: string[] = [];
-    arr.map((elm) => {
-      if (elm.toLowerCase() == ".ds_store") return;
-      if (elm.slice(0, 1) === ".") dots_arr.push(elm);
-      else other_arr.push(elm);
-    });
-    return [
-      ...other_arr.sort(sortFnStrings),
-      "../",
-      ...dots_arr.sort(sortFnStrings),
-    ];
-  };
   const temp_array = alphabeticalSortFilesAndFolders(out.split("\n"));
   const final_array: Fig.Suggestion[] = [];
   temp_array.forEach((item) => {
@@ -73,8 +59,8 @@ const filterWithPrefix = (token: string, prefix: string): string => {
   if (!token.startsWith(prefix)) return token;
   return token.slice(token.lastIndexOf("/") + 1);
 };
-const _prefixFile = "file://";
-const _prefixFileb = "fileb://";
+const prefixFile = "file://";
+const prefixFileb = "fileb://";
 const generators: Record<string, Fig.Generator> = {
   secretIdsGenerator: {
     // --page-size does not affect the number of items returned,
@@ -127,16 +113,16 @@ const generators: Record<string, Fig.Generator> = {
   // See more: https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-file.html
   listFilesGenerator: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFile);
+      return appendFolderPath(tokens, prefixFile);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFile);
+      return filterWithPrefix(token, prefixFile);
     },
   },
   // --secret-binary and a few other options takes a blob as parameter.
@@ -144,16 +130,16 @@ const generators: Record<string, Fig.Generator> = {
   // See more: https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-file.html
   listBlobsGenerator: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFileb);
+      return appendFolderPath(tokens, prefixFileb);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFileb);
+      return postProcessFiles(out, prefixFileb);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFileb);
+      return triggerPrefix(newToken, oldToken, prefixFileb);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFileb);
+      return filterWithPrefix(token, prefixFileb);
     },
   },
   getReplicaRegionsGenerator: {
@@ -1575,3 +1561,17 @@ const completionSpec: Fig.Spec = {
   ],
 };
 export default completionSpec;
+const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const dots_arr: string[] = [];
+  const other_arr: string[] = [];
+  arr.map((elm) => {
+    if (elm.toLowerCase() == ".ds_store") return;
+    if (elm.slice(0, 1) === ".") dots_arr.push(elm);
+    else other_arr.push(elm);
+  });
+  return [
+    ...other_arr.toSorted(sortFnStrings),
+    "../",
+    ...dots_arr.toSorted(sortFnStrings),
+  ];
+};

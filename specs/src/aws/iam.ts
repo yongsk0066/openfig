@@ -1,3 +1,6 @@
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 const ttl = 30000;
 const awsPrincipals = [
   "a4b.amazonaws.com",
@@ -189,7 +192,7 @@ const identityStruct: Identity[] = [
   { command: ["iam", "list-groups"], parentKey: "Groups", childKey: "Arn" },
   { command: ["iam", "list-roles"], parentKey: "Roles", childKey: "Arn" },
 ];
-const _prefixFile = "file://";
+const prefixFile = "file://";
 const appendFolderPath = (tokens: string[], prefix: string): string[] => {
   const baseLsCommand = ["ls", "-1ApL"];
   let whatHasUserTyped = tokens[tokens.length - 1];
@@ -217,23 +220,6 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
       },
     ];
   }
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
-    const dotsArray: string[] = [];
-    const otherArray: string[] = [];
-    arr.map((elm) => {
-      if (elm.toLowerCase() == ".ds_store") return;
-      if (elm.slice(0, 1) === ".") dotsArray.push(elm);
-      else otherArray.push(elm);
-    });
-    return [
-      ...otherArray.sort(sortFnStrings),
-      "../",
-      ...dotsArray.sort(sortFnStrings),
-    ];
-  };
   const tempArray = alphabeticalSortFilesAndFolders(out.split("\n"));
   const finalArray: Fig.Suggestion[] = [];
   tempArray.forEach((item) => {
@@ -633,16 +619,16 @@ const generators: Record<string, Fig.Generator> = {
   // See more: https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-file.html
   listFiles: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFile);
+      return appendFolderPath(tokens, prefixFile);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFile);
+      return filterWithPrefix(token, prefixFile);
     },
   },
   listMfaDevices: {
@@ -9097,3 +9083,17 @@ const completionSpec: Fig.Spec = {
   ],
 };
 export default completionSpec;
+const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const dotsArray: string[] = [];
+  const otherArray: string[] = [];
+  arr.map((elm) => {
+    if (elm.toLowerCase() == ".ds_store") return;
+    if (elm.slice(0, 1) === ".") dotsArray.push(elm);
+    else otherArray.push(elm);
+  });
+  return [
+    ...otherArray.toSorted(sortFnStrings),
+    "../",
+    ...dotsArray.toSorted(sortFnStrings),
+  ];
+};

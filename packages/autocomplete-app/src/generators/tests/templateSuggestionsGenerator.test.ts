@@ -1,7 +1,7 @@
 import { type Annotation, TokenType } from "@fig/autocomplete-parser";
 import type { Subcommand } from "@fig/shared/internal";
 import { describe, expect, it } from "vitest";
-import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
+import { getTemplateSuggestions as templateSuggestions } from "../templateSuggestionsGenerator";
 import type { GeneratorContext } from "../helpers";
 
 const defaultContext: GeneratorContext = {
@@ -190,3 +190,7 @@ describe.todo("getTemplateSuggestions", () => {
     });
   });
 });
+
+function getTemplateSuggestions(generator: Fig.Generator, context: GeneratorContext) {
+  return templateSuggestions(generator, context, () => []);
+}

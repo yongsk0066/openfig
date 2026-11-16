@@ -143,17 +143,17 @@ const configGenerator: Fig.Generator = {
   filterTemplateSuggestions: (param) =>
     param
       .filter(({ name }) => name?.endsWith(".json") || name?.endsWith("rc"))
-      .map((param) => {
-        const name = param.name ?? "";
+      .map((suggestion) => {
+        const name = suggestion.name ?? "";
         if (ESLINTRC_JSON.has(name)) {
-          param.description = "Oxlint is compatible with ESLint configs";
-          param.priority = 51;
+          suggestion.description = "Oxlint is compatible with ESLint configs";
+          suggestion.priority = 51;
         } else if (OXLINTRC.has(name)) {
-          param.priority = 52;
-          param.description = "oxlint config file";
+          suggestion.priority = 52;
+          suggestion.description = "oxlint config file";
         }
 
-        return param;
+        return suggestion;
       }),
 };
 

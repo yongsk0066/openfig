@@ -1,3 +1,6 @@
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 const tags = ["TAGS"];
 const launchTypes = ["EC2", "FARGATE", "EXTERNAL"];
 const schedulingStrategy = ["REPLICA", "DAEMON"];
@@ -126,7 +129,7 @@ const MultiSuggestionsGenerator = async (
   }
   return [];
 };
-const _prefixFile = "file://";
+const prefixFile = "file://";
 const appendFolderPath = (tokens: string[], prefix: string): string[] => {
   const baseLsCommand = ["ls", "-1ApL"];
   let whatHasUserTyped = tokens[tokens.length - 1];
@@ -172,13 +175,10 @@ const filterWithPrefix = (token: string, prefix: string): string => {
   return token.slice(token.lastIndexOf("/") + 1);
 };
 const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const alphabeticalSortFilesAndFolders = (entries: string[]) => {
     const dots_arr: string[] = [];
     const other_arr: string[] = [];
-    arr.map((fsObject) => {
+    entries.map((fsObject) => {
       if (fsObject.toLowerCase() == ".ds_store") return;
       if (fsObject.slice(0, 1) === ".") {
         dots_arr.push(fsObject);
@@ -188,14 +188,14 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
     });
     if (isS3) {
       return [
-        ...other_arr.sort(sortFnStrings),
-        ...dots_arr.sort(sortFnStrings),
+        ...other_arr.toSorted(sortFnStrings),
+        ...dots_arr.toSorted(sortFnStrings),
       ];
     }
     return [
-      ...other_arr.sort(sortFnStrings),
+      ...other_arr.toSorted(sortFnStrings),
       "../",
-      ...dots_arr.sort(sortFnStrings),
+      ...dots_arr.toSorted(sortFnStrings),
     ];
   };
   const temp_array = alphabeticalSortFilesAndFolders(arr);
@@ -215,16 +215,16 @@ const sortSuggestions = (arr: string[], isS3?: boolean): Fig.Suggestion[] => {
 const generators: Record<string, Fig.Generator> = {
   listFiles: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFile);
+      return appendFolderPath(tokens, prefixFile);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFile);
+      return filterWithPrefix(token, prefixFile);
     },
   },
   listCapacityProviders: {

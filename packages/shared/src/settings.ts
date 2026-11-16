@@ -1,0 +1,53 @@
+export enum SETTINGS {
+  // Dev settings.
+  DEV_MODE = "autocomplete.developerMode",
+  DEV_MODE_NPM = "autocomplete.developerModeNPM",
+  DEV_MODE_NPM_INVALIDATE_CACHE = "autocomplete.developerModeNPMInvalidateCache",
+  DEV_COMPLETIONS_FOLDER = "autocomplete.devCompletionsFolder",
+  DEV_COMPLETIONS_SERVER_PORT = "autocomplete.devCompletionsServerPort",
+
+  // Style settings
+  WIDTH = "autocomplete.width",
+  HEIGHT = "autocomplete.height",
+  THEME = "autocomplete.theme",
+  FONT_FAMILY = "autocomplete.fontFamily",
+  FONT_SIZE = "autocomplete.fontSize",
+
+  CACHE_ALL_GENERATORS = "beta.autocomplete.auto-cache",
+  // Behavior settings
+  DISABLE_FOR_COMMANDS = "autocomplete.disableForCommands",
+  IMMEDIATELY_EXEC_AFTER_SPACE = "autocomplete.immediatelyExecuteAfterSpace",
+  IMMEDIATELY_RUN_DANGEROUS_COMMANDS = "autocomplete.immediatelyRunDangerousCommands",
+  INSERT_SPACE_AUTOMATICALLY = "autocomplete.insertSpaceAutomatically",
+  SCROLL_WRAP_AROUND = "autocomplete.scrollWrapAround",
+  SORT_METHOD = "autocomplete.sortMethod",
+  ALWAYS_SUGGEST_CURRENT_TOKEN = "autocomplete.alwaysSuggestCurrentToken",
+
+  NAVIGATE_TO_HISTORY = "autocomplete.navigateToHistory",
+  ONLY_SHOW_ON_TAB = "autocomplete.onlyShowOnTab",
+  ALWAYS_SHOW_DESCRIPTION = "autocomplete.alwaysShowDescription",
+  SCRIPT_TIMEOUT = "autocomplete.scriptTimeout",
+  PREFER_VERBOSE_SUGGESTIONS = "autocomplete.preferVerboseSuggestions",
+  HIDE_AUTO_EXECUTE_SUGGESTION = "autocomplete.hideAutoExecuteSuggestion",
+
+  FUZZY_SEARCH = "autocomplete.fuzzySearch",
+
+  PERSONAL_SHORTCUTS_TOKEN = "autocomplete.personalShortcutsToken",
+
+  DISABLE_HISTORY_LOADING = "autocomplete.history.disableLoading",
+  // History settings
+  // one of "off", "history_only", "show"
+  HISTORY_MODE = "beta.history.mode",
+  HISTORY_COMMAND = "beta.history.customCommand",
+  HISTORY_MERGE_SHELLS = "beta.history.allShells",
+
+  FIRST_COMMAND_COMPLETION = "autocomplete.firstTokenCompletion",
+}
+
+export type SettingsMap = { [key in SETTINGS]?: unknown };
+
+export type SettingsReader = <T = unknown>(key: SETTINGS, defaultValue?: T) => T;
+export const readSettings =
+  (settings: SettingsMap): SettingsReader =>
+  <T = unknown>(key: SETTINGS, fallback?: T): T =>
+    (settings[key] ?? fallback) as T;

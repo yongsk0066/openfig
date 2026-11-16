@@ -306,7 +306,7 @@ export const searchGenerator: Fig.Generator = {
 
       const remoteJson: CrateSearchResults = JSON.parse(remoteStdout);
       const remoteSuggustions: Fig.Suggestion[] = remoteJson.crates
-        .sort((a, b) => b.recent_downloads - a.recent_downloads)
+        .toSorted((a, b) => b.recent_downloads - a.recent_downloads)
         .map((crate) => ({
           icon: "📦",
           displayName: `${crate.name}@${crate.newest_version}`,

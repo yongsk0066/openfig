@@ -220,12 +220,12 @@ const completionSpec: Fig.Spec = {
 
     for (const line of lines) {
       const matches: string[] = line.match(argRegex) ?? [];
-      const [_, __, command] = matches.map((match) => match.trim());
+      const [, , command] = matches.map((match) => match.trim());
       if (!command) {
         continue;
       }
 
-      const commands = command.split(",").map<Fig.Subcommand>((cmd) => {
+      const toolCommands = command.split(",").map<Fig.Subcommand>((cmd) => {
         const value = cmd.replace("dotnet-", "");
 
         return {
@@ -238,7 +238,7 @@ const completionSpec: Fig.Spec = {
         };
       });
 
-      subcommands.push(...commands);
+      subcommands.push(...toolCommands);
     }
 
     return {

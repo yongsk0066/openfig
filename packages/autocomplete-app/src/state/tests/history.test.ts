@@ -3,11 +3,11 @@ import { SETTINGS } from "@fig/api-bindings/wrappers";
 import { type ArgumentParserResult, TokenType } from "@fig/autocomplete-parser";
 import { SuggestionFlag } from "@fig/shared/utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getFullHistorySuggestions } from "../../history";
+import { getFullHistorySuggestions } from "../../history/repository";
 import { useAutocompleteStore } from "..";
 
-vi.mock("../../history", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../history")>();
+vi.mock("../../history/repository", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../history/repository")>();
   return { ...original, getFullHistorySuggestions: vi.fn(original.getFullHistorySuggestions) };
 });
 

@@ -8,10 +8,13 @@
 
 mod insert;
 mod keys;
-mod process;
+use crate::process;
 pub mod wire;
 
-use std::collections::BTreeSet;
+use std::collections::{
+    BTreeSet,
+    HashMap,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{
@@ -146,11 +149,14 @@ impl Lines {
     }
 }
 
-async fn write_lines(mut writer: OwnedWriteHalf, mut lines: mpsc::UnboundedReceiver<DaemonLine>) {
+async fn write_lines(mut writer: OwnedWriteHalf, mut lines: mpsc::Receiver<DaemonLine>) {
     while let Some(line) = lines.recv().await {
         let mut text = line.to_string();
         text.push('\n');
-        if let Err(err) = writer.write_all(text.as_bytes()).await {
+        if let Err(err) = tokio::time::timeout(Duration::from_secs(1), writer.write_all(text.as_bytes()))
+            .await
+            .unwrap_or_else(|_| Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "hook socket stalled")))
+        {
             debug!(%err, "hook session write failed");
             break;
         }
@@ -172,6 +178,9 @@ struct Session {
     preexec: bool,
     /// The last `E` text, what an insertion is reconciled against.
     buffer: String,
+    revision: Option<u64>,
+    cursor: usize,
+    pending_edits: HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>,
     /// The command line accepted by the last `X`, and when.
     running: Option<(String, SystemTime)>,
     interceptor: keys::Interceptor,
@@ -194,6 +203,8 @@ impl Session {
             environment_variables: if full { self.env.clone() } else { vec![] },
             alias: if full { self.alias.clone() } else { None },
             preexec: Some(self.preexec),
+            context_snapshot: Some(full),
+            input_revision: self.revision,
             ..Default::default()
         }
     }
@@ -218,12 +229,12 @@ async fn handle_connection(
         reader: BufReader::new(reader),
         buf: Vec::new(),
     };
-    let (out, out_rx) = mpsc::unbounded_channel();
-    let writer_task = tokio::spawn(write_lines(writer, out_rx));
+    let (out, out_rx) = mpsc::channel(64);
+    let mut writer_task = tokio::spawn(write_lines(writer, out_rx));
 
     let hello = match tokio::time::timeout(HELLO_TIMEOUT, lines.next()).await {
         Ok(Ok(Some(line))) if line == wire::PING => {
-            let _ = out.send(DaemonLine::Pong);
+            let _ = out.send(DaemonLine::Pong).await;
             drop(out);
             let _ = writer_task.await;
             return;
@@ -253,18 +264,22 @@ async fn handle_connection(
             } else {
                 debug!(peer = version, ours = HOOK_PROTOCOL_VERSION, "Refusing a zsh hook");
             }
-            let _ = out.send(DaemonLine::Refuse {
-                reason: format!("protocol version {version}, this desktop speaks {HOOK_PROTOCOL_VERSION}"),
-            });
+            let _ = out
+                .send(DaemonLine::Refuse {
+                    reason: format!("protocol version {version}, this desktop speaks {HOOK_PROTOCOL_VERSION}"),
+                })
+                .await;
             drop(out);
             let _ = writer_task.await;
             return;
         },
         other => {
             warn!(?other, "hook connection did not start with HELLO");
-            let _ = out.send(DaemonLine::Refuse {
-                reason: "expected HELLO".into(),
-            });
+            let _ = out
+                .send(DaemonLine::Refuse {
+                    reason: "expected HELLO".into(),
+                })
+                .await;
             drop(out);
             let _ = writer_task.await;
             return;
@@ -284,15 +299,19 @@ async fn handle_connection(
         context_dirty: false,
         preexec: false,
         buffer: String::new(),
+        revision: None,
+        cursor: 0,
+        pending_edits: HashMap::new(),
         running: None,
         interceptor: keys::Interceptor::default(),
         forwarded: BTreeSet::new(),
     }));
 
-    let (command_tx, command_rx) = flume::unbounded();
+    let (command_tx, command_rx) = flume::bounded(64);
+    let (disconnect, mut disconnected) = tokio::sync::watch::channel(false);
     shell_sessions.insert(ShellSession {
         id: session_id,
-        sender: command_tx,
+        sender: crate::session::ShellSender::new(command_tx, disconnect),
         edit_buffer: EditBuffer::default(),
         context: None,
         terminal_cursor_coordinates: None,
@@ -300,11 +319,19 @@ async fn handle_connection(
         intercept_global: InterceptMode::Unlocked,
     });
     let command_task = tokio::spawn(handle_commands(command_rx, session.clone(), out.clone()));
-    let _ = out.send(DaemonLine::Welcome);
+    let _ = out.send(DaemonLine::Welcome).await;
     info!(%session_id, "zsh hook session connected");
 
     loop {
-        let line = match lines.next().await {
+        let line = match tokio::select! {
+            _ = disconnected.wait_for(|closed| *closed) => break,
+            _ = &mut writer_task => {
+                shell_sessions.remove_id(&session_id);
+                command_task.abort();
+                return;
+            },
+            line = lines.next() => line,
+        } {
             Ok(Some(line)) => line,
             Ok(None) => break,
             Err(err) => {
@@ -319,7 +346,26 @@ async fn handle_connection(
                 continue;
             },
         };
+        let message = match message {
+            ShellLine::EditBufferV2 { revision, text, cursor } => {
+                session.lock().revision = Some(revision);
+                ShellLine::EditBuffer { text, cursor }
+            },
+            ShellLine::EditAck { id, status } => {
+                if let Some(response) = session.lock().pending_edits.remove(&id) {
+                    let result = match status {
+                        0 => Ok(()),
+                        1 => Err("stale input: edit rejected".into()),
+                        _ => Err("shell cannot apply this edit".into()),
+                    };
+                    let _ = response.send(result);
+                }
+                continue;
+            },
+            message => message,
+        };
         let request = match message {
+            ShellLine::EditBufferV2 { .. } | ShellLine::EditAck { .. } => unreachable!("normalized above"),
             ShellLine::Hello { .. } => {
                 warn!("ignoring a second HELLO");
                 continue;
@@ -341,6 +387,7 @@ async fn handle_connection(
                 let context = {
                     let mut session = session.lock();
                     session.buffer.clone_from(&text);
+                    session.cursor = cursor;
                     let full = std::mem::take(&mut session.context_dirty);
                     session.context(full)
                 };
@@ -402,7 +449,7 @@ async fn handle_connection(
                     (session.context(true), session.intercept_update())
                 };
                 if let Some(update) = update {
-                    let _ = out.send(update);
+                    let _ = out.send(update).await;
                 }
                 HookRequest::PreExec(PreExecHook {
                     context: Some(context),
@@ -419,7 +466,7 @@ async fn handle_connection(
                     (action, session.context(true), session.intercept_update())
                 };
                 if let Some(update) = update {
-                    let _ = out.send(update);
+                    let _ = out.send(update).await;
                 }
                 // The shell waits for this before doing anything else with the key; when
                 // interception ended after its last `INTERCEPT`, zsh keeps the key after all.
@@ -428,10 +475,12 @@ async fn handle_connection(
                     Some(action) if keys::may_insert(action) => KeyVerdict::MayInsert,
                     Some(_) => KeyVerdict::Taken,
                 };
-                let _ = out.send(DaemonLine::Key {
-                    name: name.clone(),
-                    verdict,
-                });
+                let _ = out
+                    .send(DaemonLine::Key {
+                        name: name.clone(),
+                        verdict,
+                    })
+                    .await;
                 let Some(action) = action else {
                     continue;
                 };
@@ -455,10 +504,70 @@ async fn handle_connection(
 async fn handle_commands(
     commands: flume::Receiver<ShellCommand>,
     session: Arc<Mutex<Session>>,
-    out: mpsc::UnboundedSender<DaemonLine>,
+    out: mpsc::Sender<DaemonLine>,
 ) {
-    while let Ok(command) = commands.recv_async().await {
+    let mut processes = tokio::task::JoinSet::new();
+    loop {
+        let command = tokio::select! {
+            command = commands.recv_async() => match command { Ok(command) => command, Err(_) => break },
+            _ = processes.join_next(), if !processes.is_empty() => continue,
+        };
         match command {
+            ShellCommand::ApplyEdit {
+                expires_at,
+                revision,
+                cursor_utf16,
+                buffer,
+                edit,
+                response,
+            } => {
+                // Reserve transport capacity before validating: waiting must not renew the lease.
+                let permit = match tokio::time::timeout_at(expires_at.into(), out.reserve()).await {
+                    Ok(Ok(permit)) => permit,
+                    Ok(Err(_)) => break,
+                    Err(_) => {
+                        let _ = response.send(Err("edit expired before dispatch".into()));
+                        continue;
+                    },
+                };
+                if response.is_closed() || std::time::Instant::now() >= expires_at {
+                    let _ = response.send(Err("edit cancelled or expired before dispatch".into()));
+                    continue;
+                }
+                let line = {
+                    let mut session = session.lock();
+                    session.pending_edits.retain(|_, response| !response.is_closed());
+                    if session.preexec
+                        || session.revision != Some(revision)
+                        || session.buffer != buffer
+                        || session.buffer[..session.cursor].encode_utf16().count() as u64 != cursor_utf16
+                    {
+                        let _ = response.send(Err("stale input: edit rejected".into()));
+                        continue;
+                    }
+                    if session.pending_edits.len() >= 16 {
+                        let _ = response.send(Err("too many pending edits".into()));
+                        continue;
+                    }
+                    let id = Uuid::new_v4().to_string();
+                    session.pending_edits.insert(id.clone(), response);
+                    DaemonLine::AtomicEdit {
+                        id,
+                        revision,
+                        deadline_ms: SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                            + expires_at
+                                .saturating_duration_since(std::time::Instant::now())
+                                .as_millis(),
+                        cursor: session.buffer[..session.cursor].chars().count(),
+                        buffer,
+                        edit,
+                    }
+                };
+                permit.send(line);
+            },
             ShellCommand::InterceptFigJs {
                 intercept_keystrokes,
                 intercept_global_keystrokes,
@@ -473,7 +582,7 @@ async fn handle_commands(
                     session.intercept_update()
                 };
                 if let Some(update) = update {
-                    let _ = out.send(update);
+                    let _ = out.send(update).await;
                 }
             },
             ShellCommand::InterceptFigJSVisible { visible } => {
@@ -483,7 +592,7 @@ async fn handle_commands(
                     session.intercept_update()
                 };
                 if let Some(update) = update {
-                    let _ = out.send(update);
+                    let _ = out.send(update).await;
                 }
             },
             ShellCommand::InsertText {
@@ -513,11 +622,11 @@ async fn handle_commands(
                     insert::edits(&request, &session.buffer)
                 };
                 for edit in edits {
-                    let _ = out.send(DaemonLine::Insert(edit));
+                    let _ = out.send(DaemonLine::Insert(edit)).await;
                 }
             },
             ShellCommand::RunProcess {
-                channel,
+                mut channel,
                 executable,
                 arguments,
                 working_directory,
@@ -531,8 +640,8 @@ async fn handle_commands(
                         cwd: session.cwd.clone(),
                     }
                 };
-                tokio::spawn(async move {
-                    let response = process::run(
+                processes.spawn(async move {
+                    let run = process::run(
                         process::Request {
                             executable,
                             arguments,
@@ -541,9 +650,11 @@ async fn handle_commands(
                             timeout,
                         },
                         shell,
-                    )
-                    .await;
-                    let _ = channel.send(response);
+                    );
+                    tokio::select! {
+                        _ = channel.closed() => {},
+                        response = run => { let _ = channel.send(response); },
+                    }
                 });
             },
         }
@@ -607,7 +718,7 @@ mod tests {
     #[tokio::test]
     async fn hello_with_our_version_starts_a_session() {
         let (lines, session) = exchange(&format!("HELLO {HOOK_PROTOCOL_VERSION} 1.2 zsh 1 /dev/ttys001 me@host")).await;
-        assert_eq!(lines, vec![format!("WELCOME 1 {HOOK_PROTOCOL_VERSION}")]);
+        assert_eq!(lines, vec![format!("WELCOME 1 {HOOK_PROTOCOL_VERSION} edits-v2")]);
         assert!(session);
     }
 

@@ -47,8 +47,8 @@ unsafe fn resize_image(image: &NSImage, size: NSSize) -> Option<Retained<NSImage
     // `hints` a dictionary whose keys/values AppKit is prepared to interpret, or nil.
     // Evidence:
     // - `image: &NSImage` is a Rust reference, hence a live receiver.
-    // - `context.as_deref()` is `Option<&NSGraphicsContext>` derived from a `Retained`, so it is either
-    //   `None` or live for this call.
+    // - `context.as_deref()` is `Option<&NSGraphicsContext>` derived from a `Retained`, so it is
+    //   either `None` or live for this call.
     // - `hints` is the literal `None`, so the untyped-dictionary obligation — the sole reason objc2
     //   marks this method `unsafe` — is vacuous.
     // Postcondition: `rep` is a `+0`-derived `Retained<NSImageRep>` owned by objc2; the
@@ -92,7 +92,7 @@ pub unsafe fn png_for_path(path: &Path) -> Option<Vec<u8>> {
         let file_path = NSString::from_str(path.to_str()?);
         shared.iconForFile(&file_path)
     } else {
-        let is_dir = std::fs::metadata(path).ok().map(|meta| meta.is_dir()).unwrap_or(false);
+        let is_dir = std::fs::metadata(path).ok().is_some_and(|meta| meta.is_dir());
         let file_type = if is_dir {
             NSFileTypeDirectory
         } else {
@@ -134,8 +134,8 @@ fn convert_image(image: &NSImage) -> Option<Vec<u8>> {
     // the untyped-dictionary obligation again.
     // Evidence:
     // - `image_rep` is a `Retained<NSBitmapImageRep>` from `imageRepWithData`, live here.
-    // - `properties` is `NSDictionary::new()`, i.e. empty, so no key can be misinterpreted and AppKit
-    //   falls back to its documented defaults for PNG.
+    // - `properties` is `NSDictionary::new()`, i.e. empty, so no key can be misinterpreted and
+    //   AppKit falls back to its documented defaults for PNG.
     // - `NSBitmapImageFileType::PNG` is a valid discriminant of the generated enum (TYPE FACT).
     let png_data = unsafe { image_rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties) }?;
 

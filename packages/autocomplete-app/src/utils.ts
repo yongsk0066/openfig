@@ -8,7 +8,7 @@ const DEFAULT_CONSOLE = {
   error: console.error,
 };
 
-export const LOG_DIR = window.fig?.constants?.logsDir;
+export const LOG_DIR = typeof window === "undefined" ? undefined : window.fig?.constants?.logsDir;
 
 const formatLogValue = (value: unknown): string => {
   if (typeof value === "string") return value;
@@ -23,8 +23,9 @@ const formatLogValue = (value: unknown): string => {
 const formatLog = (content: unknown[]): string => content.map(formatLogValue).join(" ");
 
 const NEW_LOG_FN = (...content: unknown[]) => {
-  fs.append(`${LOG_DIR}/logs/specs.log`, `\n${formatLog(content)}`).finally(() =>
-    DEFAULT_CONSOLE.warn("SPEC LOG:", formatLog(content)),
+  void fs.append(`${LOG_DIR}/logs/specs.log`, `\n${formatLog(content)}`).then(
+    () => DEFAULT_CONSOLE.warn("SPEC LOG:", formatLog(content)),
+    (error) => DEFAULT_CONSOLE.warn("SPEC LOG:", formatLog(content), "Write failed", error),
   );
 };
 

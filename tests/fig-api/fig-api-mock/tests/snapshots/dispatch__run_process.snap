@@ -2,6 +2,6 @@
 source: tests/fig-api/fig-api-mock/tests/dispatch.rs
 expression: sandbox.transcript()
 ---
-> ClientOriginatedMessage { id: Some(1), submessage: Some(RunProcessRequest(RunProcessRequest { executable: "true", arguments: [], working_directory: None, env: [], terminal_session_id: None, timeout: None })) }
+> ClientOriginatedMessage { id: Some(1), submessage: Some(RunProcessRequest(RunProcessRequest { executable: "true", arguments: [], working_directory: None, env: [], terminal_session_id: None, timeout: None, cancellation_token: None })) }
 < CAESIlJ1blByb2Nlc3NSZXF1ZXN0IGlzIHVuaW1wbGVtZW50ZWQ=
 < ServerOriginatedMessage { id: Some(1), submessage: Some(Error("RunProcessRequest is unimplemented")) }

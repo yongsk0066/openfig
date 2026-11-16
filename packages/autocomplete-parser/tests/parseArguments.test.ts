@@ -14,8 +14,11 @@ import {
 } from "../src/parseArguments";
 import { loadSubcommandCached } from "../src/loadSpec";
 import { cmdSpec } from "./mocks/spec";
-import { resetCaches } from "../src/caches";
+import { resetCaches } from "../src/index";
 import { afterEach, beforeEach, beforeAll, describe, it, expect, Mock, vi } from "vitest";
+const optionArgs = (subcommand: Internal.Subcommand, option: string) =>
+  subcommand.options[option].args;
+const filterTemplateSuggestions = () => [];
 
 vi.mock("../src/loadSpec", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/loadSpec")>()),
@@ -89,7 +92,6 @@ describe("createArgState", () => {
   });
 
   it("should preserve filterTemplateSuggestions", () => {
-    const filterTemplateSuggestions = () => [];
     const generators: Fig.Generator[] = [
       {
         template: "filepaths",
@@ -256,9 +258,6 @@ describe("parseArguments", () => {
   const testVar = basicTestWithSpec(vrd);
   const testOpt = basicTestWithSpec(opt);
   const testOmpa = basicTestWithSpec(ompa);
-
-  const optionArgs = (subcommand: Internal.Subcommand, option: string) =>
-    subcommand.options[option].args;
   const notSubcommands = SuggestionFlag.Any & ~SuggestionFlag.Subcommands;
 
   it.each([

@@ -1,187 +1,30 @@
-import logger, { type Logger } from "loglevel";
-import * as semver from "semver";
-import { LruCache } from "@fig/shared/lru";
-import { ensureTrailingSlash, withTimeout } from "@fig/shared/utils";
 import { executeCommand, fread, isInDevMode } from "@fig/api-bindings/wrappers";
-import z from "zod";
-import { MOST_USED_SPECS } from "./constants.js";
-import { LoadLocalSpecError } from "./errors.js";
-
-export type SpecFileImport =
-  | {
-      default: Fig.Spec;
-      getVersionCommand?: Fig.GetVersionCommand;
-    }
-  | {
-      default: Fig.Subcommand;
-      versions: Fig.VersionDiffMap;
-    };
-
-// Keyed by the spec source text, so every edit of a local spec adds an entry.
-const stringImportCache = new LruCache<string, unknown>(64);
-
-export const importString = async (str: string) => {
-  if (stringImportCache.has(str)) {
-    return stringImportCache.get(str);
-  }
-  const result = await import(
-    /* @vite-ignore */
-    URL.createObjectURL(new Blob([str], { type: "text/javascript" }))
-  );
-
-  stringImportCache.set(str, result);
-  return result;
-};
-
-/*
- * Deprecated: eventually will just use importLocalSpec above
- * Load a spec import("{path}/{name}")
- */
-export async function importSpecFromFile(
-  name: string,
-  path: string,
-  localLogger: Logger = logger,
-): Promise<SpecFileImport> {
-  const importFromPath = async (fullPath: string) => {
-    localLogger.info(`Loading spec from ${fullPath}`);
-    const contents = await fread(fullPath);
-    if (!contents) {
-      throw new LoadLocalSpecError(`Failed to read file: ${fullPath}`);
-    }
-    return contents;
-  };
-
-  let result: string;
-  const joinedPath = `${ensureTrailingSlash(path)}${name}`;
-  try {
-    result = await importFromPath(`${joinedPath}.js`);
-  } catch (_) {
-    result = await importFromPath(`${joinedPath}/index.js`);
-  }
-
-  return importString(result);
-}
-
-// TODO: this is a problem for diff-versioned specs
-export async function importFromPublicCDN<T = SpecFileImport>(name: string): Promise<T> {
-  return withTimeout(
-    20000,
-    import(
-      /* @vite-ignore */
-      `spec://localhost/${name}.js`
-    ),
-  );
-}
-
-async function jsonFromPublicCDN(path: string): Promise<unknown> {
-  return fetch(`spec://localhost/${path}.json`).then((res) => res.json());
-}
-
-// TODO: this is a problem for diff-versioned specs
-export async function importFromLocalhost<T = SpecFileImport>(
-  name: string,
-  port: number | string,
-): Promise<T> {
-  return withTimeout(
-    20000,
-    import(
-      /* @vite-ignore */
-      `http://localhost:${port}/${name}.js`
-    ),
-  );
-}
-
-const cachedCLIVersions: Record<string, string | undefined> = {};
-
-export const getCachedCLIVersion = (key: string) => cachedCLIVersions[key] ?? null;
-
-export async function getVersionFromFullFile(specData: SpecFileImport, name: string) {
-  // if the default export is a function it is a versioned spec
-  if (typeof specData.default === "function") {
-    try {
-      const storageKey = `cliVersion-${name}`;
-      const version = getCachedCLIVersion(storageKey);
-      if (!isInDevMode() && version !== null) {
-        return version;
-      }
-
-      if ("getVersionCommand" in specData && specData.getVersionCommand) {
-        const newVersion = await specData.getVersionCommand(executeCommand);
-        cachedCLIVersions[storageKey] = newVersion;
-        return newVersion;
-      }
-
-      const newVersion = semver.clean(
-        (
-          await executeCommand({
-            command: name,
-            args: ["--version"],
-          })
-        ).stdout,
-      );
-      if (newVersion) {
-        cachedCLIVersions[storageKey] = newVersion;
-        return newVersion;
-      }
-    } catch {
-      /**/
-    }
-  }
-  return undefined;
-}
-
-// TODO: cache this request using SWR strategy
-let publicSpecsRequest:
-  | Promise<{
-      completions: Set<string>;
-      diffVersionedSpecs: Set<string>;
-    }>
-  | undefined;
-
-export function clearSpecIndex() {
-  publicSpecsRequest = undefined;
-}
-
-const INDEX_ZOD = z.object({
-  completions: z.array(z.string()),
-  diffVersionedCompletions: z.array(z.string()),
+import { createSpecLoader } from "./specLoader";
+export {
+  createSpecLoader,
+  createSpecLoaderCaches,
+  type SpecFileImport,
+  type SpecLoaderPorts,
+} from "./specLoader";
+import { importSpecSource } from "./browser";
+export const defaultSpecLoader = createSpecLoader({
+  executeCommand: (input) => executeCommand(input),
+  fread,
+  isInDevMode,
+  importSource: importSpecSource,
+  importModule: (url) => import(/* @vite-ignore */ url),
+  readJson: (url) => fetch(url).then((response) => response.json()),
 });
-
-const createPublicSpecsRequest = async () => {
-  if (publicSpecsRequest === undefined) {
-    publicSpecsRequest = jsonFromPublicCDN("index")
-      .then(INDEX_ZOD.parse)
-      .then((index) => ({
-        completions: new Set(index.completions),
-        diffVersionedSpecs: new Set(index.diffVersionedCompletions),
-      }))
-      .catch(() => {
-        publicSpecsRequest = undefined;
-        return { completions: new Set(), diffVersionedSpecs: new Set() };
-      });
-  }
-  return publicSpecsRequest;
-};
-
-export async function publicSpecExists(name: string): Promise<boolean> {
-  const { completions } = await createPublicSpecsRequest();
-  return completions.has(name);
-}
-
-export async function isDiffVersionedSpec(name: string): Promise<boolean> {
-  const { diffVersionedSpecs } = await createPublicSpecsRequest();
-  return diffVersionedSpecs.has(name);
-}
-
-export async function preloadSpecs(): Promise<SpecFileImport[]> {
-  return Promise.all(
-    MOST_USED_SPECS.map(async (name) => {
-      // TODO: refactor everything to allow the correct diff-versioned specs to be loaded
-      // too, now we are only loading the index
-      if (await isDiffVersionedSpec(name)) {
-        return importFromPublicCDN(`${name}/index`);
-      }
-      return importFromPublicCDN(name);
-    }).map((promise) => promise.catch((e) => e)),
-  );
-}
+export const {
+  importString,
+  importSpecFromFile,
+  importFromPublicCDN,
+  importFromLocalhost,
+  getCachedCLIVersion,
+  getVersionFromFullFile,
+  clearSpecIndex,
+  parseSpecIndex,
+  publicSpecExists,
+  isDiffVersionedSpec,
+  preloadSpecs,
+} = defaultSpecLoader;

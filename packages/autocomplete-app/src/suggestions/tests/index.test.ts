@@ -1,7 +1,6 @@
 import type { Suggestion } from "@fig/shared/internal";
 import { SETTINGS } from "@fig/api-bindings/wrappers";
-import * as settings from "@fig/api-bindings/wrappers";
-import { type MockInstance, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   getStaticArgSuggestions,
   filterSuggestions,
@@ -177,30 +176,15 @@ describe("filterSuggestions", () => {
   });
 
   describe("should not add auto-execute when setting disables it", () => {
-    // export declare const getSetting: <T = unknown>(
-    //   key: SETTINGS,
-    //   defaultValue?: any,
-    // ) => T;
-    let spy: MockInstance;
-    beforeAll(() => {
-      spy = vi.spyOn(settings, "getSetting");
-      spy.mockImplementation((arg) => {
-        if (arg == SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION) return true;
-        return undefined;
-      });
-    });
-
-    afterAll(() => {
-      spy.mockRestore();
-    });
-
     it("to the matching suggestion", () => {
       const suggestions: Suggestion[] = [
         { name: "foo", description: "Some description" },
         { name: "foobar" },
         { name: "bar" },
       ];
-      const result = filterSuggestions(suggestions, "foo", false, false);
+      const result = filterSuggestions(suggestions, "foo", false, false, {
+        [SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION]: true,
+      });
       expect(result).toEqual([
         expect.not.objectContaining({
           type: "auto-execute",
@@ -211,7 +195,9 @@ describe("filterSuggestions", () => {
 
     it("when `suggestCurrentToken: false`", () => {
       const suggestions: Suggestion[] = [{ name: "foo" }, { name: "bar" }];
-      const result = filterSuggestions(suggestions, "fo", false, false);
+      const result = filterSuggestions(suggestions, "fo", false, false, {
+        [SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION]: true,
+      });
       expect(result).toEqual([
         {
           name: "foo",
@@ -221,7 +207,9 @@ describe("filterSuggestions", () => {
 
     it("when searchTerm is `.`", () => {
       const suggestions: Suggestion[] = [{ name: "..", type: "folder" }];
-      const result = filterSuggestions(suggestions, ".", false, false);
+      const result = filterSuggestions(suggestions, ".", false, false, {
+        [SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION]: true,
+      });
       expect(result).toEqual([
         expect.objectContaining({
           name: "..",
@@ -291,5 +279,30 @@ describe("deduplicateSuggestions", () => {
     expect(deduplicateSuggestions(suggestions, ["name", "displayName", "args"])).toStrictEqual(
       expected,
     );
+  });
+});
+
+describe("ranked suggestion ordering", () => {
+  it("ranks equal prefix matches by priority without reordering the input", () => {
+    const input: Suggestion[] = [
+      { name: "checkout", priority: 10 },
+      { name: "cherry-pick", priority: 90 },
+    ];
+    const result = filterSuggestions(input, "ch", false, false, {
+      [SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION]: true,
+    });
+    expect(result.map((item) => item.name)).toEqual(["cherry-pick", "checkout"]);
+    expect(input.map((item) => item.name)).toEqual(["checkout", "cherry-pick"]);
+  });
+
+  it("ranks fuzzy score ahead of priority", () => {
+    const input: Suggestion[] = [
+      { name: "x-c-h-e-c-k", priority: 100 },
+      { name: "checkout", priority: 1 },
+    ];
+    const result = filterSuggestions(input, "check", true, false, {
+      [SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION]: true,
+    });
+    expect(result.map((item) => item.name)).toEqual(["checkout", "x-c-h-e-c-k"]);
   });
 });

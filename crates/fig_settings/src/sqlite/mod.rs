@@ -323,8 +323,8 @@ fn has_migration<C: Deref<Target = Connection>>(conn: &C, version: usize, max_ve
         return Ok(count >= 1);
     }
 
-    // Continuing from the previously implemented logic - any migrations after the 7th can have a simple
-    // maximum version check, since we can reasonably assume if any version >=7 will have all
+    // Continuing from the previously implemented logic - any migrations after the 7th can have a
+    // simple maximum version check, since we can reasonably assume if any version >=7 will have all
     // migrations prior to it.
     #[allow(clippy::match_like_matches_macro)]
     Ok(match max_version {

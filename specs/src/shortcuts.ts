@@ -4,8 +4,8 @@ const shortcut: Fig.Arg = {
   generators: {
     script: ["shortcuts", "list"],
     postProcess: (list) =>
-      list.split("\n").map((shortcut) => ({
-        name: shortcut,
+      list.split("\n").map((shortcutName) => ({
+        name: shortcutName,
         icon: "fig:///System/Applications/Shortcuts.app",
       })),
   },

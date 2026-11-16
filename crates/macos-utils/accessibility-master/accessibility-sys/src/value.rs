@@ -25,7 +25,12 @@ pub const kAXValueTypeCFRange: u32 = 4;
 pub const kAXValueTypeAXError: u32 = 5;
 pub const kAXValueTypeIllegal: u32 = 0;
 
-pub enum __AXValue {}
+// Opaque macOS object: only pointers cross the FFI boundary.
+#[repr(C)]
+pub struct __AXValue {
+    _private: (),
+    _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+}
 pub type AXValueRef = *mut __AXValue;
 
 declare_TCFType! {
@@ -55,7 +60,7 @@ impl AXValue {
             AXValueGetValue(
                 self.as_concrete_TypeRef(),
                 kAXValueTypeCGRect,
-                &mut rect as *mut _ as *mut _,
+                std::ptr::from_mut(&mut rect).cast(),
             )
         } {
             Some(rect)
@@ -78,7 +83,7 @@ impl AXValue {
             AXValueGetValue(
                 self.as_concrete_TypeRef(),
                 kAXValueTypeCGSize,
-                &mut size as *mut _ as *mut _,
+                std::ptr::from_mut(&mut size).cast(),
             )
         } {
             Some(size)
@@ -98,7 +103,7 @@ impl AXValue {
             AXValueGetValue(
                 self.as_concrete_TypeRef(),
                 kAXValueTypeCGPoint,
-                &mut point as *mut _ as *mut _,
+                std::ptr::from_mut(&mut point).cast(),
             )
         } {
             Some(point)
@@ -118,7 +123,7 @@ impl AXValue {
             AXValueGetValue(
                 self.as_concrete_TypeRef(),
                 kAXValueTypeCFRange,
-                &mut range as *mut _ as *mut _,
+                std::ptr::from_mut(&mut range).cast(),
             )
         } {
             Some(range)
@@ -175,4 +180,56 @@ extern "C" {
     pub fn AXValueCreate(theType: AXValueType, valuePtr: *const c_void) -> AXValueRef;
     pub fn AXValueGetType(value: AXValueRef) -> AXValueType;
     pub fn AXValueGetValue(value: AXValueRef, theType: AXValueType, valuePtr: *mut c_void) -> bool;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The caller pairs the concrete value with the corresponding AXValueType.
+    unsafe fn native_value<T>(kind: AXValueType, value: &T) -> AXValue {
+        let raw = unsafe { AXValueCreate(kind, std::ptr::from_ref(value).cast()) };
+        assert!(!raw.is_null());
+        unsafe { AXValue::wrap_under_create_rule(raw) }
+    }
+
+    #[test]
+    fn geometry_round_trips_through_macos_ax_values() {
+        let point = CGPoint { x: 12.0, y: -3.0 };
+        let size = CGSize {
+            width: 640.0,
+            height: 480.0,
+        };
+        let rect = CGRect { origin: point, size };
+        // SAFETY: Each tag matches the layout of its input value; AXValueCreate copies it.
+        let point_value = unsafe { native_value(kAXValueTypeCGPoint, &point) };
+        let size_value = unsafe { native_value(kAXValueTypeCGSize, &size) };
+        let rect_value = unsafe { native_value(kAXValueTypeCGRect, &rect) };
+        assert_eq!(point_value.as_point().map(|v| (v.x, v.y)), Some((point.x, point.y)));
+        assert_eq!(
+            size_value.as_size().map(|v| (v.width, v.height)),
+            Some((size.width, size.height))
+        );
+        assert_eq!(
+            rect_value
+                .as_rect()
+                .map(|v| (v.origin.x, v.origin.y, v.size.width, v.size.height)),
+            Some((point.x, point.y, size.width, size.height))
+        );
+        assert!(point_value.as_rect().is_none());
+        assert!(size_value.as_range().is_none());
+        assert!(rect_value.as_point().is_none());
+    }
+
+    #[test]
+    fn selected_text_range_round_trips_through_macos_ax_values() {
+        let range = CFRange {
+            location: 17,
+            length: 4,
+        };
+        // SAFETY: CFRange matches kAXValueTypeCFRange and lives until the copy completes.
+        let value = unsafe { native_value(kAXValueTypeCFRange, &range) };
+        assert_eq!(value.as_range(), Some(range));
+        assert!(value.as_size().is_none());
+    }
 }

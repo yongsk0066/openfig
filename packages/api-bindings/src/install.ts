@@ -8,7 +8,7 @@ import {
 } from "@fig/proto/fig";
 
 import { sendInstallRequest } from "./requests.js";
-import { type NotificationResponse, _subscribe } from "./notifications.js";
+import { type NotificationResponse, subscribeNotification } from "./notifications.js";
 
 export type Component =
   | "dotfiles"
@@ -95,7 +95,7 @@ export const installStatus = {
     handler: (isInstalled: boolean) => NotificationResponse | undefined,
   ) => {
     if (component === "accessibility") {
-      return _subscribe(
+      return subscribeNotification(
         { type: NotificationType.NOTIFY_ON_ACCESSIBILITY_CHANGE },
         (notification) => {
           switch (notification?.type?.case) {

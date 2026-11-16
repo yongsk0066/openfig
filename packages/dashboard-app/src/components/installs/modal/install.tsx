@@ -29,21 +29,13 @@ export default function InstallModal({
 
     const timer = setTimeout(() => setTimeElapsed(true), 10000);
     return () => clearTimeout(timer);
-  }, [check, timeElapsed]);
+  }, [timeElapsed]);
 
   // Skip already installed checks.
   useEffect(() => {
     if (!isInstalled) return;
     next();
   }, [isInstalled, next]);
-
-  // Reset local state on new check.
-  useEffect(() => {
-    setExplainerOpen(false);
-    setTimeElapsed(false);
-    setChecking(false);
-    setError(null);
-  }, [check, setExplainerOpen, setTimeElapsed, setChecking, setError]);
 
   function handleInstall(key: InstallCheck["installKey"]) {
     if (!key) return;
@@ -87,6 +79,7 @@ export default function InstallModal({
         {check.image && (
           <img
             src={check.image}
+            alt={`${check.title} setup illustration`}
             className="h-auto w-full min-h-20 rounded-sm bg-zinc-200 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700"
           />
         )}
@@ -126,13 +119,13 @@ export default function InstallModal({
                     <li key={i} className="flex items-baseline gap-2 text-xs">
                       <span>{i + 1}.</span>
                       <p className="flex flex-wrap gap-[0.25em]">
-                        {step.map((str, i) => {
+                        {step.map((str, partIndex) => {
                           switch (str.tag) {
                             case "code":
-                              return <Code key={i}>{str.content}</Code>;
+                              return <Code key={partIndex}>{str.content}</Code>;
                             default:
                             case "span":
-                              return <span key={i}>{str.content}</span>;
+                              return <span key={partIndex}>{str.content}</span>;
                           }
                         })}
                       </p>

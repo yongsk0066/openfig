@@ -1,12 +1,17 @@
 import logger from "loglevel";
 
-import { executeCommand } from "@fig/api-bindings/wrappers";
-import { runPipingConsoleMethods } from "../utils";
-import { runCachedGenerator, type GeneratorContext, haveContextForGenerator } from "./helpers";
+import { type GeneratorContext, haveContextForGenerator } from "./helpers";
+import type { GeneratorServices } from "./helpers";
+
+const transform = (result: Fig.Suggestion[]) =>
+  result.map((name) => ({ ...name, type: name.type || "arg" }));
 
 export async function getCustomSuggestions(
   generator: Fig.Generator,
   context: GeneratorContext,
+  signal: AbortSignal | undefined,
+  services: Pick<GeneratorServices, "execute" | "cached" | "invoke" | "listDirectory">,
+  onRefresh?: (suggestions: Fig.Suggestion[]) => void,
 ): Promise<Fig.Suggestion[]> {
   if (!generator.custom) {
     return [];
@@ -27,25 +32,31 @@ export async function getCustomSuggestions(
   } = context;
 
   try {
-    const result = await runCachedGenerator(
+    const result = await services.cached(
       generator,
       context,
       () =>
-        runPipingConsoleMethods(() =>
-          generator.custom!(tokenArray, executeCommand, {
+        services.invoke(() =>
+          generator.custom!(tokenArray, (input) => services.execute(input, 5000, signal), {
             currentWorkingDirectory,
             currentProcess,
             sshPrefix: "",
             searchTerm,
             environmentVariables,
             isDangerous,
+            listDirectory: services.listDirectory
+              ? (path) => services.listDirectory!(path, signal)
+              : undefined,
           }),
         ),
       generator.cache?.cacheKey,
+      signal,
+      onRefresh ? (value) => onRefresh(transform(value)) : undefined,
     );
 
-    return result.map((name) => ({ ...name, type: name.type || "arg" }));
+    return transform(result);
   } catch (e) {
+    if (signal?.aborted) throw signal.reason;
     logger.error("we had an error with the custom function generator", e);
 
     return [];

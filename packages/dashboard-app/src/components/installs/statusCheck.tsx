@@ -14,7 +14,7 @@ export default function StatusCheck({ check }: { check: InstallCheckWithInstallK
   function fixInstall() {
     Install.install(check.installKey)
       .then(() => {
-        refreshStatus();
+        void refreshStatus();
       })
       .catch((e) => {
         console.error(e);
@@ -23,7 +23,7 @@ export default function StatusCheck({ check }: { check: InstallCheckWithInstallK
   }
 
   useEffect(() => {
-    refreshStatus();
+    void refreshStatus();
   }, [refreshStatus]);
 
   return (

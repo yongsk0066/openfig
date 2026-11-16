@@ -5,6 +5,7 @@ use fig_os_shim::Env;
 pub use fig_proto::fig::client_originated_message::Submessage as ClientOriginatedSubMessage;
 pub use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
+    CancelProcessRequest,
     ClientOriginatedMessage,
     DragWindowRequest,
     InsertTextRequest,
@@ -32,6 +33,7 @@ pub enum DesktopRequest {
     InsertText(InsertTextRequest),
     Notification(NotificationRequest),
     RunProcess(RunProcessRequest),
+    CancelProcess(CancelProcessRequest),
     UpdateApplicationProperties(UpdateApplicationPropertiesRequest),
     PositionWindow(PositionWindowRequest),
     DragWindow(DragWindowRequest),
@@ -91,6 +93,7 @@ async fn handle_request(
         Some(submessage) => {
             use ClientOriginatedSubMessage::{
                 AppendToFileRequest,
+                CancelProcessRequest,
                 ContentsOfDirectoryRequest,
                 CreateDirectoryRequest,
                 DestinationOfSymbolicLinkRequest,
@@ -129,6 +132,7 @@ async fn handle_request(
                 NotificationRequest(request) => desktop(message_id, DesktopRequest::Notification(request)).await,
                 // process
                 RunProcessRequest(request) => desktop(message_id, DesktopRequest::RunProcess(request)).await,
+                CancelProcessRequest(request) => desktop(message_id, DesktopRequest::CancelProcess(request)).await,
                 // properties
                 UpdateApplicationPropertiesRequest(request) => {
                     desktop(message_id, DesktopRequest::UpdateApplicationProperties(request)).await

@@ -4,7 +4,11 @@
   "license": "MIT OR Apache-2.0",
   "author": "OpenFig contributors",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts",
+    "./browser": "./src/browser.ts"
+  },
   "scripts": {
     "test": "vitest",
     "typecheck": "tsc --noEmit"
@@ -15,8 +19,7 @@
     "@fig/spec-generators": "workspace:^",
     "@fig/spec-helpers": "workspace:^",
     "loglevel": "^1.9.2",
-    "semver": "^7.8.5",
-    "zod": "catalog:"
+    "semver": "^7.8.6"
   },
   "devDependencies": {
     "@fig/config": "workspace:^",

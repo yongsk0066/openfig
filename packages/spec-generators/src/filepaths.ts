@@ -44,8 +44,8 @@ export function sortFilesAlphabetically(array: string[], skip: string[] = []): s
 
   // Put all files beginning with . after all those that don't, sort alphabetically within each.
   return [
-    ...results.filter((x) => !x.startsWith(".")).sort((a, b) => a.localeCompare(b)),
-    ...results.filter((x) => x.startsWith(".")).sort((a, b) => a.localeCompare(b)),
+    ...results.filter((x) => !x.startsWith(".")).toSorted((a, b) => a.localeCompare(b)),
+    ...results.filter((x) => x.startsWith(".")).toSorted((a, b) => a.localeCompare(b)),
     "../",
   ];
 }
@@ -140,7 +140,7 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
 
     return suggestions.map((suggestion) => ({
       ...suggestion,
-      ...((suggestion.type === "file" ? editFileSuggestions : editFolderSuggestions) || {}),
+      ...(suggestion.type === "file" ? editFileSuggestions : editFolderSuggestions),
     }));
   };
 
@@ -174,12 +174,16 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
         ) ?? "/";
 
       try {
-        const data = await executeCommand({
-          command: "ls",
-          args: ["-1ApL"],
-          cwd: currentInsertedDirectory,
-        });
-        const sortedFiles = sortFilesAlphabetically(data.stdout.split("\n"), [".DS_Store"]);
+        const files = generatorContext.listDirectory
+          ? await generatorContext.listDirectory(currentInsertedDirectory)
+          : (
+              await executeCommand({
+                command: "ls",
+                args: ["-1ApL"],
+                cwd: currentInsertedDirectory,
+              })
+            ).stdout.split("\n");
+        const sortedFiles = sortFilesAlphabetically(files, [".DS_Store"]);
 
         const generatorOutputArray: Fig.TemplateSuggestion[] = [];
         // Then loop through them and add them to the generatorOutputArray

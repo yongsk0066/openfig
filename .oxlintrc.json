@@ -75,6 +75,20 @@
   ],
   "overrides": [
     {
+      "files": [
+        "packages/autocomplete-parser/src/{core,parserCore,specLoader,specRepository}.ts",
+        "packages/autocomplete-app/src/state/{model,transitions,effects,generator-plan,pipeline,insertion,keypress,types,fig-state}.ts",
+        "packages/autocomplete-app/src/{runtime,engine,parser/coordinator,history/repository,suggestions/index,suggestions/sorting}.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": ["error", "window", "document", "localStorage", "globalThis"]
+      }
+    },
+    {
+      "files": ["packages/**/*.ts", "packages/**/*.tsx"],
+      "rules": { "typescript/no-floating-promises": "error" }
+    },
+    {
       // Upstream completion specs. A generator callback's parameters are positional
       // (`(tokens, executeShellCommand, context)`), so a leading one cannot be dropped
       // when a later one is used; `after-used` still flags genuinely dead trailing params.

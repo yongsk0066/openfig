@@ -48,10 +48,7 @@ use objc2::rc::{
     Allocated,
     Retained,
 };
-use objc2::runtime::{
-    AnyObject,
-    NSObjectProtocol,
-};
+use objc2::runtime::NSObjectProtocol;
 use objc2::{
     AllocAnyThread,
     DefinedClass,
@@ -240,18 +237,18 @@ impl WindowServer {
         // stay alive and registered until `remove_observer`, and it must actually implement
         // the selector, with the ObjC signature `-(void)sel:(NSNotification *)notif`.
         // Evidence:
-        // - The four statics are initialized by AppKit before `main` and are never written by this program,
-        //   so reading them is not a data race and each is a live `NSNotificationName`.
+        // - The four statics are initialized by AppKit before `main` and are never written by this
+        //   program, so reading them is not a data race and each is a live `NSNotificationName`.
         // - `observer` is a `Retained<ObserverClass>` that this function moves into the returned
-        //   `WindowServer`, and `WindowServer::drop` calls `remove_observer` on the same workspace center,
-        //   so the registration never outlives the object.
+        //   `WindowServer`, and `WindowServer::drop` calls `remove_observer` on the same workspace
+        //   center, so the registration never outlives the object.
         // - `ObserverClass` defines exactly `activeSpaceChanged:`, `didLaunchApplication:`,
-        //   `didTerminateApplication:` and `didActivateApplication:` in the `define_class!` block below,
-        //   each `fn(&self, &NSNotification)` — the required IMP signature. The `sel!` macro produces those
-        //   same names, checked here by inspection because ObjC selector dispatch is not type-checked by
-        //   rustc.
-        // - `NSNotificationCenter` is documented thread-safe, so registering here (main thread) is sound
-        //   regardless of which thread posts.
+        //   `didTerminateApplication:` and `didActivateApplication:` in the `define_class!` block
+        //   below, each `fn(&self, &NSNotification)` — the required IMP signature. The `sel!` macro
+        //   produces those same names, checked here by inspection because ObjC selector dispatch is
+        //   not type-checked by rustc.
+        // - `NSNotificationCenter` is documented thread-safe, so registering here (main thread) is
+        //   sound regardless of which thread posts.
         // Postcondition: AppKit holds an unretained reference to `observer`; the
         // `WindowServer` value returned below is what keeps it alive.
         unsafe {
@@ -330,11 +327,11 @@ impl Drop for WindowServer {
         // previously registered on this center, or not registered at all (AppKit documents
         // `-removeObserver:` as a no-op in that case).
         // Evidence:
-        // - `self.observer` is alive: we are inside `WindowServer::drop`, so the `Retained` field has not
-        //   been released yet, and `Retained` guarantees a `+1` on it.
-        // - It was registered on `NSWorkspace.sharedWorkspace.notificationCenter` in `WindowServer::new`;
-        //   `workspace_center()` returns that same singleton (Apple documents `sharedWorkspace` as a
-        //   process-wide singleton).
+        // - `self.observer` is alive: we are inside `WindowServer::drop`, so the `Retained` field
+        //   has not been released yet, and `Retained` guarantees a `+1` on it.
+        // - It was registered on `NSWorkspace.sharedWorkspace.notificationCenter` in
+        //   `WindowServer::new`; `workspace_center()` returns that same singleton (Apple documents
+        //   `sharedWorkspace` as a process-wide singleton).
         // Postcondition: after this call AppKit no longer holds the unretained observer
         // pointer, so releasing `self.observer` immediately afterwards cannot leave AppKit
         // with a dangling reference. This ordering is exactly why the removal lives in `Drop`.
@@ -356,11 +353,14 @@ pub struct Ivars {
     // borrow of the `Pin<Box<WindowServerInner>>` that the owning `WindowServer` keeps in its
     // `_inner` field (see `WindowServerInner::new_with_observer`). It is therefore:
     //   - non-null, aligned for `WindowServerInner`, and pointing at an initialized value;
-    //   - address-stable, because the box is pinned and `_inner` is never moved out of or reassigned;
-    //   - live for at least as long as the `Retained<ObserverClass>` stored next to it in `WindowServer`, because
-    //     `WindowServer::drop` unregisters the observer from the notification center *before* dropping either field,
-    //     so no selector can run after the box is freed;
-    //   - valid for writes, i.e. `&mut *handler` does not launder a shared-reference provenance into a mutable one.
+    //   - address-stable, because the box is pinned and `_inner` is never moved out of or
+    //     reassigned;
+    //   - live for at least as long as the `Retained<ObserverClass>` stored next to it in
+    //     `WindowServer`, because `WindowServer::drop` unregisters the observer from the
+    //     notification center *before* dropping either field, so no selector can run after the box
+    //     is freed;
+    //   - valid for writes, i.e. `&mut *handler` does not launder a shared-reference provenance
+    //     into a mutable one.
     //
     // Aliasing obligation carried by every user: the selectors below each form
     // `&mut WindowServerInner` from it. They may do so only if no other live reference to the
@@ -403,27 +403,14 @@ define_class!(
             let this = this.set_ivars(Ivars {
                 handler
             });
-            // SAFETY:
-            // Operation: `msg_send![super(this), init]` — an `objc_msgSendSuper` to
-            // `-[NSObject init]`.
-            // Contract (objc2 0.6 `msg_send!`): the receiver must be valid for the superclass
-            // method, the selector must exist on the superclass, and the declared return type
-            // must match the method's ObjC return type and ownership family.
-            // Evidence:
-            // - `this` is an `Allocated<Self>` whose ivars were just initialized by
-            //   `set_ivars`, which is the exact precondition objc2 requires before sending
-            //   `init` to a `define_class!` type.
-            // - `-[NSObject init]` exists and is in the `init` family, so it consumes the
-            //   allocation and returns `+1`; `Option<Retained<Self>>` is the matching objc2
-            //   return type (it models `init` returning nil).
-            // Postcondition: on `Some`, the caller owns a `+1` `ObserverClass` whose
-            // `handler` ivar is the pointer supplied by `ObserverClass::new`.
-            unsafe { msg_send![super(this), init] }
+            // AXUIElementCreateApplication returns an owned reference; OwnedAxRef balances it.
+        // Notification objects are checked before using NSWorkspace methods.
+        unsafe { msg_send![super(this), init] }
         }
 
         #[unsafe(method(didActivateApplication:))]
         fn did_activate_application(&self, notif: &NSNotification) {
-            let inner = self.ivars().handler as *mut WindowServerInner;
+            let inner = self.ivars().handler.cast::<WindowServerInner>();
             // SAFETY:
             // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
             // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
@@ -448,7 +435,7 @@ define_class!(
 
         #[unsafe(method(activeSpaceChanged:))]
         fn active_space_changed(&self, notif: &NSNotification) {
-            let inner = self.ivars().handler as *mut WindowServerInner;
+            let inner = self.ivars().handler.cast::<WindowServerInner>();
             // SAFETY:
             // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
             // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
@@ -473,7 +460,7 @@ define_class!(
 
         #[unsafe(method(didTerminateApplication:))]
         fn did_terminate_application(&self, notif: &NSNotification) {
-            let inner = self.ivars().handler as *mut WindowServerInner;
+            let inner = self.ivars().handler.cast::<WindowServerInner>();
             // SAFETY:
             // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
             // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
@@ -498,7 +485,7 @@ define_class!(
 
         #[unsafe(method(didLaunchApplication:))]
         fn did_launch_application(&self, notif: &NSNotification) {
-            let inner = self.ivars().handler as *mut WindowServerInner;
+            let inner = self.ivars().handler.cast::<WindowServerInner>();
             // SAFETY:
             // Operations: (1) the `as *mut WindowServerInner` pointer cast, and
             // (2) `&mut *inner`, i.e. creating a `&mut WindowServerInner` from a raw pointer.
@@ -544,13 +531,14 @@ impl ObserverClass {
         // is in the `init` family — the receiver must be a fresh `Allocated<Self>` that is
         // consumed by the call, with the result owned at `+1`.
         // Evidence:
-        // - `Self::alloc()` (`AllocAnyThread`) returns exactly `Allocated<ObserverClass>`. objc2 0.6
-        //   requires `AllocAnyThread` to be implemented, which `define_class!` does for a
+        // - `Self::alloc()` (`AllocAnyThread`) returns exactly `Allocated<ObserverClass>`. objc2
+        //   0.6 requires `AllocAnyThread` to be implemented, which `define_class!` does for a
         //   non-`MainThreadOnly` class; allocation itself is thread-agnostic.
-        // - `initWithHandler:` is defined immediately above with `#[unsafe(method_id(initWithHandler:))]`
-        //   and signature `(Allocated<Self>, *mut c_void) -> Option<Retained<Self>>`, so both the selector
-        //   and the argument type match, and `Retained<Self>` is a valid return type because `-[NSObject
-        //   init]` never returns nil for a successful allocation.
+        // - `initWithHandler:` is defined immediately above with
+        //   `#[unsafe(method_id(initWithHandler:))]` and signature `(Allocated<Self>, *mut c_void)
+        //   -> Option<Retained<Self>>`, so both the selector and the argument type match, and
+        //   `Retained<Self>` is a valid return type because `-[NSObject init]` never returns nil
+        //   for a successful allocation.
         // Postcondition: a `+1` `ObserverClass` whose `handler` ivar is `handler`.
         unsafe { msg_send![Self::alloc(), initWithHandler:handler] }
     }
@@ -638,7 +626,7 @@ impl WindowServerInner {
         // shared reference, so the mutable borrow has to happen here, at the derivation point.
         // See docs/13-unsafe-review.md #4.
         // Postcondition: `handler` satisfies the `Ivars::handler` safety invariant.
-        let handler = unsafe { Pin::get_unchecked_mut(pin.as_mut()) } as *mut Self as *mut c_void;
+        let handler = std::ptr::from_mut(unsafe { Pin::get_unchecked_mut(pin.as_mut()) }).cast::<c_void>();
         let r = ObserverClass::new(handler);
         (pin, r)
     }
@@ -764,8 +752,8 @@ impl WindowServerInner {
         //   released, so `ax_ref` outlives every observer.
         // - (2) `T` is instantiated at `AccessibilityCallbackData` and the callback is
         //   `application_ax_callback`, whose first act is `&mut *(refcon as *mut
-        //   AccessibilityCallbackData)`. The two match by construction; this pairing is the whole reason
-        //   `create` is unsafe.
+        //   AccessibilityCallbackData)`. The two match by construction; this pairing is the whole
+        //   reason `create` is unsafe.
         // - (3) is this function's own `# Safety` clause 1, discharged by its callers.
         // - Contract of `subscribe`: `ax_event` must be a HIServices notification name.
         //   `TRACKED_NOTIFICATIONS` contains only `kAX*Notification` constants re-exported by
@@ -917,7 +905,7 @@ impl WindowServerInner {
 
             // objc2-foundation 0.3 yields Retained<T> from NSArray::iter, not &T.
             for app in workspace.runningApplications().iter() {
-                self.register(&app, false)
+                self.register(&app, false);
             }
         }
 
@@ -935,17 +923,8 @@ impl WindowServerInner {
 
 impl WindowServerHandler for WindowServerInner {
     fn did_activate_application(&mut self, notif: &NSNotification) {
-        // SAFETY:
-        // Operations: `get_app_from_notification` and `Self::register`, both unsafe fns.
-        // Contract of `get_app_from_notification` (see its `# Safety`): the notification's
-        // `NSWorkspaceApplicationKey` entry must really be an `NSRunningApplication`, because
-        // the helper casts it without a class check.
-        // Evidence: AppKit documents `NSWorkspaceDidActivateApplicationNotification` as
-        // carrying exactly that key with an `NSRunningApplication` value, and
-        // `WindowServer::new` registered this selector for that name only.
-        // Contract of `register`: run-loop affinity. Evidence: `NSWorkspace`'s notification
-        // center delivers workspace notifications on the main thread, which is the thread
-        // whose run loop `register_all` used.
+        // SAFETY: register runs on the main run-loop thread delivering NSWorkspace
+        // notifications. get_app_from_notification performs a checked downcast.
         unsafe {
             if let Some(app) = get_app_from_notification(notif) {
                 let bundle_id = app_bundle_id(&app);
@@ -980,13 +959,15 @@ impl WindowServerHandler for WindowServerInner {
         // for a well-formed pid, and `wrap_under_get_rule` asserts non-null in any case.
         unsafe {
             let Some(object) = notif.object() else { return };
-            let workspace: Retained<NSWorkspace> = Retained::<AnyObject>::cast(object);
+            let Ok(workspace) = object.downcast::<NSWorkspace>() else {
+                return;
+            };
             let Some(app) = workspace.frontmostApplication() else {
                 return;
             };
             let pid = app.processIdentifier();
-            let ax_app = AXUIElementCreateApplication(pid);
-            let app_elem: UIElement = ax_app.into();
+            let ax_app = OwnedAxRef(AXUIElementCreateApplication(pid));
+            let app_elem: UIElement = ax_app.0.into();
             if let Ok(window) = app_elem.focused_window() {
                 let fullscreen = window.is_fullscreen();
                 if let Ok(is_fullscreen) = fullscreen
@@ -1001,50 +982,38 @@ impl WindowServerHandler for WindowServerInner {
     }
 
     fn did_terminate_application(&mut self, notif: &NSNotification) {
-        // SAFETY:
-        // Operation: `get_app_from_notification`, an unsafe fn.
-        // Contract and evidence are as in `did_activate_application`, with
-        // `NSWorkspaceDidTerminateApplicationNotification` as the documented source of the
-        // `NSWorkspaceApplicationKey` -> `NSRunningApplication` entry.
-        // `NSWorkspace::sharedWorkspace().runningApplications()` and `app_bundle_id` are safe;
-        // they are inside this block only for lexical convenience.
-        unsafe {
-            if let Some(ns_app) = get_app_from_notification(notif)
-                && let Some(bundle_id) = app_bundle_id(&ns_app)
-            {
-                trace!("Terminated application - {bundle_id:?}");
+        if let Some(ns_app) = get_app_from_notification(notif)
+            && let Some(bundle_id) = app_bundle_id(&ns_app)
+        {
+            trace!("Terminated application - {bundle_id:?}");
 
-                // The notification's `NSRunningApplication` is already dead, and Apple
-                // documents `processIdentifier` as -1 once that is the case, so the terminated
-                // instance cannot be identified by pid. Ask instead which of the pids we track
-                // for that bundle id are still alive — one lookup per tracked instance, rather
-                // than re-enumerating all ~143 running applications and allocating a `String`
-                // per app, which is what this used to do on every quit.
-                let stale = keys_to_deregister(
-                    self.observers.iter().map(|entry| entry.key().clone()),
-                    &bundle_id,
-                    |pid| NSRunningApplication::runningApplicationWithProcessIdentifier(pid).is_some(),
-                );
+            // The notification's `NSRunningApplication` is already dead, and Apple
+            // documents `processIdentifier` as -1 once that is the case, so the terminated
+            // instance cannot be identified by pid. Ask instead which of the pids we track
+            // for that bundle id are still alive — one lookup per tracked instance, rather
+            // than re-enumerating all ~143 running applications and allocating a `String`
+            // per app, which is what this used to do on every quit.
+            let stale = keys_to_deregister(
+                self.observers.iter().map(|entry| entry.key().clone()),
+                &bundle_id,
+                |pid| NSRunningApplication::runningApplicationWithProcessIdentifier(pid).is_some(),
+            );
 
-                for key in stale {
-                    trace!("Deregistering {:?} (pid {})", key.bundle_id, key.pid);
-                    self.deregister_one(&key);
-                }
+            for key in stale {
+                trace!("Deregistering {:?} (pid {})", key.bundle_id, key.pid);
+                self.deregister_one(&key);
             }
         }
     }
 
     fn did_launch_application(&mut self, notif: &NSNotification) {
-        // SAFETY:
-        // Operations: `get_app_from_notification` and `Self::register`.
-        // Contracts and evidence are as in `did_activate_application`, with
-        // `NSWorkspaceDidLaunchApplicationNotification` as the documented source of the
-        // `NSWorkspaceApplicationKey` -> `NSRunningApplication` entry.
+        // SAFETY: register runs on the main run-loop thread delivering NSWorkspace
+        // notifications. get_app_from_notification performs a checked downcast.
         unsafe {
             if let Some(app) = get_app_from_notification(notif) {
                 let bundle_id = app_bundle_id(&app);
                 trace!("Launched application - {bundle_id:?}");
-                self.register(&app, true)
+                self.register(&app, true);
             }
         }
     }
@@ -1090,18 +1059,18 @@ unsafe extern "C" fn application_ax_callback(
     // initialized, in a live allocation, mutable-capable provenance, and exclusive for the
     // lifetime of the reference.
     // Evidence:
-    // - Non-null: the `is_null` branch immediately above returned, and nothing between the check and
-    //   here can change `refcon` (it is a by-value parameter).
+    // - Non-null: the `is_null` branch immediately above returned, and nothing between the check
+    //   and here can change `refcon` (it is a by-value parameter).
     // - Alignment, initialization, liveness and provenance: `# Safety` clause 1 above, which
-    //   `AXObserver::subscribe` discharges — it derives the pointer with `Pin::get_unchecked_mut` from
-    //   a pinned `Box<AccessibilityCallbackData>` that stays alive until the run-loop source is removed
-    //   in `AXObserver::drop`.
-    // - Exclusivity: `# Safety` clause 4. Run-loop sources are serviced serially on one thread, and the
-    //   only other path that touches the same allocation is `AXObserver::drop`, which removes the
-    //   source before freeing the box.
+    //   `AXObserver::subscribe` discharges — it derives the pointer with `Pin::get_unchecked_mut`
+    //   from a pinned `Box<AccessibilityCallbackData>` that stays alive until the run-loop source
+    //   is removed in `AXObserver::drop`.
+    // - Exclusivity: `# Safety` clause 4. Run-loop sources are serviced serially on one thread, and
+    //   the only other path that touches the same allocation is `AXObserver::drop`, which removes
+    //   the source before freeing the box.
     // Postcondition: the `&mut` lives to the end of this function; nothing in the body calls
     // back into `AXObserver` or the run loop, so it cannot be re-entered while it is live.
-    let cb_data: &mut AccessibilityCallbackData = &mut *(refcon as *mut AccessibilityCallbackData);
+    let cb_data: &mut AccessibilityCallbackData = &mut *(refcon.cast::<AccessibilityCallbackData>());
 
     // SAFETY:
     // Operation: `UIElement::from(AXUIElementRef)`, which performs

@@ -2,7 +2,7 @@ import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
 import { SuggestionFlag, SpecLocationSource } from "@fig/shared/utils";
 import { getCommand } from "@fig/shell-parser";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetCaches } from "../src/caches";
+import { resetCaches } from "../src/index";
 import { loadSubcommandCached } from "../src/loadSpec";
 import { parseArguments, TokenType } from "../src/parseArguments";
 

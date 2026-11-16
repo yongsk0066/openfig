@@ -5,6 +5,7 @@ export default function ExternalLink({
   href,
   onClick,
   className,
+  children,
   ...props
 }: { href: string } & React.HTMLAttributes<HTMLAnchorElement>) {
   return (
@@ -21,6 +22,8 @@ export default function ExternalLink({
         onClick?.(e);
       }}
       {...props}
-    />
+    >
+      {children}
+    </a>
   );
 }

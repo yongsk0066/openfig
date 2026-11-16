@@ -1,10 +1,13 @@
-import * as apiBindingsWrappers from "@fig/api-bindings/wrappers/executeCommand";
-
 import type { Annotation } from "@fig/autocomplete-parser";
 import { type MockInstance, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import * as helpers from "../helpers";
+import { services } from "./services";
+const getScriptSuggestions = (
+  generator: Fig.Generator,
+  context: GeneratorContext,
+  timeout: number,
+) => scriptSuggestions(generator, context, timeout, undefined, services);
 import type { GeneratorContext } from "../helpers";
-import { getScriptSuggestions } from "../scriptSuggestionsGenerator";
+import { getScriptSuggestions as scriptSuggestions } from "../scriptSuggestionsGenerator";
 
 vi.mock("@fig/api-bindings/wrappers/src/executeCommand", async () =>
   vi.importActual("@fig/api-bindings/wrappers/src/executeCommand"),
@@ -20,13 +23,13 @@ const context: GeneratorContext = {
   environmentVariables: {},
 };
 
-describe.todo("getScriptSuggestions", () => {
+describe("getScriptSuggestions", () => {
   let executeCommand: MockInstance;
 
   beforeAll(() => {
-    vi.spyOn(helpers, "runCachedGenerator");
+    vi.spyOn(services, "cached");
     executeCommand = vi
-      .spyOn(apiBindingsWrappers, "executeCommandTimeout")
+      .spyOn(services, "execute")
       .mockResolvedValue({ status: 0, stdout: "a/\nx\nc/\nl", stderr: "" });
   });
 
@@ -100,30 +103,44 @@ describe.todo("getScriptSuggestions", () => {
         cwd: "/",
       },
       5000,
+      undefined,
     );
   });
 
   it("should call executeCommand with 'spec-specified' timeout", async () => {
     await getScriptSuggestions({ script: ["ascript"], scriptTimeout: 6000 }, context, 5000);
-    expect(executeCommand).toHaveBeenCalledWith({ args: [], command: "ascript", cwd: "/" }, 6000);
+    expect(executeCommand).toHaveBeenCalledWith(
+      { args: [], command: "ascript", cwd: "/" },
+      6000,
+      undefined,
+    );
   });
 
   it("should use the greatest between the settings timeout and the spec defined one", async () => {
     await getScriptSuggestions({ script: ["ascript"], scriptTimeout: 3500 }, context, 7000);
-    expect(executeCommand).toHaveBeenCalledWith({ args: [], command: "ascript", cwd: "/" }, 7000);
+    expect(executeCommand).toHaveBeenCalledWith(
+      { args: [], command: "ascript", cwd: "/" },
+      7000,
+      undefined,
+    );
   });
 
-  it("should call executeCommand without timeout when the user defined ones are negative", async () => {
+  it("should call executeCommand with zero timeout when the user defined ones are negative", async () => {
     await getScriptSuggestions({ script: ["ascript"], scriptTimeout: -100 }, context, -1000);
     expect(executeCommand).toHaveBeenCalledWith(
       { args: [], command: "ascript", cwd: "/" },
+      0,
       undefined,
     );
   });
 
   it("should call executeCommand with settings timeout when no 'spec-specified' one is defined", async () => {
     await getScriptSuggestions({ script: ["ascript"] }, context, 6000);
-    expect(executeCommand).toHaveBeenCalledWith({ args: [], command: "ascript", cwd: "/" }, 6000);
+    expect(executeCommand).toHaveBeenCalledWith(
+      { args: [], command: "ascript", cwd: "/" },
+      6000,
+      undefined,
+    );
   });
 
   describe("deprecated sshPrefix", () => {
@@ -137,7 +154,11 @@ describe.todo("getScriptSuggestions", () => {
         5000,
       );
 
-      expect(executeCommand).toHaveBeenCalledWith({ args: [], command: "ascript", cwd: "/" }, 5000);
+      expect(executeCommand).toHaveBeenCalledWith(
+        { args: [], command: "ascript", cwd: "/" },
+        5000,
+        undefined,
+      );
     });
   });
 });

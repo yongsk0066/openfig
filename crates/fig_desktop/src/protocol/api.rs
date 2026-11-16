@@ -14,15 +14,13 @@ use wry::http::{
     StatusCode,
 };
 
-use crate::webview::{
-    ApiState,
-    WindowId,
-};
+use crate::application::ApplicationServices;
+use crate::webview::WindowId;
 
 static APPLICATION_FIG_API: HeaderValue = HeaderValue::from_static("application/fig-api");
 
 pub async fn handle(
-    state: Arc<ApiState>,
+    state: Arc<ApplicationServices>,
     request: Request<Vec<u8>>,
     window_id: WindowId,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
@@ -45,20 +43,55 @@ pub async fn handle(
             .body(Cow::Owned(body.into()))?);
     }
 
-    let client_message = ClientOriginatedMessage::decode(Bytes::from(request.into_body()))?;
-
-    // See `ApiState::position_window`.
-    let _sequence = match client_message.submessage {
-        Some(ClientOriginatedSubMessage::PositionWindowRequest(_)) => Some(state.position_window.lock().await),
-        _ => None,
+    let epoch = if window_id == crate::webview::AUTOCOMPLETE_ID {
+        let Some(epoch) = request
+            .headers()
+            .get("x-fig-view-epoch")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+        else {
+            return Ok(Response::builder()
+                .status(StatusCode::CONFLICT)
+                .body(Cow::Borrowed(b"Missing page epoch".as_slice()))?);
+        };
+        Some(epoch)
+    } else {
+        None
     };
-
-    let ctx = fig_os_shim::Context::new();
-    let server_message =
+    let client_message = ClientOriginatedMessage::decode(Bytes::from(request.into_body()))?;
+    let operation = async {
+        let _sequence = match client_message.submessage {
+            Some(ClientOriginatedSubMessage::PositionWindowRequest(_)) => Some(state.position_window.lock().await),
+            _ => None,
+        };
+        let ctx = fig_os_shim::Context::new();
+        let scoped;
+        let proxy: &dyn crate::event::EventSender = if let Some(epoch) = epoch {
+            scoped = crate::event::PageEventSender {
+                epoch,
+                inner: state.proxy.as_ref(),
+            };
+            &scoped
+        } else {
+            state.proxy.as_ref()
+        };
         fig_desktop_api::handler::api_request(client_message, ctx.env(), async |message_id, request| {
-            crate::request::handle(request, message_id, window_id, &state, &ctx).await
+            crate::request::handle(request, message_id, window_id, &state, &ctx, proxy).await
         })
-        .await?;
+        .await
+    };
+    let server_message = if let Some(epoch) = epoch {
+        match state.page_epoch.run(epoch, operation).await {
+            Ok(result) => result?,
+            Err(()) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::CONFLICT)
+                    .body(Cow::Borrowed(b"Expired page epoch".as_slice()))?);
+            },
+        }
+    } else {
+        operation.await?
+    };
 
     let body = server_message.encode_to_vec().into();
 
@@ -96,14 +129,32 @@ mod tests {
         }
     }
 
-    fn api_state() -> Arc<ApiState> {
-        Arc::new(ApiState {
+    fn api_state() -> Arc<ApplicationServices> {
+        Arc::new(ApplicationServices {
+            page_epoch: Default::default(),
+            processes: Default::default(),
             shell_sessions: Arc::new(ShellSessions::default()),
             intercept_state: Default::default(),
             notifications_state: Arc::new(WebviewNotificationsState::default()),
             proxy: Box::new(NoEventLoop),
             position_window: Default::default(),
         })
+    }
+
+    #[tokio::test]
+    async fn stale_page_is_rejected_before_dispatch() {
+        let state = api_state();
+        state.page_epoch.renew();
+        let request = Request::builder()
+            .method(Method::POST)
+            .header(CONTENT_TYPE, APPLICATION_FIG_API.clone())
+            .header("x-fig-view-epoch", "1")
+            .body(ping_body())
+            .unwrap();
+        assert_eq!(
+            handle(state, request, AUTOCOMPLETE_ID).await.unwrap().status(),
+            StatusCode::CONFLICT
+        );
     }
 
     fn ping_body() -> Vec<u8> {
@@ -139,6 +190,7 @@ mod tests {
     async fn a_well_formed_request_is_answered() {
         let request = Request::builder()
             .method(Method::POST)
+            .header("x-fig-view-epoch", "1")
             .header(CONTENT_TYPE, APPLICATION_FIG_API.clone())
             .body(ping_body())
             .unwrap();
@@ -157,9 +209,9 @@ mod tests {
         );
     }
 
-    /// Sends each request through [`handle`] against one fresh [`ApiState`] and records every
-    /// exchange: the base64 of the response body (the bytes the webview receives) and its decoded
-    /// form for reading.
+    /// Sends each request through [`handle`] against one fresh [`ApplicationServices`] and records
+    /// every exchange: the base64 of the response body (the bytes the webview receives) and its
+    /// decoded form for reading.
     async fn transcript(requests: Vec<ClientOriginatedMessage>) -> String {
         use std::fmt::Write as _;
 
@@ -171,6 +223,7 @@ mod tests {
             writeln!(transcript, "> {request:?}").unwrap();
             let http_request = Request::builder()
                 .method(Method::POST)
+                .header("x-fig-view-epoch", "1")
                 .header(CONTENT_TYPE, APPLICATION_FIG_API.clone())
                 .body(request.encode_to_vec())
                 .unwrap();

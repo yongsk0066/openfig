@@ -4,6 +4,9 @@ export interface EnvironmentVariable {
 }
 
 export interface ShellContext {
+  /** Full snapshots replace environment and aliases, even when empty. */
+  contextSnapshot?: boolean;
+  inputRevision?: bigint;
   /** The current PID of the shell process */
   pid?: number;
   /** /dev/ttys## of terminal session */

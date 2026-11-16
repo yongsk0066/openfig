@@ -27,7 +27,37 @@ const handlers: Partial<Record<NotificationType, NotificationHandler[]>> = {};
  */
 const subscriptions: Partial<Record<NotificationType, Promise<void>>> = {};
 
-export function _unsubscribe(type: NotificationType, handler?: NotificationHandler) {
+// Each api:// fetch is dispatched independently by the desktop. Wait for the old page's
+// reset to finish; otherwise it can erase subscriptions the new page has already opened.
+// Start lazily so importing the bindings does not require a working transport yet.
+let reset: Promise<void> | undefined;
+const resetOldSubscriptions = (): Promise<void> => {
+  reset ??= new Promise<void>((resolve, reject) => {
+    sendMessage(
+      {
+        case: "notificationRequest",
+        value: create(NotificationRequestSchema, {
+          subscribe: false,
+          type: NotificationType.ALL,
+        }),
+      },
+      (response) => {
+        if (response?.case === "success" && response.value) resolve();
+        else
+          reject(
+            new Error(response?.case === "error" ? response.value : "Notification reset failed"),
+          );
+        return false;
+      },
+    );
+  }).catch((error: unknown) => {
+    reset = undefined;
+    throw error;
+  });
+  return reset;
+};
+
+export function unsubscribeNotification(type: NotificationType, handler?: NotificationHandler) {
   if (handler && handlers[type] !== undefined) {
     handlers[type] = (handlers[type] ?? []).filter((x) => x !== handler);
   }
@@ -86,7 +116,7 @@ const openSubscription = (
     );
   });
 
-export function _subscribe(
+export function subscribeNotification(
   request: Omit<NotificationRequest, "$typeName">,
   handler: NotificationHandler,
 ): Promise<Subscription> | undefined {
@@ -95,27 +125,17 @@ export function _subscribe(
     return Promise.reject(new Error("NotificationRequest type must be defined."));
   }
 
-  subscriptions[type] ??= openSubscription(request, type);
+  subscriptions[type] ??= resetOldSubscriptions()
+    .then(() => openSubscription(request, type))
+    .catch((error: unknown) => {
+      delete subscriptions[type];
+      throw error;
+    });
+  const registration: NotificationHandler = (notification) => handler(notification);
   return subscriptions[type].then(() => {
     // A registration of its own, so unsubscribing twice, or after another subscription
     // passed the same function, removes exactly this one.
-    const registration: NotificationHandler = (notification) => handler(notification);
     handlers[type] = [...(handlers[type] ?? []), registration];
-    return { unsubscribe: () => _unsubscribe(type, registration) };
+    return { unsubscribe: () => unsubscribeNotification(type, registration) };
   });
 }
-
-const unsubscribeFromAll = () => {
-  sendMessage({
-    case: "notificationRequest",
-    value: create(NotificationRequestSchema, {
-      subscribe: false,
-      type: NotificationType.ALL,
-    }),
-  });
-};
-
-if (!window?.fig?.quiet) {
-  console.log("[fig] unsubscribing any existing notifications...");
-}
-unsubscribeFromAll();

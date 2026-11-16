@@ -21,7 +21,7 @@ pub async fn restart_fig() -> Result<()> {
         Ok(())
     } else {
         println!("Restarting {PRODUCT_NAME}");
-        crate::util::quit_fig(false).await?;
+        let _ = crate::util::quit_fig(false).await?;
         tokio::time::sleep(Duration::from_millis(1000)).await;
         launch_fig_desktop(LaunchArgs {
             wait_for_socket: true,

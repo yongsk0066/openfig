@@ -9,6 +9,30 @@ import { useAutocompleteStore } from "..";
 import { storeEffects } from "../effects";
 import { figStateTransition, parserResultTransition } from "../transitions";
 import { type AutocompleteState, Visibility } from "../types";
+const publishContext = (
+  contextSnapshot: boolean,
+  environmentVariables: { key: string; value: string }[],
+  alias?: string,
+) => {
+  useAutocompleteStore.getState().setFigState((state) => ({
+    ...state,
+    shellContext: {
+      sessionId: "session-1",
+      contextSnapshot,
+      environmentVariables,
+      alias,
+    } as never,
+  }));
+};
+const stateWithSuggestions = (
+  visibleState: Visibility,
+  suggestions: Suggestion[],
+): AutocompleteState => ({
+  ...initial,
+  visibleState,
+  suggestions,
+  figState: { ...initialFigState, shellContext: { sessionId: "s" } as never },
+});
 
 vi.mock("@fig/api-bindings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@fig/api-bindings")>();
@@ -159,30 +183,35 @@ describe("transitions return effects instead of performing them", () => {
 const list = (n: number) => Array.from({ length: n }, (_, i): Suggestion => ({ name: `s${i}` }));
 
 describe("storeEffects", () => {
-  const at = (visibleState: Visibility, suggestions: Suggestion[]): AutocompleteState => ({
-    ...initial,
-    visibleState,
-    suggestions,
-    figState: { ...initialFigState, shellContext: { sessionId: "s" } as never },
-  });
-
   it("intercepts keystrokes while a non-empty list is visible, on every change of either", () => {
     expect(
-      storeEffects(at(Visibility.HIDDEN_UNTIL_KEYPRESS, []), at(Visibility.VISIBLE, list(3))),
+      storeEffects(
+        stateWithSuggestions(Visibility.HIDDEN_UNTIL_KEYPRESS, []),
+        stateWithSuggestions(Visibility.VISIBLE, list(3)),
+      ),
     ).toEqual([
       { kind: "setInterceptKeystrokes", intercept: true, globalIntercept: true, sessionId: "s" },
     ]);
     expect(
-      storeEffects(at(Visibility.VISIBLE, list(3)), at(Visibility.VISIBLE, list(2))),
+      storeEffects(
+        stateWithSuggestions(Visibility.VISIBLE, list(3)),
+        stateWithSuggestions(Visibility.VISIBLE, list(2)),
+      ),
     ).toHaveLength(1);
     expect(
-      storeEffects(at(Visibility.VISIBLE, list(3)), at(Visibility.HIDDEN_UNTIL_SHOWN, list(3))),
+      storeEffects(
+        stateWithSuggestions(Visibility.VISIBLE, list(3)),
+        stateWithSuggestions(Visibility.HIDDEN_UNTIL_SHOWN, list(3)),
+      ),
     ).toEqual([
       { kind: "setInterceptKeystrokes", intercept: false, globalIntercept: true, sessionId: "s" },
     ]);
-    expect(storeEffects(at(Visibility.VISIBLE, list(3)), at(Visibility.VISIBLE, list(3)))).toEqual(
-      [],
-    );
+    expect(
+      storeEffects(
+        stateWithSuggestions(Visibility.VISIBLE, list(3)),
+        stateWithSuggestions(Visibility.VISIBLE, list(3)),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -232,4 +261,32 @@ describe("store: effects run after the state is written", () => {
     // The superseded `search` run never started; only the two immediate `switch` runs did.
     expect(branches).toHaveBeenCalledTimes(2);
   });
+});
+
+it("distinguishes an empty context snapshot from an unchanged delta", () => {
+  publishContext(true, [{ key: "OLD", value: "value" }], "gs='git status'");
+  expect(useAutocompleteStore.getState().figState.environmentVariables).toEqual({ OLD: "value" });
+  expect(Object.keys(useAutocompleteStore.getState().figState.aliases)).toContain("gs");
+  publishContext(false, []);
+  expect(useAutocompleteStore.getState().figState.environmentVariables).toEqual({ OLD: "value" });
+  expect(Object.keys(useAutocompleteStore.getState().figState.aliases)).toContain("gs");
+  publishContext(true, [], "");
+  expect(useAutocompleteStore.getState().figState.environmentVariables).toEqual({});
+  expect(useAutocompleteStore.getState().figState.aliases).toEqual({});
+});
+
+it("rebinds interception on a session switch with an unchanged visible list", () => {
+  const before = {
+    ...initial,
+    visibleState: Visibility.VISIBLE,
+    suggestions: list(3),
+    figState: { ...initialFigState, shellContext: { sessionId: "A" } as never },
+  };
+  const after = {
+    ...before,
+    figState: { ...before.figState, shellContext: { sessionId: "B" } as never },
+  };
+  expect(storeEffects(before, after)).toEqual([
+    { kind: "setInterceptKeystrokes", intercept: true, globalIntercept: true, sessionId: "B" },
+  ]);
 });

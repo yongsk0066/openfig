@@ -10,8 +10,8 @@ import {
   localProtocol,
   fieldsAreEqual,
 } from "@fig/shared/utils";
-import { countEqualOptions, type Annotation, TokenType } from "@fig/autocomplete-parser";
-import { getSetting, SETTINGS, type SettingsMap } from "@fig/api-bindings/wrappers";
+import { countEqualOptions, type Annotation, TokenType } from "@fig/autocomplete-parser/core";
+import { SETTINGS, type SettingsMap } from "@fig/shared/settings";
 import type { GeneratorState } from "../generators/helpers";
 
 import {
@@ -21,6 +21,21 @@ import {
   getQueryTermForSuggestion,
   bestScoreMatch,
 } from "./helpers";
+const autoExecuteSuggestion = (
+  name: string,
+  description: string,
+  originalType?: SuggestionType,
+): Suggestion => ({
+  name,
+  type: "auto-execute" as SuggestionType,
+  originalType,
+  insertValue: "\n",
+  description,
+});
+const getShortName = (suggestion: Suggestion) =>
+  makeArray(suggestion.name || "").find(
+    (name) => name.startsWith("-") && !name.startsWith("--") && name.length === 2,
+  );
 
 type StaticSuggestions = {
   subcommands: Suggestion[];
@@ -148,9 +163,9 @@ export const getStaticSuggestions = memoizeOne(
       }));
 
     return {
-      subcommands: subcommands.sort(compareNamedObjectsAlphabetically),
-      additionalSuggestions: additionalSuggestions.sort(compareNamedObjectsAlphabetically),
-      options: options.sort(compareNamedObjectsAlphabetically),
+      subcommands: subcommands.toSorted(compareNamedObjectsAlphabetically),
+      additionalSuggestions: additionalSuggestions.toSorted(compareNamedObjectsAlphabetically),
+      options: options.toSorted(compareNamedObjectsAlphabetically),
     };
   },
 );
@@ -207,12 +222,6 @@ export const getAllSuggestions = (
     suggestions = suggestions.filter((suggestion) =>
       ["option", "arg"].includes(suggestion.type ?? ""),
     );
-
-    const getShortName = (suggestion: Suggestion) =>
-      makeArray(suggestion.name || "").find(
-        (name) => name.startsWith("-") && !name.startsWith("--") && name.length === 2,
-      );
-
     // Make sure we still show the option itself if we have a mandatory arg
     // (only suggesting args) in an option chain.
     if (!(suggestionFlags & SuggestionFlag.Options)) {
@@ -259,17 +268,6 @@ const addAutoExecuteSuggestion = (
   searchTerm: string,
   suggestCurrentToken: boolean,
 ): Suggestion[] => {
-  const autoExecuteSuggestion = (
-    name: string,
-    description: string,
-    originalType?: SuggestionType,
-  ): Suggestion => ({
-    name,
-    type: "auto-execute" as SuggestionType,
-    originalType,
-    insertValue: "\n",
-    description,
-  });
   // Special case handling for when the search term points to a directory path.
   if (
     searchTerm === "." ||
@@ -386,9 +384,7 @@ export const filterSuggestions = (
   suggestCurrentToken: boolean,
   settings: SettingsMap | undefined = undefined,
 ): Suggestion[] => {
-  // With `settings` this reads nothing global (the store passes its copy, which
-  // `useFigSettings` keeps identical to the module-level one).
-  const setting = (key: SETTINGS) => (settings ? settings[key] : getSetting(key)) ?? false;
+  const setting = (key: SETTINGS) => settings?.[key] ?? false;
   const shouldHideAutoExecute =
     (setting(SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION) as boolean) ||
     (setting(SETTINGS.ONLY_SHOW_ON_TAB) as boolean);
@@ -467,7 +463,7 @@ export const filterSuggestions = (
     }
   }
 
-  nonExactMatches.sort((a, b) => {
+  const rankedMatches = nonExactMatches.toSorted((a, b) => {
     if (a.score !== b.score) {
       return b.score - a.score;
     }
@@ -477,7 +473,7 @@ export const filterSuggestions = (
   let filteredSuggestions = [
     ...caseSensitiveMatchArr,
     ...nonCaseSensitiveMatchArr,
-    ...nonExactMatches.map(({ suggestion }) => suggestion),
+    ...rankedMatches.map(({ suggestion }) => suggestion),
   ];
 
   if (filteredSuggestions.length > 0 && !autoExecuteAdded && !shouldHideAutoExecute) {

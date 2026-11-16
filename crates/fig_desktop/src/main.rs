@@ -1,13 +1,10 @@
-// objc 0.2's `sel!`/`msg_send!` expand to `#[cfg(feature = "cargo-clippy")]`; rustc
-// resolves that cfg against this crate, and the module-level allow in
-// platform/macos.rs does not reach macro-expanded cfgs.
-#![allow(unexpected_cfgs)]
-
+mod application;
 mod cli;
 mod event;
-// mod insert_text;
+mod event_queue;
 mod file_watcher;
 mod install;
+mod latency;
 mod launchd_plist;
 mod local_ipc;
 pub mod notification_bus;
@@ -21,9 +18,9 @@ mod webview;
 
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::RwLock;
 
 use ::url::Url;
+pub use application::InterceptState;
 use clap::Parser;
 use event::Event;
 use fig_log::{
@@ -47,7 +44,6 @@ use sysinfo::{
 };
 use tao::event_loop::{
     EventLoop as WryEventLoop,
-    EventLoopProxy as WryEventLoopProxy,
     EventLoopWindowTarget as WryEventLoopWindowTarget,
 };
 use tracing::{
@@ -69,17 +65,8 @@ use webview::{
     url,
 };
 
-// #[global_allocator]
-// static GLOBAL: Jemalloc = Jemalloc;
-
-#[derive(Debug, Default)]
-pub struct InterceptState {
-    pub intercept_bound_keystrokes: RwLock<bool>,
-    pub intercept_global_keystrokes: RwLock<bool>,
-}
-
 pub type EventLoop = WryEventLoop<Event>;
-pub type EventLoopProxy = WryEventLoopProxy<Event>;
+pub use event_queue::EventLoopProxy;
 pub type EventLoopWindowTarget = WryEventLoopWindowTarget<Event>;
 
 #[tokio::main]
@@ -209,6 +196,13 @@ async fn allow_multiple_running_check(
 
     let app_process_name = OsString::from(APP_PROCESS_NAME);
     let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));
+    let system = match system {
+        Ok(system) => system,
+        Err(err) => {
+            error!(%err, "Failed to inspect existing Fig processes");
+            return Some(ExitCode::FAILURE);
+        },
+    };
     let processes = system.processes_by_name(&app_process_name);
     let current_uid = nix::unistd::getuid().as_raw();
 

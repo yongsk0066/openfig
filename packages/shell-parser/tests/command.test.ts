@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getCommand, Command } from "../src/command";
+const expectText = (command: Command | null) =>
+  expect(command?.tokens.map((token) => token.text) ?? []);
 
 describe("getCommand", () => {
   const aliases = {
@@ -7,9 +9,6 @@ describe("getCommand", () => {
     quote: "'q'",
     g: "git",
   };
-  const expectText = (command: Command | null) =>
-    expect(command?.tokens.map((token) => token.text) ?? []);
-
   it("works without matching aliases", () => {
     expectText(getCommand("git co ", {})).toEqual(["git", "co", ""]);
     expectText(getCommand("git co ", aliases)).toEqual(["git", "co", ""]);

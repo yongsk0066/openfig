@@ -61,30 +61,24 @@ pub fn update(
         .current_terminal_session_id
         .and_then(|i| Uuid::parse_str(&i).ok());
 
-    for session in shell_sessions.inner.lock().linked_sessions.values_mut() {
-        if request_session_id.as_ref() == Some(&session.id) {
-            session.intercept = request.intercept_bound_keystrokes.unwrap_or_default().into();
-            session.intercept_global = request.intercept_global_keystrokes.unwrap_or_default().into();
-
-            if let Err(err) = session.sender.send(ShellCommand::InterceptFigJs {
-                intercept_keystrokes: request.intercept_bound_keystrokes.unwrap_or_default(),
-                intercept_global_keystrokes: request.intercept_global_keystrokes.unwrap_or_default(),
-                actions: actions.clone(),
-                override_actions: true,
-            }) {
-                error!(%err, %session.id, "Failed sending command to shell session");
-            }
+    let deliveries = shell_sessions.collect(|session| {
+        let selected = request_session_id.as_ref() == Some(&session.id);
+        session.intercept = if selected {
+            request.intercept_bound_keystrokes.unwrap_or_default().into()
         } else {
-            session.intercept = InterceptMode::Unlocked;
-
-            if let Err(err) = session.sender.send(ShellCommand::InterceptFigJs {
-                intercept_keystrokes: false,
-                intercept_global_keystrokes: request.intercept_global_keystrokes.unwrap_or_default(),
-                actions: vec![],
-                override_actions: false,
-            }) {
-                error!(%err, %session.id, "Failed sending command to shell session");
-            }
+            InterceptMode::Unlocked
+        };
+        session.intercept_global = request.intercept_global_keystrokes.unwrap_or_default().into();
+        (session.id, session.sender.clone(), ShellCommand::InterceptFigJs {
+            intercept_keystrokes: selected && request.intercept_bound_keystrokes.unwrap_or_default(),
+            intercept_global_keystrokes: request.intercept_global_keystrokes.unwrap_or_default(),
+            actions: if selected { actions.clone() } else { vec![] },
+            override_actions: selected,
+        })
+    });
+    for (id, sender, command) in deliveries {
+        if let Err(err) = sender.send(command) {
+            error!(%err,%id,"Failed sending command to shell session");
         }
     }
 

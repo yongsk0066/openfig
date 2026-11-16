@@ -10,8 +10,8 @@ import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
 import { getCommand } from "@fig/shell-parser";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { GeneratorState } from "../../generators/helpers";
-import type { HistorySources } from "../../history";
-import { computeSuggestions, type SuggestionsInput } from "../pipeline";
+import type { HistorySources } from "../../history/repository";
+import { computeSuggestions, createSuggestionComputer, type SuggestionsInput } from "../pipeline";
 
 // Parse with the real parser; only spec loading (a `spec://` import in the app) and shell
 // commands (`git`'s generateSpec runs `git help -a`) are replaced.
@@ -320,4 +320,36 @@ describe("computeSuggestions", () => {
     expect(second).toEqual(first);
     expect(first.suggestions).toHaveLength(4);
   });
+});
+
+it("staged ranking stays equivalent across typing, deletion, history and selection changes", async () => {
+  const computer = createSuggestionComputer();
+  const settings = {};
+  const history = { modeEnabled: false, sources: zshHistory, recency };
+  for (const buffer of [
+    "git ",
+    "git c",
+    "git ch",
+    "git ",
+    "git commit ",
+    "git -a",
+    "git -ab",
+    "git ",
+  ]) {
+    const value = input(await parse(buffer), { settings, history });
+    const expected = computeSuggestions(value);
+    expect(computer(value)).toEqual(expected);
+    const selected = {
+      ...value,
+      selection: {
+        suggestions: expected.suggestions,
+        selectedIndex: 1,
+        hasChangedIndex: true,
+        visible: true,
+      },
+    };
+    expect(computer(selected)).toEqual(computeSuggestions(selected));
+    const withHistory = { ...selected, history: { ...history, modeEnabled: true } };
+    expect(computer(withHistory)).toEqual(computeSuggestions(withHistory));
+  }
 });

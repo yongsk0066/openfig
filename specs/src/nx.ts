@@ -268,7 +268,7 @@ const nxGenerators: NxGenerators = {
   generate: {
     script: (context) => {
       const argument = context.slice(-1)[0];
-      if (argument.indexOf(":") > -1) {
+      if (argument.includes(":")) {
         return ["nx", "list", argument.split(":")[0]];
       } else {
         return ["nx", "list"];
@@ -279,7 +279,7 @@ const nxGenerators: NxGenerators = {
     getQueryTerm: (token) => token.split(":").pop() ?? "",
     cache: oneDayCache,
     postProcess: (out) => {
-      if (out.indexOf("Installed plugins") > -1) {
+      if (out.includes("Installed plugins")) {
         const fullList = out.split(">");
         const localPlugins = fullList[1].split("\n").filter(Boolean);
         localPlugins.shift();
@@ -289,10 +289,10 @@ const nxGenerators: NxGenerators = {
           const name = pluginEntry.trim().split(" ")[0];
           return { name, insertValue: `${name}:` };
         });
-      } else if (out.indexOf("Capabilities") > -1) {
+      } else if (out.includes("Capabilities")) {
         const lines = out.split("\n");
         return lines
-          .filter((line) => line.trim().indexOf(" : ") > -1)
+          .filter((line) => line.trim().includes(" : "))
           .map((line) => ({ name: line.trim().split(" : ")[0] }));
       }
       return [];
@@ -302,7 +302,7 @@ const nxGenerators: NxGenerators = {
     script: ["nx", "list"],
     cache: oneDayCache,
     postProcess: (out) => {
-      if (out.indexOf("Installed plugins") > -1) {
+      if (out.includes("Installed plugins")) {
         const fullList = out.split(">");
         const localPlugins = fullList[1].split("\n").filter(Boolean);
         localPlugins.shift();

@@ -170,7 +170,7 @@ impl History {
         query: &str,
         params: P,
     ) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
 
         conn.authorizer(Some(history_reads_only))?;
         let result = Self::query_inner(&conn, query, params);

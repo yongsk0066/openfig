@@ -259,7 +259,7 @@ impl DebugSubcommand {
             },
             DebugSubcommand::Accessibility { action } => match action {
                 Some(AccessibilityAction::Refresh) => {
-                    quit_fig(true).await?;
+                    let _ = quit_fig(true).await?;
 
                     Command::new("tccutil")
                         .args(["reset", "Accessibility", APP_BUNDLE_ID])
@@ -273,7 +273,7 @@ impl DebugSubcommand {
                     })?;
                 },
                 Some(AccessibilityAction::Reset) => {
-                    quit_fig(true).await?;
+                    let _ = quit_fig(true).await?;
 
                     Command::new("tccutil")
                         .args(["reset", "Accessibility", APP_BUNDLE_ID])

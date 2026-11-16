@@ -103,7 +103,12 @@ impl Recorder {
 impl ShellHookHandler for Recorder {
     type Error = anyhow::Error;
 
-    async fn edit_buffer(&mut self, hook: &EditBufferHook, _: Uuid, _: &Arc<ShellSessions>) -> Result<()> {
+    async fn edit_buffer(&mut self, hook: &EditBufferHook, id: Uuid, sessions: &Arc<ShellSessions>) -> Result<()> {
+        sessions.with_update(id, |session| {
+            session.context = hook.context.clone();
+            session.edit_buffer.text = hook.text.clone();
+            session.edit_buffer.cursor = hook.cursor;
+        });
         self.record(HookEvent::EditBuffer {
             text: hook.text.clone(),
             cursor: hook.cursor,
@@ -396,7 +401,7 @@ impl HookShell {
         loop {
             match tokio::time::timeout(quiet, self.output_at.recv()).await {
                 Err(_) => return Ok(()),
-                Ok(Some(_)) if Instant::now() < deadline => continue,
+                Ok(Some(_)) if Instant::now() < deadline => {},
                 Ok(Some(_)) => bail!("output did not settle within {timeout:?}"),
                 Ok(None) => bail!("the pty closed"),
             }
@@ -443,7 +448,7 @@ impl HookShell {
                 Ok(Some((at, HookEvent::EditBuffer { text: got, .. }))) if got == text => {
                     break at.saturating_duration_since(start);
                 },
-                Ok(Some(_)) => continue,
+                Ok(Some(_)) => {},
                 Ok(None) => bail!("the daemon stopped"),
                 Err(_) => bail!("no edit buffer {text:?} within {timeout:?} after {key:?}"),
             }
@@ -487,12 +492,9 @@ impl HookShell {
     pub fn command(&self, command: ShellCommand) -> Result<()> {
         let state = self.shell_sessions.as_ref().context("not a Daemon::Real shell")?;
         let sender = state
-            .inner
-            .lock()
-            .linked_sessions
-            .values()
+            .collect(|session| session.sender.clone())
+            .into_iter()
             .next()
-            .map(|session| session.sender.clone())
             .context("no hook session")?;
         sender.send(command)?;
         Ok(())
@@ -502,7 +504,7 @@ impl HookShell {
     pub fn sessions(&self) -> usize {
         self.shell_sessions
             .as_ref()
-            .map_or(0, |state| state.inner.lock().linked_sessions.len())
+            .map_or(0, |state| state.collect(|session| session.id).len())
     }
 
     /// [`Daemon::Raw`]: writes `line` to every connection.

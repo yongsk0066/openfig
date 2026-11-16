@@ -52,7 +52,7 @@ const installedPluginVersionsGenerator = (
   postProcess: (output) =>
     output
       .split("\n")
-      .reverse()
+      .toReversed()
       .map((pluginVersion) => ({
         name: `${pluginVersion}`.trim(),
         description: "Plugin version",
@@ -77,7 +77,7 @@ const allPluginVersionsGenerator = (
   postProcess: (output) =>
     output
       .split("\n")
-      .reverse()
+      .toReversed()
       .map((pluginVersion) => ({
         name: `${pluginVersion}`.trim(),
         description: "Plugin version",

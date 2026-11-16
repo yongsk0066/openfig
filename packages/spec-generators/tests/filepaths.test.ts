@@ -421,3 +421,51 @@ describe("Test sortFilesAlphabetically", () => {
 //     });
 //   });
 // });
+
+const legacyDirectoryExecute: Fig.ExecuteCommandFunction = async () => ({
+  stdout: "folder/\nfile\n",
+  stderr: "",
+  status: 0,
+});
+
+describe("structured host directory adapter", () => {
+  it("preserves newline names and filters directories without spawning ls", async () => {
+    const { filepaths } = await import("../src/filepaths");
+    let calls = 0;
+    const execute: Fig.ExecuteCommandFunction = async () => {
+      calls++;
+      return { stdout: "", stderr: "", status: 0 };
+    };
+    const generator = filepaths({ extensions: ["ts"] });
+    const result = await generator.custom!([], execute, {
+      ...defaultContext,
+      listDirectory: async (path) => {
+        expect(path).toBe(`${defaultCwd}/`);
+        return ["normal.ts", "line\nbreak.ts", "no.js", "folder/", ".hidden.ts", ".DS_Store"];
+      },
+    });
+    expect(result.map((s) => s.name)).toEqual([
+      "folder/",
+      "line\nbreak.ts",
+      "normal.ts",
+      ".hidden.ts",
+      "../",
+    ]);
+    expect(calls).toBe(0);
+  });
+  it("retains the legacy command adapter for external hosts and handles a read error", async () => {
+    const { folders } = await import("../src/filepaths");
+
+    expect(
+      (await folders.custom!([], legacyDirectoryExecute, defaultContext)).map((s) => s.name),
+    ).toEqual(["folder/", "../"]);
+    expect(
+      await folders.custom!([], legacyDirectoryExecute, {
+        ...defaultContext,
+        listDirectory: async () => {
+          throw new Error("denied");
+        },
+      }),
+    ).toEqual([]);
+  });
+});

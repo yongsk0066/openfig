@@ -1,4 +1,7 @@
 import awsRegions from "./regions";
+const sortFnStrings = (a: string, b: string) => {
+  return a.localeCompare(b);
+};
 const awsPrincipals = [
   "a4b.amazonaws.com",
   "acm-pca.amazonaws.com",
@@ -343,9 +346,9 @@ const MultiSuggestionsGenerator = async (
   }
   return [];
 };
-const _prefixFile = "file://";
-const _prefixBlob = "fileb://";
-const _prefixS3 = "s3://";
+const prefixFile = "file://";
+const prefixBlob = "fileb://";
+const prefixS3 = "s3://";
 const appendFolderPath = (tokens: string[], prefix: string): string[] => {
   const baseLsCommand = ["ls", "-1ApL"];
   let whatHasUserTyped = tokens[tokens.length - 1];
@@ -373,23 +376,6 @@ const postProcessFiles = (out: string, prefix: string): Fig.Suggestion[] => {
       },
     ];
   }
-  const sortFnStrings = (a: string, b: string) => {
-    return a.localeCompare(b);
-  };
-  const alphabeticalSortFilesAndFolders = (arr: string[]) => {
-    const dotsArr: string[] = [];
-    const otherArr: string[] = [];
-    arr.map((elm) => {
-      if (elm.toLowerCase() == ".ds_store") return;
-      if (elm.slice(0, 1) === ".") dotsArr.push(elm);
-      else otherArr.push(elm);
-    });
-    return [
-      ...otherArr.sort(sortFnStrings),
-      "../",
-      ...dotsArr.sort(sortFnStrings),
-    ];
-  };
   const tempArr = alphabeticalSortFilesAndFolders(out.split("\n"));
   const finalArr: Fig.Suggestion[] = [];
   tempArr.forEach((item) => {
@@ -425,30 +411,30 @@ const generators: Record<string, Fig.Generator> = {
   // See more: https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-file.html
   listFiles: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixFile);
+      return appendFolderPath(tokens, prefixFile);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixFile);
+      return postProcessFiles(out, prefixFile);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixFile);
+      return triggerPrefix(newToken, oldToken, prefixFile);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixFile);
+      return filterWithPrefix(token, prefixFile);
     },
   },
   listBlobs: {
     script: (tokens) => {
-      return appendFolderPath(tokens, _prefixBlob);
+      return appendFolderPath(tokens, prefixBlob);
     },
     postProcess: (out) => {
-      return postProcessFiles(out, _prefixBlob);
+      return postProcessFiles(out, prefixBlob);
     },
     trigger: (newToken, oldToken) => {
-      return triggerPrefix(newToken, oldToken, _prefixBlob);
+      return triggerPrefix(newToken, oldToken, prefixBlob);
     },
     getQueryTerm: (token) => {
-      return filterWithPrefix(token, _prefixBlob);
+      return filterWithPrefix(token, prefixBlob);
     },
   },
   listLayerArns: {
@@ -839,7 +825,7 @@ const generators: Record<string, Fig.Generator> = {
         const args = [
           "s3",
           "ls",
-          `${_prefixS3}${tokens[idx + 1]}`,
+          `${prefixS3}${tokens[idx + 1]}`,
           "--recursive",
           "--page-size",
           "1000",
@@ -851,11 +837,11 @@ const generators: Record<string, Fig.Generator> = {
         if (stdout == "") {
           return [];
         }
-        if (stdout.trim() === _prefixS3) {
+        if (stdout.trim() === prefixS3) {
           return [
             {
-              name: _prefixS3,
-              insertValue: _prefixS3,
+              name: prefixS3,
+              insertValue: prefixS3,
             },
           ];
         }
@@ -898,11 +884,11 @@ const generators: Record<string, Fig.Generator> = {
         if (stdout == "") {
           return [];
         }
-        if (stdout.trim() === _prefixS3) {
+        if (stdout.trim() === prefixS3) {
           return [
             {
-              name: _prefixS3,
-              insertValue: _prefixS3,
+              name: prefixS3,
+              insertValue: prefixS3,
             },
           ];
         }
@@ -5373,3 +5359,17 @@ const completionSpec: Fig.Spec = {
   ],
 };
 export default completionSpec;
+const alphabeticalSortFilesAndFolders = (arr: string[]) => {
+  const dotsArr: string[] = [];
+  const otherArr: string[] = [];
+  arr.map((elm) => {
+    if (elm.toLowerCase() == ".ds_store") return;
+    if (elm.slice(0, 1) === ".") dotsArr.push(elm);
+    else otherArr.push(elm);
+  });
+  return [
+    ...otherArr.toSorted(sortFnStrings),
+    "../",
+    ...dotsArr.toSorted(sortFnStrings),
+  ];
+};

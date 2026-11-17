@@ -13,7 +13,8 @@ verify_app() {
 # Prepare a new, unique bundle without touching running code, input clients or registration.
 stage_app() (
   set -euo pipefail
-  local source="$1" destination="$2" cli="$3" desktop="$4" stage
+  # These variables belong to the subshell. Bash 3.2 drops function locals before EXIT traps.
+  source="$1" destination="$2" cli="$3" desktop="$4" stage=''
   [[ -d "$source" && ! -e "$destination" && ! -L "$destination" ]] || exit 2
   mkdir -p "$(dirname "$destination")"
   stage="$(mktemp -d "$(dirname "$destination")/.fig-stage.XXXXXX")"
@@ -40,7 +41,8 @@ same_input_method() {
 # a copy/rename/launch failure restores it. Enrollment is a separate transaction.
 replace_app() (
   set -euo pipefail
-  local source="$1" destination="$2" cli="$3" desktop="$4" stage backup backup_dir moved=0 installed=0 helper_changed=0
+  # Keep rollback state alive until the subshell's EXIT trap has completed (including Bash 3.2).
+  source="$1" destination="$2" cli="$3" desktop="$4" stage='' backup='' backup_dir='' moved=0 installed=0 helper_changed=0
   [[ -d "$source" && ! -L "$destination" ]] || { echo 'Invalid bundle source or symlink destination' >&2; exit 2; }
   stage="$(mktemp -d "$(dirname "$destination")/.fig-install.XXXXXX")"
   backup_dir="$(dirname "$destination")/.fig-backups"

@@ -54,6 +54,6 @@ React is the current presentation adapter. The injected core permits another UI,
 
 Window-frame polling runs at 4 Hz while a visible list is stationary, increasing to 20 Hz during mouse drag or for 500ms after a frame change. AX move/resize notifications also request a frame immediately. The timer sleeps while tracking is disabled, and at most one tick waits in the main queue. IMK refresh cadence and stale-result validation remain independent.
 
-## Login lifecycle
+## macOS automatic startup
 
-`login_item.rs` separates reconciliation policy from the macOS backend. Settings notifications request reconciliation on the main loop; persisted applied intent prevents repeated registration and preserves OS-side user decisions. Pending approval is distinct from enabled. Legacy cleanup follows confirmed registration and intent persistence, and never unloads the running desktop. Development/staged bundles cannot mutate the installed login item. These low-frequency ServiceManagement calls remain native main-loop operations, outside the query-worker deadlines.
+`login_item.rs` manages automatic app startup when the user signs into macOS, separating reconciliation policy from the macOS backend. Settings notifications request reconciliation on the main loop; persisted applied intent prevents repeated registration and preserves OS-side user decisions. Pending approval is distinct from enabled. Legacy cleanup follows confirmed registration and intent persistence, and never unloads the running desktop. Development/staged bundles cannot mutate the installed login item. These low-frequency ServiceManagement calls remain native main-loop operations, outside the query-worker deadlines.

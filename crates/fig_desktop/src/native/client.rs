@@ -10,7 +10,6 @@ use tokio::io::{
 use tokio::process::{
     Child,
     ChildStdin,
-    ChildStdout,
     Command,
 };
 use tokio::sync::watch;
@@ -30,7 +29,10 @@ use super::{
 struct Connection {
     child: Child,
     input: ChildStdin,
-    output: ChildStdout,
+    #[cfg(not(test))]
+    output: tokio::process::ChildStdout,
+    #[cfg(test)]
+    output: std::pin::Pin<Box<dyn tokio::io::AsyncRead + Send>>,
     poisoned: bool,
 }
 
@@ -38,6 +40,8 @@ struct Connection {
 /// A kernel that cannot reap a killed process degrades this lane instead of leaking children.
 pub struct Process {
     executable: PathBuf,
+    #[cfg(test)]
+    fixture: Option<(PathBuf, String)>,
     connection: Option<Connection>,
     sequence: u64,
     retry_at: Instant,
@@ -53,6 +57,8 @@ impl Process {
     pub fn new(executable: PathBuf) -> Self {
         Self {
             executable,
+            #[cfg(test)]
+            fixture: None,
             connection: None,
             sequence: 0,
             retry_at: Instant::now(),
@@ -104,23 +110,57 @@ impl Process {
 
     async fn exchange(&mut self, request: &Request) -> io::Result<Reply> {
         if self.connection.is_none() {
-            let mut child = Command::new(&self.executable)
-                .arg("--stdio")
-                .arg("--lane")
-                .arg(stage(request))
+            let mut command = Command::new(&self.executable);
+            command.args(["--stdio", "--lane", stage(request)]);
+            #[cfg(test)]
+            if let Some((root, fault)) = &self.fixture {
+                command = Command::new(&self.executable);
+                command
+                    .args([
+                        "--exact",
+                        "native::client::tests::worker_fixture",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .env("FIG_TEST_WORKER_ROOT", root)
+                    .env("FIG_TEST_WORKER_FAULT", fault);
+            }
+            command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
-                .kill_on_drop(true)
-                .spawn()?;
+                .kill_on_drop(true);
+            // The Rust test harness owns stdout; only fixture children use stderr as their pipe.
+            #[cfg(test)]
+            if self.fixture.is_some() {
+                command.stdout(Stdio::null()).stderr(Stdio::piped());
+            }
+            let mut child = command.spawn()?;
             let input = child
                 .stdin
                 .take()
                 .ok_or_else(|| io::Error::other("missing native stdin"))?;
+            #[cfg(not(test))]
             let output = child
                 .stdout
                 .take()
                 .ok_or_else(|| io::Error::other("missing native stdout"))?;
+            #[cfg(test)]
+            let output: std::pin::Pin<Box<dyn tokio::io::AsyncRead + Send>> = if self.fixture.is_some() {
+                Box::pin(
+                    child
+                        .stderr
+                        .take()
+                        .ok_or_else(|| io::Error::other("missing fixture stderr"))?,
+                )
+            } else {
+                Box::pin(
+                    child
+                        .stdout
+                        .take()
+                        .ok_or_else(|| io::Error::other("missing native stdout"))?,
+                )
+            };
             self.connection = Some(Connection {
                 child,
                 input,
@@ -252,50 +292,98 @@ fn trace_duration(stage: &str, ms: f64) {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use std::os::unix::fs::PermissionsExt;
+    use std::io::{
+        Read,
+        Write,
+    };
 
     use super::*;
     use crate::native::FocusTarget;
 
     pub(crate) fn fixture(fault: &str) -> (tempfile::TempDir, Process) {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("worker");
-        let code = r#"#!/usr/bin/python3
-import json, os, struct, sys, time
-root = os.path.dirname(__file__)
-fault = FAULT
-first = not os.path.exists(root+'/started')
-open(root+'/started','a').write(str(os.getpid())+'\n')
-while True:
-    header = sys.stdin.buffer.read(4)
-    if len(header) != 4: break
-    data = json.loads(sys.stdin.buffer.read(struct.unpack('>I',header)[0]))
-    value = data['value'].get('Focus', {'pid':1})['pid']
-    open(root+'/requests','a').write(str(value)+'\n')
-    if first:
-        first = False
-        if fault == 'hang': time.sleep(3600)
-        if fault == 'crash': os._exit(71)
-        if fault == 'partial':
-            sys.stdout.buffer.write(struct.pack('>I',100)+b'{')
-            sys.stdout.buffer.flush()
-            time.sleep(3600)
-        if fault == 'oversize':
-            sys.stdout.buffer.write(struct.pack('>I',0xffffffff))
-            sys.stdout.buffer.flush()
-            time.sleep(3600)
-        if fault == 'slow': time.sleep(0.15)
-    reply = {'id':data['id'], 'value':({'Icon':None} if 'Icon' in data['value'] else {'Focus':value})}
-    if fault == 'wrong-id': reply['id'] += 1
-    if fault == 'wrong-kind': reply['value'] = {'Caret':None}
-    payload = json.dumps(reply).encode()
-    sys.stdout.buffer.write(struct.pack('>I',len(payload))+payload)
-    sys.stdout.buffer.flush()
-"#
-        .replace("FAULT", &format!("{fault:?}"));
-        std::fs::write(&path, code).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
-        (dir, Process::new(path))
+        let mut process = Process::new(std::env::current_exe().unwrap());
+        process.fixture = Some((dir.path().to_owned(), fault.to_owned()));
+        (dir, process)
+    }
+
+    // A separate Rust test process exercises real pipes and reaping without interpreter startup.
+    #[test]
+    #[ignore = "child entry point; invoked by the native fault tests"]
+    #[expect(
+        clippy::exit,
+        reason = "fault fixture must terminate its own child without unwinding"
+    )]
+    fn worker_fixture() {
+        let root = PathBuf::from(std::env::var_os("FIG_TEST_WORKER_ROOT").expect("fixture root"));
+        let fault = std::env::var("FIG_TEST_WORKER_FAULT").expect("fixture fault");
+        let mut first = !root.join("started").exists();
+        let mut started = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(root.join("started"))
+            .unwrap();
+        writeln!(started, "{}", std::process::id()).unwrap();
+        let mut input = std::io::stdin().lock();
+        let mut output = std::io::stderr().lock();
+        loop {
+            let mut header = [0; 4];
+            if input.read_exact(&mut header).is_err() {
+                break;
+            }
+            let size = u32::from_be_bytes(header) as usize;
+            assert!(size <= MAX_FRAME);
+            let mut bytes = vec![0; size];
+            input.read_exact(&mut bytes).unwrap();
+            let data: Envelope<Request> = serde_json::from_slice(&bytes).unwrap();
+            let value = match data.value {
+                Request::Focus(target) => target.pid,
+                _ => 1,
+            };
+            let mut requests = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(root.join("requests"))
+                .unwrap();
+            writeln!(requests, "{value}").unwrap();
+            if first {
+                first = false;
+                match fault.as_str() {
+                    "hang" => std::thread::sleep(Duration::from_secs(3600)),
+                    "crash" => std::process::exit(71),
+                    "partial" | "oversize" => {
+                        let length = if fault == "partial" { 100_u32 } else { u32::MAX };
+                        output.write_all(&length.to_be_bytes()).unwrap();
+                        if fault == "partial" {
+                            output.write_all(b"{").unwrap();
+                        }
+                        output.flush().unwrap();
+                        std::thread::sleep(Duration::from_secs(3600));
+                    },
+                    "slow" => {
+                        while !root.join("release").exists() {
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                    },
+                    _ => {},
+                }
+            }
+            let reply = Envelope {
+                id: data.id + u64::from(fault == "wrong-id"),
+                work_ms: None,
+                value: if fault == "wrong-kind" {
+                    Reply::Caret(None)
+                } else if matches!(data.value, Request::Icon(_)) {
+                    Reply::Icon(None)
+                } else {
+                    Reply::Focus(Some(value.try_into().unwrap()))
+                },
+            };
+            let bytes = serde_json::to_vec(&reply).unwrap();
+            output.write_all(&(bytes.len() as u32).to_be_bytes()).unwrap();
+            output.write_all(&bytes).unwrap();
+            output.flush().unwrap();
+        }
     }
     fn request(pid: i32) -> Request {
         Request::Focus(FocusTarget {
@@ -383,6 +471,7 @@ while True:
         started(dir.path()).await;
         sender.send_replace(Some(2));
         sender.send_replace(Some(3));
+        std::fs::write(dir.path().join("release"), []).unwrap();
         assert_eq!(timeout(Duration::from_secs(3), results.recv()).await.unwrap(), Some(3));
         assert!(results.try_recv().is_err());
         assert_eq!(std::fs::read_to_string(dir.path().join("requests")).unwrap(), "1\n3\n");

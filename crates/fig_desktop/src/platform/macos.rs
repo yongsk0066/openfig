@@ -1,3 +1,4 @@
+mod observers;
 use std::cell::{
     Cell,
     RefCell,
@@ -29,20 +30,14 @@ use macos_utils::window_server::{
     UIElement,
 };
 use macos_utils::{
-    NotificationCenter,
     NotificationSubscription,
     WindowServer,
-    WindowServerEvent,
 };
 use objc2::MainThreadMarker;
 use objc2_app_kit::{
     NSEvent,
     NSEventMask,
     NSWorkspace,
-};
-use objc2_foundation::{
-    NSOperationQueue,
-    ns_string,
 };
 use tao::dpi::{
     LogicalPosition,
@@ -117,6 +112,7 @@ impl Drop for ScrollMonitor {
 
 #[derive(Debug)]
 pub struct PlatformState {
+    observer_tasks: RefCell<tokio::task::JoinSet<()>>,
     main_thread: MainThreadMarker,
     activation_policy: Cell<ActivationPolicy>,
     accessibility_subscription: RefCell<Option<NotificationSubscription>>,
@@ -149,6 +145,8 @@ pub struct PlatformState {
 
 #[derive(Debug)]
 struct PlatformWindowImpl {
+    // Stable for this activation even if IMK reconnects and invalidates geometry.
+    activation: u64,
     window_id: CGWindowID,
     pub bundle_id: String,
     pub pid: pid_t,
@@ -165,8 +163,9 @@ impl From<CGRect> for Rect {
 }
 
 impl PlatformWindowImpl {
-    fn new(bundle_id: String, pid: pid_t, window_id: CGWindowID) -> Self {
+    fn new(bundle_id: String, pid: pid_t, window_id: CGWindowID, activation: u64) -> Self {
         Self {
+            activation,
             window_id,
             pid,
             bundle_id,
@@ -292,6 +291,7 @@ impl PlatformState {
             frame_watch_queued: Arc::default(),
             frame_watch_wake: Arc::default(),
             window_frames,
+            observer_tasks: Default::default(),
             focus_generation: Default::default(),
             focus_validation,
         })
@@ -405,8 +405,7 @@ impl PlatformState {
                         terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod
                     });
                 if is_ime {
-                    self.cancel_caret();
-                    let generation = self.focus_generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+                    let generation = self.invalidate_focus();
                     if let Some(window) = self.focused_window.borrow().as_ref() {
                         self.input_method_focus_validation
                             .send_replace(Some(super::focus_validation::FocusTarget {
@@ -522,154 +521,17 @@ impl PlatformState {
                 }
                 Ok(())
             },
-            PlatformBoundEvent::Initialize => {
-                if accessibility_is_enabled() {
-                    UIElement::set_global_messaging_timeout(0.25);
-                }
-
-                let (tx, rx) = flume::unbounded::<WindowServerEvent>();
-
-                self.window_server.borrow_mut().replace(WindowServer::new(
-                    self.main_thread,
-                    tx,
-                    APP_BUNDLE_ID,
-                    fig_util::terminal::xterm_bundle_ids(),
-                ));
-
-                let accessibility_proxy = self.proxy.clone();
-                let distributed = NotificationCenter::distributed_center();
-                let ax_notification_name = ns_string!("com.apple.accessibility.api");
-                let queue = NSOperationQueue::new();
-                let subscription =
-                    distributed.subscribe(self.main_thread, ax_notification_name, Some(&queue), move |_| {
-                        accessibility_proxy
-                            .clone()
-                            .send_event(Event::PlatformBoundEvent(
-                                PlatformBoundEvent::AccessibilityUpdateRequested,
-                            ))
-                            .ok();
-                    });
-
-                self.accessibility_subscription.replace(Some(subscription));
-
-                let observer_proxy = self.proxy.clone();
-                let activation_queries = self.activation_queries.clone();
-                tokio::runtime::Handle::current().spawn(async move {
-                    while let std::result::Result::Ok(result) = rx.recv_async().await {
-                        let mut events: Vec<Event> = vec![];
-
-                        match result {
-                            WindowServerEvent::FocusRequested { app } => {
-                                activation_queries.send_replace(Some(app));
-                            },
-                            WindowServerEvent::Workspace(event) => {
-                                events.push(Event::PlatformBoundEvent(PlatformBoundEvent::WorkspaceNotification(
-                                    event,
-                                )));
-                            },
-                            WindowServerEvent::WindowDestroyed { app } => {
-                                events.push(Event::PlatformBoundEvent(PlatformBoundEvent::WindowDestroyed { app }));
-                            },
-                            WindowServerEvent::ActiveSpaceChanged => {
-                                events.push(Event::WindowEvent {
-                                    window_id: AUTOCOMPLETE_ID,
-                                    window_event: WindowEvent::Hide,
-                                });
-                            },
-                            WindowServerEvent::RequestCaretPositionUpdate => {
-                                events.push(Event::PlatformBoundEvent(
-                                    PlatformBoundEvent::CaretPositionUpdateRequested,
-                                ));
-                            },
-                        };
-
-                        for event in events {
-                            if let Err(e) = observer_proxy.send_event(event) {
-                                warn!("Error sending event: {e:?}");
-                            }
-                        }
-                    }
-                });
-
-                Ok(())
-            },
-            PlatformBoundEvent::InitializePostRun => {
-                if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
-                    super::webview_host::install_focus_behavior(&window.webview)?;
-                }
-
-                // Observe drag state at 20 Hz; idle native frame queries run at 4 Hz.
-                // Only one tick may wait in the main queue.
-                let proxy = self.proxy.clone();
-                let visible = self.autocomplete_visible.clone();
-                let tracking = self.autocomplete_tracking.clone();
-                let queued = self.frame_watch_queued.clone();
-                let wake = self.frame_watch_wake.clone();
-                tokio::runtime::Handle::current().spawn(async move {
-                    loop {
-                        if !tracking.load(Ordering::Acquire) {
-                            wake.notified().await;
-                            continue;
-                        }
-                        let period = if visible.load(Ordering::Acquire) { 50 } else { 250 };
-                        tokio::select! {
-                            () = wake.notified() => continue,
-                            () = tokio::time::sleep(std::time::Duration::from_millis(period)) => {},
-                        }
-                        if tracking.load(Ordering::Acquire)
-                            && !queued.swap(true, Ordering::AcqRel)
-                            && proxy
-                                .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::FrameWatchTick))
-                                .is_err()
-                        {
-                            break;
-                        }
-                    }
-                });
-
-                // Accessibility trust is only re-evaluated on the `com.apple.accessibility.api`
-                // distributed notification, which fires when the user flips the switch — never
-                // at login. Launched by the LaunchAgent early in the session, `AXIsProcessTrusted`
-                // can answer `false` before TCC is ready, and the app then tracked nothing until
-                // the next restart (2026-09-17). Poll cheaply and reconcile on change.
-                let proxy = self.proxy.clone();
-                tokio::runtime::Handle::current().spawn(async move {
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
-                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-                    loop {
-                        interval.tick().await;
-                        let enabled = accessibility_is_enabled();
-                        if enabled != ACCESSIBILITY_ENABLED.load(Ordering::SeqCst)
-                            && proxy
-                                .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::AccessibilityUpdated {
-                                    enabled,
-                                }))
-                                .is_err()
-                        {
-                            break;
-                        }
-                    }
-                });
-                Ok(())
-            },
+            PlatformBoundEvent::Initialize => self.start_workspace_observers(),
+            PlatformBoundEvent::InitializePostRun => self.start_window_tracking(window_map),
             PlatformBoundEvent::EditBufferChanged => {
                 self.caret_tracking.borrow_mut().clear();
                 self.request_window_frame();
                 self.input_method_scrolled.set(false);
-                // Tracking for the terminal in use can have failed at activation time
-                // (`macos_utils::window_server::register`: the 0.25 s AX messaging timeout
-                // while the terminal was busy) and nothing else retried it, so the autocomplete
-                // window neither followed nor hid (the terminal focus recovery path). An
-                // edit-buffer update proves the terminal is responsive right now; retry here. When
-                // the app is already tracked this is one `frontmostApplication` call and a map
-                // lookup.
+                // Retry AX registration when a previously unresponsive terminal reports an edit.
                 if let Some(window_server) = self.window_server.borrow_mut().as_mut() {
                     window_server.ensure_frontmost_tracked();
                 }
 
-                // `debug!`, to match `CaretPositionUpdateRequested` below, which calls the exact
-                // same function. Without accessibility permission this fires once per keystroke,
-                // and at `error!` it drowned out every real error in the log.
                 if let Err(err) = self.refresh_window_position() {
                     debug!(%err, "Failed to refresh window position");
                 }
@@ -708,75 +570,21 @@ impl PlatformState {
                 }
                 Ok(())
             },
-            PlatformBoundEvent::ExternalWindowFocusChanged { window_id, app } => {
-                let front = frontmost_application();
-                let decision = super::focus_validation::classify_focus_change(
-                    front.as_ref(),
-                    &app,
-                    window_id,
-                    self.focused_window
-                        .borrow()
-                        .as_ref()
-                        .map(|window| (window.pid, window.bundle_id.as_str(), window.window_id)),
-                );
-                match decision {
-                    super::focus_validation::FocusChange::Stale => return Ok(()),
-                    super::focus_validation::FocusChange::Duplicate => {
-                        self.validate_input_method_focus();
-                        self.refresh_window_position()?;
-                        return Ok(());
-                    },
-                    super::focus_validation::FocusChange::Changed => {},
-                }
-                // Only a verified change may hide suggestions. Delayed or duplicate AX
-                // notifications must not dismiss a list produced by a newer shell edit.
-                self.cancel_caret();
-                self.focus_generation.fetch_add(1, Ordering::Relaxed);
-                let had_focus = self.focused_window.borrow_mut().take().is_some();
-                if (had_focus || window_id.is_none() || Terminal::from_bundle_id(app.bundle_id.clone()).is_none())
-                    && let Some(autocomplete) = window_map.get(&AUTOCOMPLETE_ID)
+            PlatformBoundEvent::ExternalWindowFocusChanged { window_id, app } => self.change_focus(
+                app,
+                window_id,
+                window_map,
+                shell_sessions,
+                notifications_state,
+                window_target,
+            ),
+            PlatformBoundEvent::FocusEligibility(result) => {
+                let activation = self.focused_window.borrow().as_ref().map(|w| w.activation);
+                if let Some(enabled) = result.for_activation(activation)
+                    && let Some(window) = window_map.get(&AUTOCOMPLETE_ID)
                 {
-                    // Commit the hide in this transition; a queued Hide could overtake the
-                    // next shell edit and erase its newly established show intent.
-                    autocomplete.handle(
-                        WindowEvent::Hide,
-                        shell_sessions,
-                        self,
-                        notifications_state,
-                        window_target,
-                    );
+                    window.set_enabled(enabled);
                 }
-                let Some(window_id) = window_id else { return Ok(()) };
-                let window = PlatformWindowImpl::new(app.bundle_id, app.pid, window_id);
-                let current_terminal = Terminal::from_bundle_id(window.bundle_id.clone());
-
-                let enabled_proxy = self.proxy.clone();
-                tokio::spawn(async move {
-                    let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
-                        fig_settings::settings::get_bool_or(
-                            format!("integrations.{}.disabled", terminal.internal_id()),
-                            false,
-                        )
-                    });
-
-                    let terminal_cursor_backing_installed = current_terminal.is_some();
-
-                    let is_enabled = !is_terminal_disabled
-                        && terminal_cursor_backing_installed
-                        && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
-                        && accessibility_is_enabled();
-
-                    enabled_proxy.send_event_or_log(Event::WindowEvent {
-                        window_id: AUTOCOMPLETE_ID,
-                        window_event: WindowEvent::SetEnabled(is_enabled),
-                    });
-                });
-
-                self.focused_window.borrow_mut().replace(window);
-                self.request_window_frame();
-                self.validate_input_method_focus();
-                self.refresh_window_position()?;
-
                 Ok(())
             },
             PlatformBoundEvent::WindowFrameResolved { target, frame } => {
@@ -1010,26 +818,111 @@ impl PlatformState {
                 target,
                 focused_window_id,
             } => {
-                let mut focused = self.focused_window.borrow_mut();
-                if let Some(window) = focused.as_ref() {
+                let clear = self.focused_window.borrow().as_ref().is_some_and(|window| {
                     let current = super::focus_validation::FocusTarget {
                         pid: window.pid,
                         window_id: window.window_id,
                         generation: self.focus_generation.load(Ordering::Relaxed),
                     };
-                    if super::focus_validation::should_clear(current, target, focused_window_id) {
-                        self.cancel_caret();
-                        focused.take();
-                        self.focus_generation.fetch_add(1, Ordering::Relaxed);
-                        self.proxy.send_event_or_log(Event::WindowEvent {
-                            window_id: AUTOCOMPLETE_ID,
-                            window_event: WindowEvent::Hide,
-                        });
+                    super::focus_validation::should_clear(current, target, focused_window_id)
+                });
+                if clear {
+                    self.invalidate_focus();
+                    self.focused_window.borrow_mut().take();
+                    if let Some(popup) = window_map.get(&AUTOCOMPLETE_ID) {
+                        popup.handle(
+                            WindowEvent::Hide,
+                            shell_sessions,
+                            self,
+                            notifications_state,
+                            window_target,
+                        );
                     }
                 }
                 Ok(())
             },
         }
+    }
+
+    fn invalidate_focus(&self) -> u64 {
+        self.cancel_caret();
+        self.focus_generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
+    }
+
+    fn change_focus(
+        &self,
+        app: macos_utils::window_server::ApplicationSpecifier,
+        window_id: Option<u32>,
+        window_map: &FigIdMap,
+        shell_sessions: &fig_shell_ipc::session::ShellSessions,
+        notifications_state: &Arc<WebviewNotificationsState>,
+        window_target: &EventLoopWindowTarget,
+    ) -> anyhow::Result<()> {
+        let front = frontmost_application();
+        let decision = super::focus_validation::classify_focus_change(
+            front.as_ref(),
+            &app,
+            window_id,
+            self.focused_window
+                .borrow()
+                .as_ref()
+                .map(|window| (window.pid, window.bundle_id.as_str(), window.window_id)),
+        );
+        let dismiss = match decision {
+            super::focus_validation::FocusChange::Stale => return Ok(()),
+            super::focus_validation::FocusChange::Duplicate => {
+                self.validate_input_method_focus();
+                self.refresh_window_position()?;
+                return Ok(());
+            },
+            super::focus_validation::FocusChange::Replace { dismiss } => dismiss,
+        };
+        // Only a verified change may hide suggestions. Delayed or duplicate AX
+        // notifications must not dismiss a list produced by a newer shell edit.
+        let activation = self.invalidate_focus();
+        self.focused_window.borrow_mut().take();
+        if dismiss && let Some(autocomplete) = window_map.get(&AUTOCOMPLETE_ID) {
+            // Commit the hide in this transition; a queued Hide could overtake the
+            // next shell edit and erase its newly established show intent.
+            autocomplete.handle(
+                WindowEvent::Hide,
+                shell_sessions,
+                self,
+                notifications_state,
+                window_target,
+            );
+        }
+        let Some(window_id) = window_id else { return Ok(()) };
+        let window = PlatformWindowImpl::new(app.bundle_id, app.pid, window_id, activation);
+        let current_terminal = Terminal::from_bundle_id(window.bundle_id.clone());
+
+        let enabled_proxy = self.proxy.clone();
+        tokio::spawn(async move {
+            let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
+                fig_settings::settings::get_bool_or(format!("integrations.{}.disabled", terminal.internal_id()), false)
+            });
+
+            let terminal_cursor_backing_installed = current_terminal.is_some();
+
+            let is_enabled = !is_terminal_disabled
+                && terminal_cursor_backing_installed
+                && !fig_settings::settings::get_bool_or("autocomplete.disable", false)
+                && accessibility_is_enabled();
+
+            enabled_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::FocusEligibility(
+                super::focus_validation::FocusEligibility {
+                    activation,
+                    enabled: is_enabled,
+                },
+            )));
+        });
+
+        self.focused_window.borrow_mut().replace(window);
+        self.request_window_frame();
+        self.validate_input_method_focus();
+        self.refresh_window_position()?;
+
+        Ok(())
     }
 
     fn request_window_frame(&self) {
@@ -1211,7 +1104,7 @@ mod caret_target_tests {
     };
     #[test]
     fn cached_window_bounds_cannot_cross_a_focus_generation() {
-        let mut window = PlatformWindowImpl::new("terminal".into(), 12, 34);
+        let mut window = PlatformWindowImpl::new("terminal".into(), 12, 34, 1);
         assert!(window.get_bounds(1).is_none());
         window.frame = Some((1, CGWindowInfo {
             owner_pid: 12,

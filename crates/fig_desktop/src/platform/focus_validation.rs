@@ -5,7 +5,7 @@ pub use fig_desktop::native::FocusTarget;
 pub enum FocusChange {
     Stale,
     Duplicate,
-    Changed,
+    Replace { dismiss: bool },
 }
 
 pub fn classify_focus_change(
@@ -21,7 +21,24 @@ pub fn classify_focus_change(
     }) {
         FocusChange::Duplicate
     } else {
-        FocusChange::Changed
+        FocusChange::Replace {
+            dismiss: current.is_some()
+                || window_id.is_none()
+                || fig_util::Terminal::from_bundle_id(&incoming.bundle_id).is_none(),
+        }
+    }
+}
+
+/// A terminal's settings can finish loading after focus has moved away and back.
+#[derive(Debug, Clone, Copy)]
+pub struct FocusEligibility {
+    pub activation: u64,
+    pub enabled: bool,
+}
+
+impl FocusEligibility {
+    pub fn for_activation(self, current: Option<u64>) -> Option<bool> {
+        (current == Some(self.activation)).then_some(self.enabled)
     }
 }
 
@@ -32,6 +49,17 @@ pub fn should_clear(current: FocusTarget, requested: FocusTarget, focused: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn eligibility_does_not_cross_focus_loss_or_reactivation_of_the_same_window() {
+        let result = FocusEligibility {
+            activation: 3,
+            enabled: false,
+        };
+        assert_eq!(result.for_activation(Some(3)), Some(false));
+        assert_eq!(result.for_activation(None), None);
+        assert_eq!(result.for_activation(Some(4)), None);
+    }
+
     #[test]
     fn a_late_result_cannot_clear_a_new_focus_even_if_the_id_is_reused() {
         let a = FocusTarget {
@@ -68,9 +96,20 @@ mod tests {
         );
         assert_eq!(
             classify_focus_change(Some(&b), &b, Some(23), current),
-            FocusChange::Changed
+            FocusChange::Replace { dismiss: true }
         );
-        assert_eq!(classify_focus_change(Some(&b), &b, None, current), FocusChange::Changed);
+        assert_eq!(
+            classify_focus_change(Some(&b), &b, None, current),
+            FocusChange::Replace { dismiss: true }
+        );
+        let ghostty = ApplicationSpecifier {
+            pid: 7,
+            bundle_id: "com.mitchellh.ghostty".into(),
+        };
+        assert_eq!(
+            classify_focus_change(Some(&ghostty), &ghostty, Some(1), None),
+            FocusChange::Replace { dismiss: false }
+        );
         let reused = ApplicationSpecifier {
             pid: b.pid,
             bundle_id: "another.process".into(),

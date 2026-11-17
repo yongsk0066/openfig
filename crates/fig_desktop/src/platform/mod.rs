@@ -71,6 +71,7 @@ pub enum PlatformBoundEvent {
     /// `kAXWindowMovedNotification` only when a drag *ends*, so without this the dropdown sat still
     /// during the drag.
     FrameWatchTick,
+    FocusEligibility(focus_validation::FocusEligibility),
     WindowFocusValidated {
         target: focus_validation::FocusTarget,
         focused_window_id: Option<u32>,

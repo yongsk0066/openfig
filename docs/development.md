@@ -11,17 +11,21 @@ CI=1 just gate     # complete local validation
 just hooks         # optional pre-push gate
 ```
 
-The gate checks formatting, zero-warning lint, core dependency boundaries, protobuf regeneration, types, JS/Rust tests and a real WKWebView smoke test. It needs macOS with an interactive GUI session for native checks. There is no GitHub Actions workflow; a successful push alone is not a validation result.
+The gate checks formatting, zero-warning lint, core dependency boundaries, protobuf regeneration, types, JS/Rust tests, installer failure recovery, input-method geometry and a real WKWebView smoke test. It needs macOS with an interactive GUI session for native checks. The native-process tests inject hung, crashed, partial, oversized and mismatched replies, verify automatic recovery/reaping and bounded icon admission, and exercise the real helper PNG output. The popup-root regression test checks fresh layout with no `ResizeObserver` callbacks. The mocked installer tests cover backup retention, helper replacement versus signature-only updates, and copy, signature, missing-helper, process-stuck and launch failures. Staging tests verify that copy/signature failures preserve the live app and never launch or stop a process. There is no GitHub Actions workflow; a successful push alone is not a validation result.
 
 For development, run `just dev-web` in one terminal and `just dev` in another. The latter stops the installed app and runs the native host against autocomplete on port 3124 and settings on port 3433.
 
 ## Installation and signing
 
-`just install` replaces `/Applications/Fig.app`, links `~/.local/bin/q` and installs zsh startup hooks. Keep a copy of the existing app when you need rollback. Existing regular files at the CLI link target are moved aside. The app's launch-on-startup setting controls its login launcher.
+`just stage` copies and verifies a uniquely named update under `/Applications/.fig-updates` without stopping, replacing or launching the installed app, or changing input-method registration. It does not activate the update; use the regular installation path when a restart is permitted.
+
+`just install` stages the signed bundle, verifies its signature and required executables (including the separately signed `fig_native_worker`), then asks the installed app to quit and waits for it to stop. Copy/signature failures or a process that refuses to stop leave the old bundle in place. It then moves the old bundle to `/Applications/.fig-backups`, swaps the staged bundle into `/Applications/Fig.app` and launches it. Replacement or launch-command failures trigger an attempt to restore and relaunch the old bundle. A successful `open` command only means launch acceptance; runtime health needs a separate check. It also links `~/.local/bin/q` and installs zsh startup hooks. Existing regular files at the CLI link target are moved aside. The app's launch-on-startup setting controls its login launcher.
+
+[Input-method enrollment](macos-input-method.md) runs after replacement. Pending approval does not remove or leave the desktop stopped. Mocked recovery tests do not validate macOS consent prompts.
 
 `just sign` selects an available Apple Development / Developer ID identity, or falls back to ad-hoc signing. Override with `FIG_SIGN_IDENTITY`. Reuse the same identity to preserve Accessibility authorization across builds; ad-hoc rebuilds may require reauthorizing Fig. `branding.env` controls bundle ID, app/CLI names and data paths: renaming the repository does not change them.
 
-After installation, open a new terminal tab and verify `git ` suggestions, arrows/Tab, click then type, rapid edit/delete, app switching, window move/resize and description popups. Verify settings and shortcuts persist after reopening. Automated tests do not replace this actual terminal check.
+Shells that have loaded the current hook automatically reconnect after desktop replacement, including an unchanged prompt. Already-running shells with an older hook retain that older code until reloaded or replaced by a new shell. After activation, verify `git ` suggestions, arrows/Tab, click then type, rapid edit/delete, app switching, window move/resize, Ghostty split switching and description popups. Verify settings and shortcuts persist after reopening. Automated tests do not replace this actual terminal check.
 
 ## Changes and diagnostics
 

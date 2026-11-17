@@ -30,7 +30,7 @@ Grant Fig Accessibility access in System Settings → Privacy & Security → Acc
 | API transport and schemas | `packages/api-bindings/`, `proto/` |
 | Bundled completion specs | `specs/` |
 
-Read [architecture](docs/architecture.md), [development](docs/development.md), or [latency diagnostics](docs/latency.md). There is no packaged release or automatic update channel; build locally.
+Read [architecture](docs/architecture.md), [development](docs/development.md), [Ghostty input-method setup](docs/macos-input-method.md), or [latency diagnostics](docs/latency.md). There is no packaged release or automatic update channel; build locally.
 
 ## License
 

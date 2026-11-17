@@ -1,0 +1,49 @@
+name: macOS validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      CI: "1"
+      FIG_SIGN_IDENTITY: "-"
+      TURBO_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install validation tools
+        run: |
+          brew install just jq protobuf cargo-nextest
+          npm install --global "$(node -p 'require("./package.json").packageManager')"
+          rustup toolchain install nightly --profile minimal --component rustfmt
+          just deps
+      - name: Build and verify the public bundle
+        run: |
+          test ! -e bundle-id.local
+          test ! -e themes.local
+          just all
+      - name: Run the shared gate without interactive UI
+        run: bash scripts/gate.sh --headless
+      - name: Require a clean generated tree
+        run: |
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

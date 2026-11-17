@@ -4,6 +4,14 @@
 
 set -euo pipefail
 
+native_ui=1
+case "${1:-}" in
+  "") ;;
+  --headless) native_ui=0 ;;
+  *) echo "usage: $0 [--headless]" >&2; exit 2 ;;
+esac
+if [ "$#" -gt 1 ]; then echo "usage: $0 [--headless]" >&2; exit 2; fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
@@ -69,6 +77,7 @@ codegen_zero_diff() {
 }
 
 step "pnpm install (frozen lockfile)" pnpm install --frozen-lockfile --prefer-offline
+step "locked Rust sources for license checks" cargo fetch --locked --target aarch64-apple-darwin
 step "rustfmt --check" cargo +nightly fmt --check
 step "oxfmt --check" pnpm exec oxfmt --check
 step "oxlint --type-aware (zero warnings)" pnpm exec oxlint --type-aware --max-warnings 0
@@ -86,6 +95,10 @@ step "nextest run --workspace" cargo nextest run --locked --workspace
 step "FFI safety doctests" cargo test --locked -p macos-utils --doc
 step "app installation rollback" python3 scripts/test-app-install.py
 step "input method compile and geometry" bash scripts/check-input-method.sh
-step "WKWebView runtime resize smoke" cargo run --locked -p fig_desktop --example webview_runtime_smoke
+if [ "$native_ui" -eq 1 ]; then
+  step "WKWebView runtime resize smoke" cargo run --locked -p fig_desktop --example webview_runtime_smoke
+else
+  summary+=("SKIP         WKWebView runtime resize smoke (--headless; run just gate in a GUI session)")
+fi
 
 report

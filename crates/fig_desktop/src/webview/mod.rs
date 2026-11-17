@@ -157,6 +157,8 @@ impl WebviewManager {
             EventLoopExtMacOS,
         };
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        // Only an explicit dashboard presentation should take focus from the terminal.
+        event_loop.set_activate_ignoring_other_apps(false);
 
         let proxy = EventLoopProxy::new(event_loop.create_proxy());
 
@@ -672,6 +674,7 @@ pub fn build_dashboard(
     }
 
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
+        .with_focused(visible)
         .with_url(url.as_str())
         .with_devtools(true)
         .with_asynchronous_custom_protocol(
@@ -732,6 +735,7 @@ pub fn build_autocomplete(
     let fig_icons = state.clone();
     let native_icons = state.clone();
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
+        .with_focused(false)
         .with_url(self::url::autocomplete().as_str())
         .with_asynchronous_custom_protocol(
             "fig".into(),

@@ -646,6 +646,9 @@ impl WindowState {
 
                     self.window.set_visible(true);
                     self.window.set_focus();
+                    if let Err(err) = self.webview.focus() {
+                        warn!(%err, "Unable to focus dashboard content");
+                    }
                 }
             },
             WindowEvent::NavigateAbsolute { url } => {

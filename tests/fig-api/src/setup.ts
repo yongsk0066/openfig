@@ -4,8 +4,20 @@ import { tempDir } from "./util.js";
 // Set Fig JS bindings to log less
 window.fig = { constants: undefined, quiet: true } as unknown as typeof fig;
 
-// Build CLI so we get warnings/errors if there are any
-childProcess.execSync("cargo build -p fig-api-mock -q");
+// Directory requests exercise the same isolated worker as the desktop.
+childProcess.execFileSync("cargo", [
+  "build",
+  "--locked",
+  "-p",
+  "fig-api-mock",
+  "-p",
+  "fig_desktop",
+  "--bin",
+  "fig-api-mock",
+  "--bin",
+  "fig_io_worker",
+  "-q",
+]);
 
 // Init constants
 eval(

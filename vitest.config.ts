@@ -6,8 +6,7 @@ import { defineConfig } from "vitest/config";
  * definitions, so the five one-line `vitest.config.ts` files that used to sit
  * in the packages are gone and the environments are visible side by side.
  *
- * `tests/fig-api` is deliberately not a project here: its setup shells out to
- * `cargo build -p fig-api-mock` and every IPC message is a `cargo run`, which
+ * `tests/fig-api` is deliberately not a project here: its setup builds the Rust mock and I/O helper and every IPC message is a `cargo run`, which
  * makes `vitest run` need a Rust toolchain and takes ~31s instead of ~6s. Run
  * it on demand with
  *   pnpm exec vitest run --root tests/fig-api

@@ -70,6 +70,9 @@ pub struct FigMessage {
     message_type: FigMessageType,
 }
 
+/// Shared wire budget for the local CLI protocol (including binary API response payloads).
+pub const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+
 #[derive(Debug)]
 pub enum FigMessageComponent {
     Header,
@@ -79,6 +82,8 @@ pub enum FigMessageComponent {
 
 #[derive(Debug, Error)]
 pub enum FigMessageParseError {
+    #[error("message exceeds the 16 MiB wire budget")]
+    TooLarge,
     /// The missing component and the needed bytes
     #[error("incomplete message, missing {0:?}")]
     Incomplete(FigMessageComponent, usize),
@@ -106,6 +111,8 @@ pub enum FigMessageDecodeError {
 
 #[derive(Debug, Error)]
 pub enum FigMessageEncodeError {
+    #[error("message exceeds the 16 MiB wire budget")]
+    TooLarge,
     #[error(transparent)]
     IntError(#[from] std::num::TryFromIntError),
     #[error(transparent)]
@@ -123,6 +130,9 @@ impl FigMessage {
 
     fn encode_buf(&self, dst: &mut BytesMut) -> Result<(), FigMessageEncodeError> {
         let body = &self.inner;
+        if body.len() > MAX_MESSAGE_SIZE {
+            return Err(FigMessageEncodeError::TooLarge);
+        }
         let message_type = self.message_type;
 
         let message_len: u64 = body.len().try_into()?;
@@ -190,7 +200,11 @@ impl FigMessage {
             ));
         }
 
-        let len: usize = src.get_u64().try_into()?;
+        let len = src.get_u64();
+        if len > MAX_MESSAGE_SIZE as u64 {
+            return Err(FigMessageParseError::TooLarge);
+        }
+        let len: usize = len.try_into()?;
 
         if src.remaining() < len {
             return Err(FigMessageParseError::Incomplete(
@@ -335,5 +349,32 @@ mod tests {
         let decoded_message: local::LocalMessage = msg.decode().unwrap();
 
         assert_eq!(message, decoded_message);
+    }
+}
+
+#[cfg(test)]
+mod wire_limits {
+    use super::*;
+    #[test]
+    fn all_codecs_reject_oversized_headers_and_sends() {
+        for kind in [
+            FigMessageType::Protobuf,
+            FigMessageType::Json,
+            FigMessageType::MessagePack,
+        ] {
+            let mut bytes = BytesMut::new();
+            bytes.extend_from_slice(b"\x1b@");
+            bytes.extend_from_slice(kind.header());
+            bytes.extend_from_slice(&(MAX_MESSAGE_SIZE as u64 + 1).to_be_bytes());
+            assert!(matches!(
+                FigMessage::parse(&mut bytes.freeze()),
+                Err(FigMessageParseError::TooLarge)
+            ));
+        }
+        let message = FigMessage {
+            inner: Bytes::from(vec![0; MAX_MESSAGE_SIZE + 1]),
+            message_type: FigMessageType::Protobuf,
+        };
+        assert!(matches!(message.to_encoded(), Err(FigMessageEncodeError::TooLarge)));
     }
 }

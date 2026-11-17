@@ -1,6 +1,8 @@
 pub mod local;
 
 mod error;
+mod listener;
+pub use listener::serve_connections;
 
 mod buffered_reader;
 mod recv_message;

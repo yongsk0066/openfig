@@ -22,7 +22,9 @@ pin_project! {
     pub struct BufferedReader<T> {
         #[pin]
         pub(crate) inner: T,
-        pub(crate) buffer: BytesMut
+        pub(crate) buffer: BytesMut,
+        pub(crate) frame_started: Option<tokio::time::Instant>,
+        pub(crate) failed: bool,
     }
 }
 
@@ -31,6 +33,8 @@ impl<T> BufferedReader<T> {
         Self {
             inner,
             buffer: BytesMut::new(),
+            frame_started: None,
+            failed: false,
         }
     }
 }

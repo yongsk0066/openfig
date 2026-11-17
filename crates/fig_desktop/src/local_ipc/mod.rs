@@ -72,27 +72,15 @@ pub async fn start_local_ipc(
     tokio::fs::remove_file(&socket_path).await.ok();
 
     let listener = UnixListener::bind(&socket_path)?;
-
-    loop {
-        let stream = match listener.accept().await {
-            Ok((stream, _)) => stream,
-            Err(err) => {
-                // A single transient accept failure (EMFILE, ECONNABORTED, ...) used to end the
-                // `while let Ok(..)` loop and silently kill the desktop's only local IPC
-                // listener for the rest of the process's life.
-                warn!(%err, "Failed to accept a local IPC connection");
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                continue;
-            },
-        };
-
-        tokio::spawn(handle_local_ipc(
+    fig_ipc::serve_connections(listener, 32, nix::unistd::getuid().as_raw(), move |stream| {
+        handle_local_ipc(
             BufferedUnixStream::new(stream),
             shell_sessions.clone(),
             webview_notifications_state.clone(),
             proxy.clone(),
-        ));
-    }
+        )
+    })
+    .await
 }
 
 async fn handle_local_ipc(
@@ -101,12 +89,27 @@ async fn handle_local_ipc(
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
 ) {
-    while let Some(message) = stream.recv_message::<LocalMessage>().await.unwrap_or_else(|err| {
-        if !err.is_disconnect() {
-            error!("Failed receiving local message: {err}");
-        }
-        None
-    }) {
+    let mut first = true;
+    loop {
+        // Idle established connections may be subscriptions. Only the first message has an
+        // idle deadline; the framed reader separately bounds partially received messages.
+        let received = if first {
+            first = false;
+            match tokio::time::timeout(Duration::from_secs(5), stream.recv_message::<LocalMessage>()).await {
+                Ok(result) => result,
+                Err(_) => break,
+            }
+        } else {
+            stream.recv_message::<LocalMessage>().await
+        };
+        let Some(message) = received.unwrap_or_else(|err| {
+            if !err.is_disconnect() {
+                error!("Failed receiving local message: {err}");
+            }
+            None
+        }) else {
+            break;
+        };
         trace!("Received local message: {message:?}");
         match message.r#type {
             Some(LocalMessageType::Command(command)) => {

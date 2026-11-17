@@ -1223,3 +1223,101 @@ async fn hook_reconnection_renegotiates_edits_and_rejects_old_revision() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn hook_partial_commands_leave_typing_live_and_preserve_frame_order() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Raw).await.unwrap();
+    shell.send_bytes(b"INSERT 0 pa").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    shell.press("x").unwrap();
+    shell.wait_for_output("x", Duration::from_millis(500)).await.unwrap();
+    shell.send_bytes(b"rt 0 0\nINSERT 0 ! 0 0\n").await.unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "E 6 6 xpart!"),
+        )
+        .await
+        .unwrap();
+    assert_no_noise(&shell.output());
+}
+
+#[tokio::test]
+async fn hook_split_utf8_insertion_preserves_characters_and_cursor() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Raw).await.unwrap();
+    let frame = "INSERT 0 한🙂 1 0\n".as_bytes();
+    for byte in frame {
+        shell.send_bytes(&[*byte]).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "E 1 3 한🙂"),
+        )
+        .await
+        .unwrap();
+    shell.type_text("!").await.unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "E 2 4 한!🙂"),
+        )
+        .await
+        .unwrap();
+    assert_no_noise(&shell.output());
+}
+
+#[tokio::test]
+async fn hook_disconnect_releases_interception_before_the_next_key() {
+    let rc = format!("{PLAIN}{WORKDIR}");
+    let mut shell = HookShell::spawn(Rc::Text(&rc), Daemon::Raw).await.unwrap();
+    shell.type_text("cat uniq").await.unwrap();
+    shell.send_line("INTERCEPT 1 tab enter").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    shell.kill_daemon().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    shell.press("\t").unwrap();
+    shell
+        .wait_for_output("uniquefile1", Duration::from_millis(500))
+        .await
+        .unwrap();
+    assert_no_noise(&shell.output());
+}
+
+#[tokio::test]
+async fn hook_unrelated_messages_do_not_extend_a_key_deadline() {
+    let rc = format!("{PLAIN}{WORKDIR}");
+    let mut shell = HookShell::spawn(Rc::Text(&rc), Daemon::Raw).await.unwrap();
+    shell.type_text("cat uniq").await.unwrap();
+    shell.send_line("INTERCEPT 1 tab").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    shell.press("\t").unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line == "K tab"),
+        )
+        .await
+        .unwrap();
+    // The former per-read timeout was renewed by each of these frames.
+    for _ in 0..8 {
+        shell.send_line("INTERCEPT 1 tab").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    shell
+        .wait_for_output("uniquefile1", Duration::from_millis(400))
+        .await
+        .unwrap();
+    assert_no_noise(&shell.output());
+}
+
+#[tokio::test]
+async fn hook_oversized_command_retires_connection_without_editing() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Raw).await.unwrap();
+    shell.send_bytes(&vec![b'x'; 1024 * 1024 + 4096]).await.ok();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    shell.press("safe").unwrap();
+    shell.wait_for_output("safe", Duration::from_millis(500)).await.unwrap();
+    assert_no_noise(&shell.output());
+}

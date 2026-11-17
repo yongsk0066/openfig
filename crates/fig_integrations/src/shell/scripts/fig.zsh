@@ -7,7 +7,7 @@ if [[ -o interactive && -z ${_fig_sock-} ]] && autoload -Uz is-at-least add-zle-
 typeset -g _fig_sock='{{HOOK_SOCKET}}' _fig_fd= _fig_off= _fig_armed= _fig_isearch= _fig_last= _fig_ctx=
 typeset -gi _fig_revision=0 _fig_retry=1 _fig_timer=0 _fig_status=0
 typeset -gF _fig_hello_deadline=0
-typeset -g _fig_connect_fd= _fig_hello= _fig_in_command=
+typeset -g _fig_connect_fd= _fig_hello= _fig_in_command= _fig_rx=
 typeset -g _fig_v2= _fig_ack_id= _fig_ack_status=
 typeset -gA _fig_fwd _fig_orig _fig_names
 _fig_names=($'\t' tab $'\e[Z' shift+tab $'\e[A' up $'\eOA' up $'\e[B' down $'\eOB' down $'\r' enter $'\e' esc
@@ -48,7 +48,7 @@ _fig_close() {
   for fd in $_fig_fd $_fig_connect_fd; do
     zle -F $fd 2>/dev/null; exec {fd}>&- 2>/dev/null
   done
-  _fig_fd= _fig_connect_fd= _fig_hello= _fig_last= _fig_ctx= _fig_v2= _fig_ack_id= _fig_ack_status= _fig_fwd=()
+  _fig_fd= _fig_connect_fd= _fig_hello= _fig_rx= _fig_last= _fig_ctx= _fig_v2= _fig_ack_id= _fig_ack_status= _fig_fwd=()
   _fig_unschedule; _fig_schedule
 }
 
@@ -131,21 +131,45 @@ _fig_report() {
 _fig_isearch_on() { [[ -n $_fig_isearch ]] || { _fig_isearch=1 _fig_last=; _fig_send 'E 0 0 ' }; return 0 }
 _fig_isearch_off() { _fig_isearch=; return 0 }
 
-# A forwarded key waits for the desktop's verdict: KEY 0 zsh's after all, KEY 2 taken, KEY 1 taken and an
-# insertion may follow. zsh runs no widget from a `zle -F` handler until the next key arrives, so a line
-# an insertion ends with can only be run from here: wait up to 80 ms for it. No `emulate`: the original
-# widget runs under the user's options.
+# One bounded frame reader owns all post-handshake input. Readiness means some bytes, not a
+# complete line: leave partial frames buffered and return to ZLE instead of blocking typing.
+# Return 0 with REPLY, 2 while incomplete, or 1 after retiring a closed/oversized connection.
+_fig_read_line() {
+  emulate -L zsh; setopt nomultibyte
+  local chunk result; local -F end=$(( EPOCHREALTIME + ${1:-0} )) remaining
+  while [[ -n $_fig_fd ]]; do
+    if [[ $_fig_rx == *$'\n'* ]]; then
+      REPLY=${_fig_rx%%$'\n'*}; _fig_rx=${_fig_rx#*$'\n'}
+      (( ${#REPLY} <= 1048576 )) && return 0
+      _fig_close; return 1
+    fi
+    (( ${#_fig_rx} <= 1048576 )) || { _fig_close; return 1 }
+    (( remaining = end - EPOCHREALTIME )); (( remaining < 0 )) && remaining=0
+    sysread -i $_fig_fd -s 4096 -t $remaining chunk; result=$?
+    (( result == 4 )) && return 2
+    (( result == 0 )) || { _fig_close; return 1 }
+    _fig_rx+=$chunk
+    # A busy peer cannot extend a key's deadline by sending unrelated or partial messages.
+    [[ $_fig_rx == *$'\n'* ]] || (( EPOCHREALTIME < end )) || return 2
+  done
+  return 1
+}
+
+# A forwarded key has one total verdict deadline, followed by at most 80ms for KEY 1's
+# insertion. No emulate here: the original widget must run under the user's options.
 _fig_key() {
   zle -f nolast 2>/dev/null
-  local name=${_fig_names[$KEYS]} line end left
+  local name=${_fig_names[$KEYS]} line end left REPLY
   if [[ -n ${_fig_fwd[$name]-} && $LASTWIDGET != *menu-select* ]] && _fig_send "K $name"; then
-    while [[ -n $_fig_fd ]] && read -t 1 -r -u $_fig_fd line; do
+    end=$(( EPOCHREALTIME + 1 ))
+    while [[ -n $_fig_fd ]] && (( (left = end - EPOCHREALTIME) > 0 )) && _fig_read_line $left; do
+      line=$REPLY
       case $line in ("KEY 2 $name") return 0;; ("KEY 0 $name") break;; ("KEY 1 $name") ;; (*) _fig_line "$line"; continue;; esac
       end=$(( EPOCHREALTIME + 0.08 ))
-      while [[ -n $_fig_fd ]] && (( (left = end - EPOCHREALTIME) > 0 )) && read -t $left -r -u $_fig_fd line; do
-        _fig_line "$line" accept || return 0
+      while [[ -n $_fig_fd ]] && (( (left = end - EPOCHREALTIME) > 0 )) && _fig_read_line $left; do
+        line=$REPLY; _fig_line "$line" accept || return 0
         [[ $line == INSERT* ]] || continue
-        while [[ -n $_fig_fd ]] && read -t 0 -r -u $_fig_fd line; do _fig_line "$line" accept || return 0; done
+        while [[ -n $_fig_fd ]] && _fig_read_line 0; do _fig_line "$REPLY" accept || return 0; done
         return 0
       done
       return 0
@@ -184,10 +208,10 @@ _fig_line() {
   return 0
 }
 _fig_on_msg() {
-  emulate -L zsh; local line
-  [[ -z ${2-} ]] && read -r -u $1 line || { _fig_close; return 0 }
-  _fig_line "$line"
-  while [[ -n $_fig_fd ]] && read -t 0 -r -u $1 line; do _fig_line "$line"; done
+  emulate -L zsh; local REPLY
+  [[ $1 == $_fig_fd ]] || return 0
+  [[ -z ${2-} ]] || { _fig_close; return 0 }
+  while [[ -n $_fig_fd ]] && _fig_read_line 0; do _fig_line "$REPLY"; done
   return 0
 }
 
@@ -228,7 +252,7 @@ _fig_precmd() {
   _fig_arm
   if [[ -z $_fig_fd ]]; then _fig_unschedule; _fig_connect; return 0; fi
   # Commands arriving during execution cannot insert into a later prompt.
-  while [[ -n $_fig_fd ]] && read -t 0 -r -u $_fig_fd line; do [[ $line == INSERT* ]] || _fig_line "$line"; done
+  while [[ -n $_fig_fd ]] && _fig_read_line 0; do line=$REPLY; [[ $line == INSERT* ]] || _fig_line "$line"; done
   _fig_context
   _fig_esc "$PWD"; _fig_send "P $st $REPLY"; return 0
 }

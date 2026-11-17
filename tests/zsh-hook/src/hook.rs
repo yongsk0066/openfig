@@ -511,8 +511,13 @@ impl HookShell {
 
     /// [`Daemon::Raw`]: writes `line` to every connection.
     pub async fn send_line(&self, line: &str) -> Result<()> {
+        self.send_bytes(format!("{line}\n").as_bytes()).await
+    }
+
+    /// Send deliberately fragmented or coalesced frames to the real hook.
+    pub async fn send_bytes(&self, bytes: &[u8]) -> Result<()> {
         for writer in self.raw_writers.lock().await.iter_mut() {
-            writer.write_all(format!("{line}\n").as_bytes()).await?;
+            writer.write_all(bytes).await?;
         }
         Ok(())
     }

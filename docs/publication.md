@@ -12,6 +12,12 @@ The separate `withfig/themes` repository did not declare a license at review tim
 
 `objc2` publishes its Apple-SDK provenance caveat alongside its license; the supplemental notices preserve it. OpenFig does not bundle Xcode or macOS frameworks. Build with your own licensed SDK. Software license review is not a determination that every trademark, patent, SDK or distribution-policy question is settled.
 
+## Name and distribution channel
+
+An unrelated Figma tooling project already uses [OpenFig](https://openfig.org/). This terminal fork does not claim affiliation or exclusive rights to that name. Distinguishing the projects in README reduces confusion but is not trademark clearance; review the public-facing name before promoting a release.
+
+Source hosting and Mac App Store submission are different decisions. OpenFig still uses the private AX window-ID SPI documented in [architecture](architecture.md). Apple's [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) require public APIs for App Store apps. Publishing source does not establish App Store eligibility; do not promise it or infer that a local signature implies notarization.
+
 ## Privacy and publication checks
 
 Before changing visibility, inspect all branches, tags and historical file contents, not just HEAD. Run `python3 scripts/check-publication.py --history` and a full-history secret scan such as `gitleaks git --log-opts='--all --full-history' --redact=100`. Inspect findings; CLI documentation contains example keys, so a raw hit is not proof of a live credential. Never use a broad exclusion for an entire specs directory. Scanners cannot prove the absence of every secret or personal detail.

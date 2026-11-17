@@ -1,4 +1,4 @@
-# OpenFig
+# OpenFig — terminal autocomplete
 
 A personal macOS terminal-autocomplete fork of [Amazon Q Developer CLI Autocomplete](https://github.com/aws/amazon-q-developer-cli-autocomplete), originally built by Fig. It shows completion suggestions beside the terminal cursor and inserts the selected text into zsh.
 
@@ -37,3 +37,5 @@ Read [architecture](docs/architecture.md), [development](docs/development.md), [
 Project code is available under [MIT](LICENSE.MIT) or [Apache-2.0](LICENSE.APACHE). Original upstream notices and vendored component licenses are retained; see [NOTICE](NOTICE). This is an independent fork, not an Amazon or Fig supported product.
 
 This is a personal project without a support or release schedule. See [source publication](docs/publication.md) for component licenses, asset provenance and distribution checks.
+
+This terminal fork is unrelated to the [OpenFig.org Figma tools](https://openfig.org/). The shared name is not a claim of affiliation or exclusive branding rights.

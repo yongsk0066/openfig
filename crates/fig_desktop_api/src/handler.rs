@@ -75,13 +75,17 @@ pub async fn api_request(
         Err(_) => return Err(crate::error::Error::Timeout),
     };
 
-    Ok(ServerOriginatedMessage {
+    let mut message = ServerOriginatedMessage {
         id: Some(request_id),
         submessage: Some(match response {
             Ok(msg) => *msg,
             Err(msg) => ServerOriginatedSubMessage::Error(msg.to_string()),
         }),
-    })
+    };
+    if message.encoded_len() > fig_proto::MAX_MESSAGE_SIZE {
+        message.submessage = Some(ServerOriginatedSubMessage::Error("API response exceeds 16 MiB".into()));
+    }
+    Ok(message)
 }
 
 async fn handle_request(
@@ -170,5 +174,33 @@ async fn handle_request(
             warn!("Missing submessage: {message:?}");
             RequestResult::error("Missing submessage")
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn oversized_desktop_reply_returns_a_correlated_error() {
+        let request = ClientOriginatedMessage {
+            id: Some(42),
+            submessage: Some(ClientOriginatedSubMessage::RunProcessRequest(Default::default())),
+        };
+        let response = api_request(request, &Env::new(), async |_, _| {
+            Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(
+                fig_proto::fig::RunProcessResponse {
+                    stdout: "x".repeat(fig_proto::MAX_MESSAGE_SIZE),
+                    ..Default::default()
+                },
+            )))
+        })
+        .await
+        .unwrap();
+        assert_eq!(response.id, Some(42));
+        assert!(matches!(
+            response.submessage,
+            Some(ServerOriginatedSubMessage::Error(_))
+        ));
     }
 }

@@ -21,23 +21,49 @@ use crate::util::{
     resolve_filepath,
 };
 
+// Reserve space for the protobuf response ID, nested message tags and length prefixes.
+const MAX_FILE_BYTES: usize = fig_proto::MAX_MESSAGE_SIZE - 32;
+
+fn read_bounded(reader: impl std::io::Read, size_hint: u64, limit: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::{
+        Error,
+        Read,
+    };
+    let too_large = || Error::other(format!("file exceeds the {limit}-byte read limit"));
+    if size_hint > limit as u64 {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::with_capacity(size_hint as usize + 1);
+    // The file may grow after metadata was read, or report zero length until read.
+    reader.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(too_large());
+    }
+    Ok(bytes)
+}
+
 pub(crate) async fn read_file(request: ReadFileRequest, env: &Env) -> RequestResult {
     use fig_proto::fig::read_file_response::Type;
     let path = request.path.as_ref().ok_or("No path provided")?;
-    let resolved_path = resolve_filepath(path, env);
-    let kind = if request.is_binary_file() {
-        Type::Data(
-            tokio::fs::read(&*resolved_path)
-                .await
-                .map_err(|err| format!("Failed reading file at {resolved_path}: {err}"))?,
-        )
-    } else {
-        Type::Text(
-            tokio::fs::read_to_string(&*resolved_path)
-                .await
-                .map_err(|err| format!("Failed reading file at {resolved_path}: {err}"))?,
-        )
-    };
+    let resolved_path = resolve_filepath(path, env).into_owned();
+    let binary = request.is_binary_file();
+    let kind = tokio::task::spawn_blocking(move || {
+        let read = || -> std::io::Result<Type> {
+            let file = std::fs::File::open(&*resolved_path)?;
+            let hint = file.metadata()?.len();
+            let bytes = read_bounded(file, hint, MAX_FILE_BYTES)?;
+            if binary {
+                Ok(Type::Data(bytes))
+            } else {
+                String::from_utf8(bytes).map(Type::Text).map_err(|_invalid_utf8| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "stream did not contain valid UTF-8")
+                })
+            }
+        };
+        read().map_err(|err| format!("Failed reading file at {resolved_path}: {err}"))
+    })
+    .await
+    .map_err(|err| err.to_string())??;
     let response = ServerOriginatedSubMessage::ReadFileResponse(ReadFileResponse { r#type: Some(kind) });
 
     Ok(response.into())
@@ -156,6 +182,16 @@ mod tests {
             Err(err) => err.to_string(),
             Ok(response) => panic!("expected an error, got {response:?}"),
         }
+    }
+
+    #[test]
+    fn file_size_hint_cannot_bypass_read_limit() {
+        assert_eq!(read_bounded(&b"abcd"[..], 0, 4).unwrap(), b"abcd");
+        assert!(read_bounded(&b"abcde"[..], 1, 4).is_err());
+        assert!(read_bounded(std::io::empty(), 5, 4).is_err());
+        let mut endless = std::io::Cursor::new([0; 100]);
+        assert!(read_bounded(&mut endless, 0, 4).is_err());
+        assert_eq!(endless.position(), 5);
     }
 
     #[tokio::test]

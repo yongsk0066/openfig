@@ -435,71 +435,76 @@ mod test {
 
     use super::*;
 
-    /// A `JsonStore` backed by a file in a temp directory, so the round trip can be checked
-    /// without touching the user's real settings. Every nextest test runs in its own process, so
-    /// the statics below are private to one test.
-    static TEST_DIR: LazyLock<tempfile::TempDir> = LazyLock::new(|| tempfile::tempdir().unwrap());
-    static TEST_FILE_LOCK: RwLock<()> = RwLock::new(());
-    static TEST_DATA: RwLock<Option<Map>> = RwLock::new(None);
-
-    struct TestStore {
-        inner: Backend,
-    }
-
-    impl JsonStore for TestStore {
-        fn path() -> Result<PathBuf> {
-            Ok(TEST_DIR.path().join("local.json"))
-        }
-
-        fn file_lock() -> &'static RwLock<()> {
-            &TEST_FILE_LOCK
-        }
-
-        fn data_lock() -> &'static RwLock<Option<Map>> {
-            &TEST_DATA
-        }
-
-        fn new_from_backend(backend: Backend) -> Self {
-            Self { inner: backend }
-        }
-
-        fn map(&self) -> ReadGuard<'_, Map> {
-            match &self.inner {
-                Backend::Global => ReadGuard::Global(Self::data_lock().read()),
-                Backend::Memory(map) => ReadGuard::Memory(map),
+    // Each invocation defines its own store type and statics. Test ownership must not depend
+    // on the runner putting every test into a separate process.
+    macro_rules! file_store {
+        ($name:ident) => {
+            struct $name {
+                inner: Backend,
             }
-        }
 
-        fn map_mut(&mut self) -> WriteGuard<'_, Map> {
-            match &mut self.inner {
-                Backend::Global => WriteGuard::Global(Self::data_lock().write()),
-                Backend::Memory(map) => WriteGuard::Memory(map),
+            impl JsonStore for $name {
+                fn path() -> Result<PathBuf> {
+                    static TEST_DIR: LazyLock<tempfile::TempDir> = LazyLock::new(|| tempfile::tempdir().unwrap());
+                    Ok(TEST_DIR.path().join("local.json"))
+                }
+
+                fn file_lock() -> &'static RwLock<()> {
+                    static TEST_FILE_LOCK: RwLock<()> = RwLock::new(());
+                    &TEST_FILE_LOCK
+                }
+
+                fn data_lock() -> &'static RwLock<Option<Map>> {
+                    static TEST_DATA: RwLock<Option<Map>> = RwLock::new(None);
+                    &TEST_DATA
+                }
+
+                fn new_from_backend(backend: Backend) -> Self {
+                    Self { inner: backend }
+                }
+
+                fn map(&self) -> ReadGuard<'_, Map> {
+                    match &self.inner {
+                        Backend::Global => ReadGuard::Global(Self::data_lock().read()),
+                        Backend::Memory(map) => ReadGuard::Memory(map),
+                    }
+                }
+
+                fn map_mut(&mut self) -> WriteGuard<'_, Map> {
+                    match &mut self.inner {
+                        Backend::Global => WriteGuard::Global(Self::data_lock().write()),
+                        Backend::Memory(map) => WriteGuard::Memory(map),
+                    }
+                }
             }
-        }
+        };
     }
 
-    fn contents() -> String {
-        fs::read_to_string(TestStore::path().unwrap()).unwrap()
+    fn contents<T: JsonStore>() -> String {
+        fs::read_to_string(T::path().unwrap()).unwrap()
     }
 
-    fn mode() -> u32 {
-        fs::metadata(TestStore::path().unwrap()).unwrap().permissions().mode() & 0o777
+    fn mode<T: JsonStore>() -> u32 {
+        fs::metadata(T::path().unwrap()).unwrap().permissions().mode() & 0o777
     }
 
-    /// The round trip the commented-out `test_store_type` used to cover, against the current API.
     #[test]
     fn set_get_remove_round_trip() {
+        file_store!(TestStore);
         let path = TestStore::path().unwrap();
 
         let mut store = TestStore::load().unwrap();
-        assert_eq!(contents(), "{}", "load must create the file");
+        assert_eq!(contents::<TestStore>(), "{}", "load must create the file");
         assert_eq!(*store.map(), Map::new());
 
         store.set("a", 123);
         store.set("b", "hello");
         store.set("c", false);
         store.save_to_file().unwrap();
-        assert_eq!(contents(), "{\n  \"a\": 123,\n  \"b\": \"hello\",\n  \"c\": false\n}");
+        assert_eq!(
+            contents::<TestStore>(),
+            "{\n  \"a\": 123,\n  \"b\": \"hello\",\n  \"c\": false\n}"
+        );
 
         let reloaded = TestStore::load().unwrap();
         assert_eq!(reloaded.get("b").unwrap().as_str(), Some("hello"));
@@ -509,38 +514,37 @@ mod test {
         let mut store = TestStore::load().unwrap();
         store.remove("a").unwrap();
         store.save_to_file().unwrap();
-        assert_eq!(contents(), "{\n  \"b\": \"hello\",\n  \"c\": false\n}");
+        assert_eq!(contents::<TestStore>(), "{\n  \"b\": \"hello\",\n  \"c\": false\n}");
 
         // No temp file left behind by the atomic replacement.
         assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
     }
 
-    /// The file holds settings and, for `state`, tokens. The first-creation path used a plain
-    /// `File::create`, which gave 0644 — measurably so on this machine before the fix — and
-    /// nothing ever narrowed it again.
+    /// Settings remain private on first creation, on loading older files and after replacement.
     #[test]
     fn the_file_is_never_world_readable() {
+        file_store!(TestStore);
         let path = TestStore::path().unwrap();
 
         TestStore::load().unwrap();
-        assert_eq!(mode(), 0o600, "freshly created file");
+        assert_eq!(mode::<TestStore>(), 0o600, "freshly created file");
 
         // An existing file created by an older version is repaired on the next load.
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         TestStore::load().unwrap();
-        assert_eq!(mode(), 0o600, "pre-existing 0644 file");
+        assert_eq!(mode::<TestStore>(), 0o600, "pre-existing 0644 file");
 
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         let mut store = TestStore::load().unwrap();
         store.set("a", 1);
         store.save_to_file().unwrap();
-        assert_eq!(mode(), 0o600, "after a save");
+        assert_eq!(mode::<TestStore>(), 0o600, "after a save");
     }
 
-    /// A file this version cannot parse used to be overwritten with `{}` — every setting the user
-    /// had, gone, with no copy anywhere. It must be moved aside instead.
+    /// Preserve unparseable settings while allowing the in-memory backend to recover.
     #[test]
     fn an_unparseable_file_is_preserved() {
+        file_store!(TestStore);
         let path = TestStore::path().unwrap();
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "invalid json").unwrap();
@@ -561,6 +565,6 @@ mod test {
         assert!(!path.exists(), "the unparseable file was left in place");
 
         // The in-memory backend falls back to empty so the process can keep running.
-        assert_eq!(*TEST_DATA.read(), Some(Map::new()));
+        assert_eq!(*TestStore::data_lock().read(), Some(Map::new()));
     }
 }

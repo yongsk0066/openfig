@@ -11,6 +11,8 @@ CI=1 just gate     # complete local validation
 just hooks         # optional pre-push gate
 ```
 
+CLI integration commands own temporary homes and socket paths, so tests never use the installed app's settings or database. A concurrent first-open regression checks migration and atomic updates across eight independent database connections.
+
 The gate checks formatting, zero-warning lint, core dependency boundaries, protobuf regeneration, types, JS/Rust tests, installer failure recovery, input-method geometry and a real WKWebView smoke test. It needs macOS with an interactive GUI session for native checks. The native-process tests inject hung, crashed, partial, oversized and mismatched replies, verify automatic recovery/reaping and bounded icon admission, and exercise the real helper PNG output. The popup-root regression test checks fresh layout with no `ResizeObserver` callbacks. The mocked installer tests cover backup retention, helper replacement versus signature-only updates, and copy, signature, missing-helper, process-stuck and launch failures. Staging tests verify that copy/signature failures preserve the live app and never launch or stop a process. GitHub Actions builds an ad-hoc-signed public bundle on macOS arm64 from a fresh checkout and runs the same gate with `--headless`. This explicit mode skips only the WKWebView runtime smoke and reports that omission; `CI=1` alone never skips it. Hosted CI does not validate real terminal placement, login-item approval or input-method enrollment. A successful push alone is not a validation result.
 
 For development, run `just dev-web` in one terminal and `just dev` in another. The latter stops the installed app and runs the native host against autocomplete on port 3124 and settings on port 3433.

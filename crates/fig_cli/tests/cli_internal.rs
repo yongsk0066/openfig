@@ -4,11 +4,20 @@ use common::*;
 
 #[test]
 fn local_state_all() -> Result<()> {
-    cli()
+    let mut command = cli();
+    command
         .args(["_", "local-state", "all", "-f", "json"])
         .assert()
         .stdout(is_json())
         .success();
+    assert!(
+        command
+            .home()
+            .join("Library/Application Support")
+            .join(fig_util::consts::DATA_DIR_NAME)
+            .join("data.sqlite3")
+            .is_file()
+    );
     Ok(())
 }
 
@@ -30,10 +39,12 @@ fn hostname() -> Result<()> {
 
 #[test]
 fn socket_dir() -> Result<()> {
-    cli()
+    let mut command = cli();
+    let expected = command.home().join(fig_util::consts::RUNTIME_DIR_NAME);
+    command
         .args(["_", "sockets-dir"])
         .assert()
-        .stdout(format!("{}\n", fig_util::directories::sockets_dir_utf8().unwrap()))
+        .stdout(format!("{}\n", expected.display()))
         .success();
     Ok(())
 }

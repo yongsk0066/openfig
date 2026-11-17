@@ -1,4 +1,4 @@
-use std::process::Command;
+mod common;
 
 use assert_cmd::prelude::*;
 
@@ -6,7 +6,7 @@ macro_rules! init_test {
     ($name:ident, $shell:expr, $stage:expr, $file:expr) => {
         #[test]
         fn $name() -> Result<(), Box<dyn std::error::Error>> {
-            let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("fig_cli"));
+            let mut cmd = common::cli();
             cmd.arg("init").arg($shell).arg($stage).arg("--rcfile").arg($file);
             cmd.env("TMPDIR", "/fig-init-snapshot");
             let out = cmd.assert().success().get_output().stdout.clone();
@@ -34,10 +34,7 @@ fn init_bash_is_a_silent_no_op() {
         &["init", "bash", "post", "--rcfile", "profile"],
         &["init", "bash", "post"],
     ] {
-        let output = Command::new(assert_cmd::cargo::cargo_bin!("fig_cli"))
-            .args(args)
-            .output()
-            .unwrap();
+        let output = common::cli().args(args).output().unwrap();
         assert!(output.status.success(), "{args:?}: {output:?}");
         assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
         assert!(output.stderr.is_empty(), "{args:?}: {output:?}");

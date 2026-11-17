@@ -7,7 +7,10 @@ use std::sync::{
     Arc,
     LazyLock,
 };
-use std::time::Duration;
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use fig_util::directories::fig_data_dir;
 use parking_lot::{
@@ -19,6 +22,7 @@ use rusqlite::{
     Connection,
     Error,
     ToSql,
+    TransactionBehavior,
     params,
 };
 use serde_json::Map;
@@ -76,13 +80,8 @@ const MIGRATIONS: &[Migration] = migrations![
     "005_auth_table"
 ];
 
-/// One connection, behind a mutex.
-///
-/// This was an r2d2 pool on its defaults, which meant `max_size(10)` with `min_idle == max_size`
-/// (so `build()` blocked until ten connections to the same local file were open), a
-/// `ScheduledThreadPool` of three worker threads, a 30 s reaper, and `test_on_check_out` firing a
-/// round trip before every single statement. Nothing here is concurrent enough to need any of
-/// that: the callers are a CLI and one desktop process, all doing short key/value reads.
+/// One mutex-owned connection per process. Transactions arbitrate writes between processes;
+/// the mutex alone only protects callers sharing this connection.
 #[derive(Debug, Clone)]
 pub struct Db {
     conn: Arc<Mutex<Connection>>,
@@ -124,16 +123,29 @@ impl Db {
         })
     }
 
-    /// The database was on sqlite's defaults: `journal_mode=delete` (a rollback journal created
-    /// and deleted around every write) and `synchronous=FULL` (an fsync per transaction). WAL
-    /// lets readers run while a writer is committing — which matters now that there is one
-    /// connection per process rather than a pool — and `NORMAL` is the standard pairing: durable
-    /// against a process crash, and at worst loses the last transactions on a power cut, for
-    /// a key/value store of UI state.
+    /// WAL keeps readers concurrent with writers. NORMAL preserves process-crash consistency;
+    /// a power loss can still lose the last UI-state transactions.
     fn configure(conn: &Connection) -> Result<()> {
-        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
-        // Several processes share this file; wait for a writer instead of failing with SQLITE_BUSY.
-        conn.busy_timeout(Duration::from_secs(5))?;
+        const BUDGET: Duration = Duration::from_secs(5);
+        let start = Instant::now();
+        loop {
+            conn.busy_timeout(BUDGET.saturating_sub(start.elapsed()))?;
+            match conn.execute_batch("PRAGMA journal_mode = WAL;") {
+                // Concurrent first opens can fail a journal-mode lock upgrade without invoking
+                // SQLite's busy handler. Retry outside a transaction with one total budget.
+                Err(Error::SqliteFailure(error, _))
+                    if error.code == rusqlite::ErrorCode::DatabaseBusy && start.elapsed() < BUDGET =>
+                {
+                    std::thread::sleep(Duration::from_millis(10).min(BUDGET.saturating_sub(start.elapsed())));
+                },
+                result => {
+                    result?;
+                    break;
+                },
+            }
+        }
+        conn.busy_timeout(BUDGET)?;
+        conn.execute_batch("PRAGMA synchronous = NORMAL;")?;
         Ok(())
     }
 
@@ -151,7 +163,9 @@ impl Db {
 
     pub(crate) fn migrate(&self) -> Result<()> {
         let mut conn = self.conn();
-        let transaction = conn.transaction()?;
+        // Acquire the writer reservation before reading migration state. A deferred read-to-write
+        // upgrade can return SQLITE_BUSY_SNAPSHOT immediately, bypassing the busy timeout.
+        let transaction = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
         let max_version = max_migration_version(&transaction);
 
@@ -257,7 +271,7 @@ impl Db {
         op: impl FnOnce(&Option<T>) -> Option<T>,
     ) -> Result<Option<T>> {
         let mut conn = self.conn();
-        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
         let value = tx.query_row::<Option<T>, _, _>(SELECT_STATE, [key.as_ref()], |row| row.get(0));
 
@@ -457,6 +471,41 @@ mod tests {
             assert_eq!(db.atomic_bool_or(key, b).unwrap(), c);
             assert_eq!(db.get_state_value(key).unwrap().unwrap(), d);
             db.unset_state_value(key).unwrap();
+        }
+    }
+    #[test]
+    fn concurrent_fresh_connections_migrate_and_write_without_losing_updates() {
+        for _ in 0..3 {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("fresh.sqlite3");
+            let start = std::sync::Barrier::new(8);
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = (0..8)
+                    .map(|_| {
+                        scope.spawn(|| {
+                            start.wait();
+                            let db = Db::open(&path).unwrap();
+                            db.migrate().unwrap();
+                            for _ in 0..10 {
+                                db.atomic_op::<serde_json::Value>("counter", |value| {
+                                    // Widen the read-to-write interval to expose deferred
+                                    // transaction upgrades.
+                                    std::thread::sleep(Duration::from_millis(1));
+                                    Some(serde_json::json!(
+                                        value.as_ref().and_then(serde_json::Value::as_i64).unwrap_or(0) + 1
+                                    ))
+                                })
+                                .unwrap();
+                            }
+                        })
+                    })
+                    .collect();
+                for worker in workers {
+                    worker.join().unwrap();
+                }
+            });
+            let db = Db::open(&path).unwrap();
+            assert_eq!(db.get_state_value("counter").unwrap(), Some(serde_json::json!(80)));
         }
     }
 }

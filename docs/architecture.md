@@ -37,6 +37,8 @@ Focus generation determines cache validity, not when frames refresh. Focus chang
 
 Filesystem listing is a native request returning an array of names, preserving embedded newlines and optional directory suffixes. It has no persistent directory cache. External generator hosts retain the command-based fallback. Protobuf request/response and native WebView delivery have distinct roles; see [protocol schemas](../proto/README.md).
 
+Each process owns one mutex-protected SQLite connection. WAL setup retries only transient busy errors with a total five-second budget. Schema migration and read/modify/write state operations reserve the writer before reading, preventing deferred-transaction lock upgrades from failing or losing updates across processes. Ordinary reads retain WAL concurrency.
+
 ## Native safety and remaining boundaries
 
 `macos-utils` denies implicit unsafe operations inside unsafe functions. `ApplicationServices` owns the isolated icon lane: at most eight admitted requests and one child process. AppKit rendering runs on that child's main thread, never through a desktop icon event. Callers wait up to two seconds; canceled queued work is skipped and permits are released after handling. Resolved bytes retain the 512-entry FIFO; timeout/overload fallbacks are not cached. Path metadata lookup also stays in the child; unavailable path icons use the trailing slash as a folder hint rather than submitting uncancelable filesystem work on the desktop runtime.

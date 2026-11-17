@@ -41,6 +41,8 @@ pub enum Phase {
     Recovering,
     Failed,
 }
+const FAILURE_WINDOW: Duration = Duration::from_secs(60);
+
 pub struct Delivery {
     pub phase: Phase,
     queue: VecDeque<Frame>,
@@ -98,10 +100,12 @@ impl Delivery {
     }
 
     pub fn ack(&mut self, id: u64) -> bool {
-        if self.flight.is_some_and(|(current, _)| current == id) {
+        if let Some((current, started)) = self.flight.as_ref()
+            && *current == id
+        {
             tracing::trace!(
                 id,
-                elapsed_us = self.flight.as_ref().unwrap().1.elapsed().as_micros(),
+                elapsed_us = started.elapsed().as_micros(),
                 "webview dispatch round trip"
             );
             self.flight = None;
@@ -112,14 +116,19 @@ impl Delivery {
     }
 
     pub fn needs_watch(&self) -> bool {
-        self.flight.is_some() || matches!(self.phase, Phase::Loading | Phase::Recovering)
+        self.flight.is_some() || matches!(self.phase, Phase::Loading | Phase::Recovering | Phase::Failed)
     }
 
     pub fn timed_out(&self) -> bool {
+        self.timed_out_at(Instant::now())
+    }
+
+    fn timed_out_at(&self, now: Instant) -> bool {
         self.flight
-            .is_some_and(|(_, start)| start.elapsed() > Duration::from_secs(3))
+            .is_some_and(|(_, start)| now.saturating_duration_since(start) > Duration::from_secs(3))
             || (matches!(self.phase, Phase::Loading | Phase::Recovering)
-                && self.started.elapsed() > Duration::from_secs(15))
+                && now.saturating_duration_since(self.started) > Duration::from_secs(15))
+            || (self.phase == Phase::Failed && now.saturating_duration_since(self.started) >= FAILURE_WINDOW)
     }
 
     pub fn recovery_delay(&self) -> Duration {
@@ -127,15 +136,25 @@ impl Delivery {
     }
 
     pub fn recover(&mut self) -> bool {
-        self.failures.retain(|time| time.elapsed() < Duration::from_secs(60));
+        self.recover_at(Instant::now())
+    }
+
+    fn recover_at(&mut self, now: Instant) -> bool {
+        // Duplicate fatal/recovery events must neither bypass nor extend the circuit cooldown.
+        if self.phase == Phase::Failed && !self.timed_out_at(now) {
+            return false;
+        }
+        self.failures
+            .retain(|time| now.saturating_duration_since(*time) < FAILURE_WINDOW);
         self.queue.clear();
         self.flight = None;
         if self.failures.len() >= 3 {
             self.phase = Phase::Failed;
+            self.started = now;
             return false;
         }
-        self.failures.push_back(Instant::now());
-        self.started = Instant::now();
+        self.failures.push_back(now);
+        self.started = now;
         self.phase = Phase::Recovering;
         true
     }
@@ -196,5 +215,26 @@ mod tests {
         }
         assert!(!d.recover());
         assert_eq!(d.phase, Phase::Failed);
+    }
+}
+
+#[cfg(test)]
+mod cooldown_tests {
+    use super::*;
+    #[test]
+    fn failed_delivery_retries_after_cooldown_without_extending_it_on_duplicate_errors() {
+        let start = Instant::now();
+        let mut state = Delivery::default();
+        for _ in 0..3 {
+            assert!(state.recover_at(start));
+        }
+        assert!(!state.recover_at(start));
+        assert_eq!(state.phase, Phase::Failed);
+        assert!(state.needs_watch());
+        assert!(!state.recover_at(start + Duration::from_secs(30)));
+        assert!(!state.timed_out_at(start + Duration::from_secs(59)));
+        assert!(state.timed_out_at(start + Duration::from_secs(60)));
+        assert!(state.recover_at(start + Duration::from_secs(60)));
+        assert_eq!(state.phase, Phase::Recovering);
     }
 }

@@ -26,76 +26,64 @@ const DASHBOARD_FORWARD: &str = "dashboard-forward";
 
 /// The dashboard window's menu bar.
 ///
-/// The "Help" submenu used to be appended empty — a top-level title with nothing under it. The
-/// dashboard's own `/help` route is the real one.
-pub fn menu_bar() -> Menu {
+/// Help content lives in the dashboard's `/help` route.
+pub fn menu_bar() -> anyhow::Result<Menu> {
     let menu_bar = Menu::new();
 
     let app_submenu = Submenu::new(PRODUCT_NAME, true);
-    app_submenu
-        .append_items(&[
-            &MenuItemBuilder::new()
-                .text("Backward")
-                .id(DASHBOARD_BACK.into())
-                .enabled(true)
-                .accelerator(Some("super+["))
-                .unwrap()
-                .build(),
-            &MenuItemBuilder::new()
-                .text("Forward")
-                .id(DASHBOARD_FORWARD.into())
-                .enabled(true)
-                .accelerator(Some("super+]"))
-                .unwrap()
-                .build(),
-            &MenuItemBuilder::new()
-                .text("Reload")
-                .id(DASHBOARD_RELOAD.into())
-                .enabled(true)
-                .accelerator(Some("super+r"))
-                .unwrap()
-                .build(),
-            &MenuItemBuilder::new()
-                .text("Close Window")
-                .id(DASHBOARD_CLOSE.into())
-                .enabled(true)
-                .accelerator(Some("super+w"))
-                .unwrap()
-                .build(),
-            &MenuItemBuilder::new()
-                .text(format!("Quit {PRODUCT_NAME}"))
-                .id(APP_QUIT.into())
-                .enabled(true)
-                .accelerator(Some("super+q"))
-                .unwrap()
-                .build(),
-        ])
-        .unwrap();
+    app_submenu.append_items(&[
+        &MenuItemBuilder::new()
+            .text("Backward")
+            .id(DASHBOARD_BACK.into())
+            .enabled(true)
+            .accelerator(Some("super+["))?
+            .build(),
+        &MenuItemBuilder::new()
+            .text("Forward")
+            .id(DASHBOARD_FORWARD.into())
+            .enabled(true)
+            .accelerator(Some("super+]"))?
+            .build(),
+        &MenuItemBuilder::new()
+            .text("Reload")
+            .id(DASHBOARD_RELOAD.into())
+            .enabled(true)
+            .accelerator(Some("super+r"))?
+            .build(),
+        &MenuItemBuilder::new()
+            .text("Close Window")
+            .id(DASHBOARD_CLOSE.into())
+            .enabled(true)
+            .accelerator(Some("super+w"))?
+            .build(),
+        &MenuItemBuilder::new()
+            .text(format!("Quit {PRODUCT_NAME}"))
+            .id(APP_QUIT.into())
+            .enabled(true)
+            .accelerator(Some("super+q"))?
+            .build(),
+    ])?;
 
-    menu_bar.append(&app_submenu).unwrap();
+    menu_bar.append(&app_submenu)?;
 
     let edit_submenu = Submenu::new("Edit", true);
-    edit_submenu
-        .append_items(&[
-            &PredefinedMenuItem::undo(Some("Undo")),
-            &PredefinedMenuItem::redo(Some("Redo")),
-            &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::copy(Some("Copy")),
-            &PredefinedMenuItem::paste(Some("Paste")),
-            &PredefinedMenuItem::cut(Some("Cut")),
-            &PredefinedMenuItem::select_all(Some("Select All")),
-        ])
-        .unwrap();
+    edit_submenu.append_items(&[
+        &PredefinedMenuItem::undo(Some("Undo")),
+        &PredefinedMenuItem::redo(Some("Redo")),
+        &PredefinedMenuItem::separator(),
+        &PredefinedMenuItem::copy(Some("Copy")),
+        &PredefinedMenuItem::paste(Some("Paste")),
+        &PredefinedMenuItem::cut(Some("Cut")),
+        &PredefinedMenuItem::select_all(Some("Select All")),
+    ])?;
 
-    menu_bar.append(&edit_submenu).unwrap();
+    menu_bar.append(&edit_submenu)?;
 
     let window_submenu = Submenu::new("Window", true);
-    window_submenu
-        .append_items(&[&PredefinedMenuItem::minimize(Some("Minimize"))])
-        .unwrap();
-    menu_bar.append(&window_submenu).unwrap();
+    window_submenu.append_items(&[&PredefinedMenuItem::minimize(Some("Minimize"))])?;
+    menu_bar.append(&window_submenu)?;
 
-    menu_bar
+    Ok(menu_bar)
 }
 
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {

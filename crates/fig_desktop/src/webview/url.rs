@@ -7,14 +7,10 @@ use url::Url;
 pub static RESOURCE_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("figresource://localhost").unwrap());
 
 /// The URL for one of the two windows, honouring the env var and the `developer.*.host` setting.
-///
-/// This was two near-identical files (`autocomplete.rs`, `dashboard.rs`) differing only in those
-/// two names, with three separate `Url::parse(..).unwrap()`s between them.
 fn url(env_var: &str, dev_host_setting: &str) -> Url {
     if let Ok(url) = std::env::var(env_var) {
         match Url::parse(&url) {
             Ok(url) => return url,
-            // Previously an `unwrap`: a typo in the env var aborted startup.
             Err(err) => error!(%err, %env_var, "Failed to parse the URL override"),
         }
     }

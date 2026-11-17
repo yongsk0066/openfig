@@ -39,18 +39,7 @@ use wry::{
 use crate::webview::WindowId;
 use crate::webview::window_id::WindowIdProvider;
 
-/// Determines if the build is ran in debug mode
-#[allow(dead_code)]
-pub fn is_cargo_debug_build() -> bool {
-    cfg!(debug_assertions) && !fig_settings::state::get_bool_or("developer.override-cargo-debug", false)
-}
-
 /// Adapt an `async fn(request, window_id)` into a wry asynchronous custom-protocol handler.
-///
-/// A protocol that needs state captures it in `f`: the asset protocols need none, `api://`
-/// captures its [`crate::application::ApplicationServices`]. That state used to be a separate
-/// `Arc<S>` argument, and the asset protocols were handed an `Arc<fig_os_shim::Context>` that every
-/// one of them ignored.
 pub fn wrap_custom_protocol<F, Fut, W>(
     proto_name: &'static str,
     window_id: W,
@@ -124,7 +113,6 @@ pub fn icon() -> Icon {
 
 fn load_from_memory() -> Icon {
     let (icon_rgba, icon_width, icon_height) = {
-        // TODO: Use different per platform icons
         let image = image::load_from_memory(include_bytes!("../icons/icon.png"))
             .expect("Failed to open icon path")
             .into_rgba8();
@@ -142,20 +130,7 @@ pub struct Rect {
     pub size: Size,
 }
 
-#[allow(dead_code)]
 impl Rect {
-    pub fn left(&self, scale_factor: f64) -> f64 {
-        self.position.to_logical::<f64>(scale_factor).x
-    }
-
-    pub fn right(&self, scale_factor: f64) -> f64 {
-        self.position.to_logical::<f64>(scale_factor).x + self.size.to_logical::<f64>(scale_factor).width
-    }
-
-    pub fn top(&self, scale_factor: f64) -> f64 {
-        self.position.to_logical::<f64>(scale_factor).y
-    }
-
     pub fn bottom(&self, scale_factor: f64) -> f64 {
         self.position.to_logical::<f64>(scale_factor).y + self.size.to_logical::<f64>(scale_factor).height
     }

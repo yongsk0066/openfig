@@ -81,6 +81,8 @@ step "turbo typecheck" pnpm exec turbo typecheck
 step "vitest run" pnpm exec vitest run
 step "nextest run --workspace" cargo nextest run --locked --workspace
 step "FFI safety doctests" cargo test --locked -p macos-utils --doc
+step "app installation rollback" python3 scripts/test-app-install.py
+step "input method compile and geometry" bash scripts/check-input-method.sh
 step "WKWebView runtime resize smoke" cargo run --locked -p fig_desktop --example webview_runtime_smoke
 
 report

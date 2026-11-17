@@ -43,16 +43,13 @@ use super::to_tao_theme;
 use super::window_id::WindowId;
 use crate::event::{
     EmitEventName,
+    EventSender,
     WindowEvent,
     WindowGeometryResult,
     WindowPosition,
 };
-use crate::platform::{
-    self,
-    PlatformState,
-};
+use crate::platform::PlatformState;
 use crate::utils::Rect;
-#[allow(unused_imports)]
 use crate::{
     AUTOCOMPLETE_ID,
     DASHBOARD_ID,
@@ -88,13 +85,12 @@ impl WindowGeometryState {
     }
 }
 
-// TODO: Add state for the active terminal window
-#[allow(dead_code)]
 pub struct WindowState {
     pub(super) page_epoch: std::sync::Arc<super::page_epoch::PageEpoch>,
     pub window: Window,
     pub webview: WebView,
-    pub context: WebContext,
+    // Retain the context until after its webview is dropped.
+    _context: WebContext,
     pub window_id: WindowId,
     pub window_geometry_state: Mutex<WindowGeometryState>,
     /// What this window's frame was last set to, or `None` when nothing is known.
@@ -107,12 +103,30 @@ pub struct WindowState {
     /// the window where the first event put it.
     applied_geometry: Mutex<Option<AppliedGeometry>>,
     geometry_turn: Mutex<GeometryTurn>,
+    presentation: Mutex<Presentation>,
     pub enabled: AtomicBool,
     pub url: Mutex<Url>,
     pub(super) delivery: Mutex<super::delivery::Delivery>,
     pub(super) recovery_queued: AtomicBool,
     pub(super) watch_delivery: std::sync::Arc<AtomicBool>,
     pub(super) proxy: crate::EventLoopProxy,
+}
+
+/// Show is an intent, not permission to expose an unpositioned native window.
+#[derive(Default)]
+struct Presentation {
+    requested: bool,
+    anchor: Option<crate::platform::caret_worker::Request>,
+}
+
+impl Presentation {
+    fn suspend_geometry(&mut self) {
+        self.anchor = None;
+    }
+
+    fn can_show(&self, ready: bool, accepts: impl FnOnce(crate::platform::caret_worker::Request) -> bool) -> bool {
+        self.requested && ready && self.anchor.is_some_and(accepts)
+    }
 }
 
 /// A window frame as it was last requested from Cocoa.
@@ -137,9 +151,7 @@ fn geometry_calls(applied: Option<AppliedGeometry>, target: AppliedGeometry) -> 
         resize,
         // Cocoa's origin is the bottom-left, so `setContentSize:` keeps the bottom edge and moves
         // the top edge — the edge this window is anchored by. A resize therefore always needs the
-        // position applied after it, even when the position itself did not change. Positioning
-        // *before* the resize as well, as this used to, set a frame that the resize and the second
-        // positioning replaced within the same main-queue drain.
+        // position applied after it, even when the position itself did not change.
         reposition: resize || applied.is_none_or(|applied| applied.position != target.position),
     }
 }
@@ -196,7 +208,7 @@ pub struct Screen {
 /// consume the latest caret immediately; dry runs and hide/show remain ordering barriers.
 #[derive(Default)]
 struct GeometryTurn {
-    caret: Option<WindowPosition>,
+    caret: Option<(WindowPosition, Option<crate::platform::caret_worker::Request>)>,
     screen: Option<Screen>,
 }
 
@@ -208,10 +220,8 @@ impl GeometryTurn {
 
 /// Where the autocomplete window goes, and what to tell the app about the result.
 ///
-/// This is the calculation half of `update_window_geometry`, which was 193 lines of state
-/// update, monitor search, coordinate conversion, clipping and window manipulation with no
-/// tests at all. Everything about the screen and the focused window arrives as an argument, so
-/// the arithmetic can be exercised directly.
+/// Pure geometry calculation: screen and focused-window inputs are supplied by the caller;
+/// native window mutations happen only after a solution is accepted.
 ///
 /// `None` means there is nothing to position (no current monitor for a `Centered` request).
 fn solve_geometry(
@@ -337,13 +347,10 @@ impl WindowState {
         enabled: bool,
         url: Url,
         proxy: crate::EventLoopProxy,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let scale_factor = window.scale_factor();
 
-        let position = window
-            .outer_position()
-            .expect("Failed to acquire window position")
-            .to_logical(scale_factor);
+        let position = window.outer_position()?.to_logical(scale_factor);
 
         let size = window.inner_size().to_logical(scale_factor);
 
@@ -368,7 +375,7 @@ impl WindowState {
                 }
             });
         }
-        Self {
+        Ok(Self {
             page_epoch: Default::default(),
             delivery: Mutex::default(),
             recovery_queued: AtomicBool::new(false),
@@ -376,7 +383,7 @@ impl WindowState {
             proxy,
             window,
             webview,
-            context,
+            _context: context,
             window_id,
             window_geometry_state: Mutex::new(WindowGeometryState {
                 position: WindowPosition::Absolute(Position::Logical(position)),
@@ -385,9 +392,10 @@ impl WindowState {
             }),
             applied_geometry: Mutex::new(None),
             geometry_turn: Mutex::default(),
+            presentation: Mutex::default(),
             enabled: enabled.into(),
             url: Mutex::new(url),
-        }
+        })
     }
 
     fn set_position(&self, platform_state: &PlatformState, position: Position, which: &'static str) {
@@ -458,8 +466,28 @@ impl WindowState {
         self.geometry_turn.lock().screen = None;
     }
 
+    pub fn queue_caret_update(&self, request: crate::platform::caret_worker::Request, position: WindowPosition) {
+        self.geometry_turn.lock().caret = Some((position, Some(request)));
+        let mut presentation = self.presentation.lock();
+        presentation.anchor = Some(request);
+        if presentation.requested && !self.window.is_visible() {
+            self.proxy.send_event_or_log(crate::event::Event::WindowEvent {
+                window_id: self.window_id.clone(),
+                window_event: WindowEvent::ReconcileVisibility,
+            });
+        }
+    }
+
+    fn take_pending_caret(&self, platform: &PlatformState) -> Option<WindowPosition> {
+        let (position, request) = self.geometry_turn.lock().caret.take()?;
+        // Focus/input may change between the worker event and the end-of-turn geometry flush.
+        request
+            .is_none_or(|request| platform.accepts_caret(request))
+            .then_some(position)
+    }
+
     pub fn flush_geometry(&self, platform: &PlatformState) {
-        let caret = self.geometry_turn.lock().caret.take();
+        let caret = self.take_pending_caret(platform);
         if let Some(position) = caret {
             self.update_window_geometry(Some(position), None, None, platform, false);
         }
@@ -467,7 +495,6 @@ impl WindowState {
 
     #[allow(clippy::only_used_in_recursion)]
     #[allow(clippy::too_many_arguments)]
-    #[allow(unused_variables)]
     pub fn handle(
         &self,
         event: WindowEvent,
@@ -486,14 +513,14 @@ impl WindowState {
             } => {
                 if !dry_run && tx.is_none() && size.is_none() && anchor.is_none() {
                     if position.is_some() {
-                        self.geometry_turn.lock().caret = position;
+                        self.geometry_turn.lock().caret = position.map(|position| (position, None));
                     }
                     return;
                 }
                 if dry_run {
                     self.flush_geometry(platform_state);
                 }
-                let pending = self.geometry_turn.lock().caret.take();
+                let pending = self.take_pending_caret(platform_state);
                 let (is_above, is_clipped) =
                     self.update_window_geometry(position.or(pending), size, anchor, platform_state, dry_run);
                 if let Some(tx) = tx
@@ -512,9 +539,29 @@ impl WindowState {
             | WindowEvent::RuntimeTick => {
                 self.handle_runtime(event, shell_sessions, platform_state, notifications_state);
             },
-            WindowEvent::Hide => {
+            WindowEvent::Hide | WindowEvent::SuspendGeometry => {
+                let suspended = matches!(event, WindowEvent::SuspendGeometry);
+                crate::latency::record(
+                    if suspended { "geometry-suspended" } else { "hide-intent" },
+                    "",
+                    None,
+                    None,
+                    None,
+                );
+                let tracking = {
+                    let mut presentation = self.presentation.lock();
+                    if suspended {
+                        presentation.suspend_geometry();
+                    } else {
+                        *presentation = Presentation::default();
+                    }
+                    presentation.requested
+                };
+                if self.window_id == AUTOCOMPLETE_ID {
+                    platform_state.set_autocomplete_tracking(tracking);
+                }
                 // Commit caret state, but do not perform an invisible placement.
-                if let Some(caret) = self.geometry_turn.lock().caret.take() {
+                if let Some(caret) = self.take_pending_caret(platform_state) {
                     self.window_geometry_state.lock().position = caret;
                 }
                 self.invalidate_geometry_screen();
@@ -527,10 +574,7 @@ impl WindowState {
                     platform_state.set_autocomplete_visible(false);
                     shell_sessions.broadcast(|| ShellCommand::InterceptFigJSVisible { visible: false });
 
-                    // This used to toggle `set_resizable(true)` then `set_resizable(false)` on
-                    // every hide, under a "why?" TODO. The window is built non-resizable and
-                    // nothing makes it resizable, so the pair was two `setStyleMask:` calls that
-                    // ended where they started. Only a window that did become resizable changes.
+                    // Avoid redundant AppKit style-mask updates on an already fixed-size popup.
                     if self.window.is_resizable() {
                         self.window.set_resizable(false);
                     }
@@ -542,19 +586,38 @@ impl WindowState {
                 }
 
                 if self.window_id == DASHBOARD_ID {
-                    use tao::platform::macos::{
-                        ActivationPolicy,
-                        EventLoopWindowTargetExtMacOS,
-                    };
+                    use tao::platform::macos::ActivationPolicy;
 
-                    let mut policy_lock = platform::ACTIVATION_POLICY.lock().unwrap();
-                    if *policy_lock != ActivationPolicy::Accessory {
-                        *policy_lock = ActivationPolicy::Accessory;
-                        window_target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
-                    }
+                    platform_state.set_activation_policy(window_target, ActivationPolicy::Accessory);
                 }
             },
-            WindowEvent::Show => {
+            WindowEvent::Show | WindowEvent::ReconcileVisibility => {
+                crate::latency::record(
+                    "show-intent",
+                    "",
+                    None,
+                    None,
+                    Some(usize::from(self.presentation.lock().anchor.is_some())),
+                );
+                if matches!(event, WindowEvent::Show) {
+                    self.presentation.lock().requested = true;
+                    if self.window_id == AUTOCOMPLETE_ID {
+                        platform_state.set_autocomplete_tracking(true);
+                    }
+                } else if !self.presentation.lock().requested {
+                    return;
+                }
+                if self.window_id == AUTOCOMPLETE_ID
+                    && !self.window.is_visible()
+                    && !self
+                        .presentation
+                        .lock()
+                        .can_show(self.delivery.lock().phase == super::delivery::Phase::Ready, |request| {
+                            platform_state.accepts_caret(request)
+                        })
+                {
+                    return;
+                }
                 if !self.window.is_visible() {
                     self.flush_geometry(platform_state);
                 }
@@ -566,25 +629,19 @@ impl WindowState {
                     // `InterceptFigJSVisible` to every linked shell session and re-called
                     // `set_visible(true)` on an already visible window.
                     if !self.window.is_visible() {
+                        if let Err(error) = crate::platform::webview_host::show_without_activation(&self.window) {
+                            tracing::error!(%error, "Unable to show completion window");
+                            return;
+                        }
                         shell_sessions.broadcast(|| ShellCommand::InterceptFigJSVisible { visible: true });
-
-                        self.window.set_visible(true);
                         platform_state.set_autocomplete_visible(true);
-                        // We handle setting window level on focus changed on MacOS
-                        // TODO: pull this out into platform code.
+                        // PlatformState synchronizes the native window level on focus changes.
                     }
                 } else {
                     if self.window_id == DASHBOARD_ID {
-                        use tao::platform::macos::{
-                            ActivationPolicy,
-                            EventLoopWindowTargetExtMacOS,
-                        };
+                        use tao::platform::macos::ActivationPolicy;
 
-                        let mut policy_lock = platform::ACTIVATION_POLICY.lock().unwrap();
-                        if *policy_lock != ActivationPolicy::Regular {
-                            *policy_lock = ActivationPolicy::Regular;
-                            window_target.set_activation_policy_at_runtime(ActivationPolicy::Regular);
-                        }
+                        platform_state.set_activation_policy(window_target, ActivationPolicy::Regular);
                     }
 
                     self.window.set_visible(true);
@@ -896,6 +953,71 @@ mod tests {
             resize: true,
             reposition: true,
         });
+    }
+
+    #[test]
+    fn delayed_caret_and_runtime_must_not_flash_or_resurrect_a_hidden_popup() {
+        use crate::platform::caret_worker::{
+            Request,
+            accepts,
+        };
+        use crate::platform::focus_validation::FocusTarget;
+        let target = FocusTarget {
+            pid: 10,
+            window_id: 20,
+            generation: 1,
+        };
+        let request = Request {
+            target,
+            sequence: 3,
+            anchor: fig_util::terminal::CompletionAnchor::InputMethod,
+        };
+        let mut presentation = Presentation {
+            requested: true,
+            anchor: None,
+        };
+        assert!(!presentation.can_show(true, |_| true), "show before caret must wait");
+        presentation.anchor = Some(request);
+        assert!(
+            !presentation.can_show(false, |_| true),
+            "caret before runtime must wait"
+        );
+        assert!(presentation.can_show(true, |r| accepts(target, 3, r)));
+        assert!(
+            !presentation.can_show(true, |r| accepts(target, 4, r)),
+            "new input rejects old coordinates"
+        );
+        assert!(
+            !presentation.can_show(true, |r| accepts(
+                FocusTarget {
+                    generation: 2,
+                    ..target
+                },
+                3,
+                r
+            )),
+            "focus reuse rejects old coordinates"
+        );
+        presentation.suspend_geometry();
+        assert!(
+            presentation.requested,
+            "temporary geometry loss preserves the list intent"
+        );
+        assert!(
+            !presentation.can_show(true, |_| true),
+            "suspension rejects the old anchor"
+        );
+        presentation.anchor = Some(request);
+        assert!(
+            presentation.can_show(true, |r| accepts(target, 3, r)),
+            "fresh geometry restores the same list"
+        );
+        presentation = Presentation::default();
+        presentation.anchor = Some(request);
+        assert!(
+            !presentation.can_show(true, |_| true),
+            "late geometry must not undo Hide"
+        );
     }
 
     /// A 1920x1080 monitor at the origin, scale 1, so logical == physical.

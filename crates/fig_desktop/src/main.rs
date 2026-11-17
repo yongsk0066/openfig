@@ -8,6 +8,7 @@ mod latency;
 mod launchd_plist;
 mod local_ipc;
 pub mod notification_bus;
+mod panic_report;
 mod platform;
 pub mod protocol;
 mod request;
@@ -20,7 +21,6 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use ::url::Url;
-pub use application::InterceptState;
 use clap::Parser;
 use event::Event;
 use fig_log::{
@@ -73,17 +73,29 @@ pub type EventLoopWindowTarget = WryEventLoopWindowTarget<Event>;
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
 
-    let _log_guard = initialize_logging(LogArgs {
+    let log_file_path = directories::logs_dir().map(|path| path.join("fig_desktop.log"));
+    if let Err(err) = &log_file_path {
+        eprintln!("File logging unavailable: {err}");
+    }
+    panic_report::install(
+        log_file_path
+            .as_ref()
+            .ok()
+            .and_then(|path| path.parent())
+            .map(|dir| dir.join("fig_desktop.panic.log")),
+    );
+    let _log_guard = match initialize_logging(LogArgs {
         log_level: None,
         log_to_stdout: true,
-        log_file_path: Some(
-            directories::logs_dir()
-                .expect("home dir must be set")
-                .join("fig_desktop.log"),
-        ),
+        log_file_path: log_file_path.ok(),
         delete_old_log_file: false,
-    })
-    .expect("Failed to init logging");
+    }) {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Unable to initialize logging: {err}");
+            return ExitCode::FAILURE;
+        },
+    };
 
     if let Err(err) = fig_settings::settings::init_global() {
         error!(%err, "failed to init global settings");
@@ -131,31 +143,42 @@ async fn main() -> ExitCode {
     let autocomplete_enabled =
         !fig_settings::settings::get_bool_or("autocomplete.disable", false) && accessibility_enabled;
 
-    let mut webview_manager = WebviewManager::new(visible);
-    webview_manager
-        .build_webview(
-            DASHBOARD_ID,
-            build_dashboard,
-            DashboardOptions {
-                show_onboarding: !fig_settings::state::get_bool_or("desktop.completedOnboarding", false),
-                visible,
-                page,
-            },
-            true,
-            url::dashboard,
-        )
-        .unwrap();
-    webview_manager
-        .build_webview(
-            AUTOCOMPLETE_ID,
-            build_autocomplete,
-            AutocompleteOptions,
-            autocomplete_enabled,
-            url::autocomplete,
-        )
-        .unwrap();
+    let mut webview_manager = match WebviewManager::new(visible) {
+        Ok(manager) => manager,
+        Err(err) => {
+            error!(%err, "Unable to initialize the desktop");
+            return ExitCode::FAILURE;
+        },
+    };
+    if let Err(err) = webview_manager.build_webview(
+        DASHBOARD_ID,
+        build_dashboard,
+        DashboardOptions {
+            show_onboarding: !fig_settings::state::get_bool_or("desktop.completedOnboarding", false),
+            visible,
+            page,
+        },
+        true,
+        url::dashboard,
+    ) {
+        error!(%err, "Unable to create WebView");
+        return ExitCode::FAILURE;
+    }
+    if let Err(err) = webview_manager.build_webview(
+        AUTOCOMPLETE_ID,
+        build_autocomplete,
+        AutocompleteOptions,
+        autocomplete_enabled,
+        url::autocomplete,
+    ) {
+        error!(%err, "Unable to create WebView");
+        return ExitCode::FAILURE;
+    }
 
-    webview_manager.run().await.unwrap();
+    if let Err(err) = webview_manager.run().await {
+        error!(%err, "Desktop event loop failed");
+        return ExitCode::FAILURE;
+    }
     ExitCode::SUCCESS
 }
 

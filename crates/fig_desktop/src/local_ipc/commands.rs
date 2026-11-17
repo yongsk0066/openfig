@@ -1,4 +1,7 @@
-use std::sync::Mutex;
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
 
 use fig_os_shim::Env;
 use fig_proto::local::command_response::Response as CommandResponseTypes;
@@ -29,7 +32,6 @@ use crate::event::{
     EventSender,
     WindowEvent,
 };
-use crate::platform::PlatformState;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::{
     AUTOCOMPLETE_ID,
@@ -38,20 +40,16 @@ use crate::{
 };
 
 pub async fn debug(command: DebugModeCommand, proxy: &EventLoopProxy) -> LocalResult {
-    static DEBUG_MODE: Mutex<bool> = Mutex::new(false);
+    static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
     let debug_mode = match command.set_debug_mode {
         Some(b) => {
-            *DEBUG_MODE.lock().unwrap() = b;
+            DEBUG_MODE.store(b, Ordering::Relaxed);
             b
         },
         None => match command.toggle_debug_mode {
-            Some(true) => {
-                let mut locked_debug = DEBUG_MODE.lock().unwrap();
-                *locked_debug = !*locked_debug;
-                *locked_debug
-            },
-            _ => *DEBUG_MODE.lock().unwrap(),
+            Some(true) => !DEBUG_MODE.fetch_xor(true, Ordering::Relaxed),
+            _ => DEBUG_MODE.load(Ordering::Relaxed),
         },
     };
 
@@ -187,7 +185,6 @@ pub fn dump_state(
     command: DumpStateCommand,
     shell_sessions: &ShellSessions,
     webview_notifications_state: &WebviewNotificationsState,
-    platform_state: &PlatformState,
 ) -> LocalResult {
     let json = match command.r#type() {
         DumpStateType::DumpStateSessions => {
@@ -196,7 +193,9 @@ pub fn dump_state(
         DumpStateType::DumpStateWebNotifications => serde_json::to_string_pretty(&webview_notifications_state)
             .unwrap_or_else(|err| format!("unable to dump: {err}")),
         DumpStateType::DumpStatePlatform => {
-            serde_json::to_string_pretty(&platform_state).unwrap_or_else(|err| format!("unable to dump: {err}"))
+            // The former PlatformState serializer skipped every native field. Preserve its
+            // wire response without lending main-thread objects to the IPC worker.
+            "{}".to_owned()
         },
     };
 

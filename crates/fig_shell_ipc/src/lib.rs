@@ -91,7 +91,6 @@ pub(crate) async fn dispatch_hook(
     sessions: &Arc<ShellSessions>,
     handler: &mut (impl ShellHookHandler + Send),
 ) {
-    // `scripts/latency-trace.sh` starts a keystroke's timeline at this line.
     trace!(?request, "Received shell hook");
     let res = match request {
         HookRequest::EditBuffer(mut edit_buffer) => {

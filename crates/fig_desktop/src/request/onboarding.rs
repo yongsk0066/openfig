@@ -8,7 +8,6 @@ use fig_proto::fig::{
 use fig_util::Shell;
 use tao::event_loop::ControlFlow;
 use tokio::process::Command;
-#[allow(unused_imports)]
 use tracing::error;
 
 use super::{

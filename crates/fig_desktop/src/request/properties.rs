@@ -15,21 +15,8 @@ use super::{
     RequestResult,
     RequestResultImpl,
 };
-use crate::InterceptState;
 
-pub fn update(
-    request: UpdateApplicationPropertiesRequest,
-    shell_sessions: &ShellSessions,
-    intercept_state: &InterceptState,
-) -> RequestResult {
-    if let Some(intercept_bound_keystrokes) = request.intercept_bound_keystrokes {
-        *intercept_state.intercept_bound_keystrokes.write().unwrap() = intercept_bound_keystrokes;
-    }
-
-    if let Some(intercept_global_keystrokes) = request.intercept_global_keystrokes {
-        *intercept_state.intercept_global_keystrokes.write().unwrap() = intercept_global_keystrokes;
-    }
-
+pub fn update(request: UpdateApplicationPropertiesRequest, shell_sessions: &ShellSessions) -> RequestResult {
     let key_bindings = KeyBindings::load_from_settings("autocomplete")
         .map_or_else(
             |err| {

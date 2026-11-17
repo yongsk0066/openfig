@@ -30,15 +30,21 @@ use crate::webview::notification::WebviewNotificationsState;
 pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>, proxy: EventLoopProxy) {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-    let mut watcher = notify::recommended_watcher(move |res| match res {
+    let watcher = notify::recommended_watcher(move |res| match res {
         Ok(event) => {
             if let Err(err) = tx.send(event) {
                 error!(%err, "failed to send notify event");
             }
         },
         Err(err) => error!(%err, "notify watcher"),
-    })
-    .unwrap();
+    });
+    let mut watcher = match watcher {
+        Ok(watcher) => watcher,
+        Err(err) => {
+            error!(%err, "Unable to create settings watcher");
+            return;
+        },
+    };
 
     let settings_path = match directories::settings_path() {
         Ok(settings_path) => match settings_path.parent() {

@@ -38,9 +38,7 @@ pub async fn handle(
             state.processes.cancel(window_id, &request.cancellation_token)?;
             RequestResult::success()
         },
-        DesktopRequest::UpdateApplicationProperties(request) => {
-            properties::update(request, &state.shell_sessions, &state.intercept_state)
-        },
+        DesktopRequest::UpdateApplicationProperties(request) => properties::update(request, &state.shell_sessions),
         DesktopRequest::PositionWindow(request) => {
             window::position_window(request, window_id, &state.shell_sessions, proxy).await
         },

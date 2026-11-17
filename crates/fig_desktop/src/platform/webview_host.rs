@@ -81,11 +81,21 @@ pub fn install_focus_behavior(webview: &wry::WebView) -> anyhow::Result<()> {
     use wry::WebViewExtMacOS;
     super::objc_overrides::install(&webview.webview())
 }
-pub fn set_level(window: &tao::window::Window, level: i64) {
+pub fn set_level(_mtm: objc2::MainThreadMarker, window: &tao::window::Window, level: i64) {
     use tao::platform::macos::WindowExtMacOS;
-    let _mtm = objc2::MainThreadMarker::new().expect("AppKit window changes require main thread");
     // SAFETY: Tao owns the live NSWindow; the borrow never escapes this main-thread call.
     if let Some(window) = unsafe { window.ns_window().cast::<objc2_app_kit::NSWindow>().as_ref() } {
         window.setLevel(level as isize);
     }
+}
+
+pub fn show_without_activation(window: &tao::window::Window) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use tao::platform::macos::WindowExtMacOS;
+    let _mtm = objc2::MainThreadMarker::new().context("Window presentation requires the AppKit thread")?;
+    // SAFETY: Tao owns this live NSWindow. The borrow stays on its main thread.
+    let window = unsafe { window.ns_window().cast::<objc2_app_kit::NSWindow>().as_ref() }
+        .context("Completion window has no native window")?;
+    window.orderFrontRegardless();
+    Ok(())
 }

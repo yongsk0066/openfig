@@ -15,6 +15,7 @@ use strum::{
 /// Terminals that macOS supports
 pub const MACOS_TERMINALS: &[Terminal] = &[
     Terminal::Iterm,
+    Terminal::Ghostty,
     Terminal::Tabby,
     Terminal::TerminalApp,
     Terminal::VSCodeInsiders,
@@ -50,12 +51,23 @@ pub fn xterm_bundle_ids() -> &'static [&'static str] {
     })
 }
 
+/// Where a terminal exposes a reliable completion anchor through accessibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompletionAnchor {
+    TextRange,
+    Xterm,
+    /// The terminal exposes its caret through the macOS text input client.
+    InputMethod,
+}
+
 /// All supported terminals
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 #[serde(rename_all = "kebab-case")]
 pub enum Terminal {
     /// iTerm 2
     Iterm,
+    /// Ghostty native terminal
+    Ghostty,
     /// Native macOS terminal
     TerminalApp,
     /// Hyper terminal
@@ -96,6 +108,7 @@ impl fmt::Display for Terminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Terminal::Iterm => write!(f, "iTerm 2"),
+            Terminal::Ghostty => write!(f, "Ghostty"),
             Terminal::TerminalApp => write!(f, "macOS"),
             Terminal::Hyper => write!(f, "Hyper"),
             Terminal::VSCode => write!(f, "VSCode"),
@@ -194,6 +207,7 @@ impl Terminal {
     pub fn internal_id(&self) -> Cow<'static, str> {
         match self {
             Terminal::Iterm => "iterm".into(),
+            Terminal::Ghostty => "ghostty".into(),
             Terminal::TerminalApp => "terminal".into(),
             Terminal::Hyper => "hyper".into(),
             Terminal::VSCode => "vscode".into(),
@@ -219,6 +233,7 @@ impl Terminal {
     pub fn to_bundle_id(&self) -> Option<Cow<'static, str>> {
         match self {
             Terminal::Iterm => Some("com.googlecode.iterm2".into()),
+            Terminal::Ghostty => Some("com.mitchellh.ghostty".into()),
             Terminal::TerminalApp => Some("com.apple.Terminal".into()),
             Terminal::Hyper => Some("co.zeit.hyper".into()),
             Terminal::VSCode => Some("com.microsoft.VSCode".into()),
@@ -239,6 +254,7 @@ impl Terminal {
         let bundle = bundle.as_ref();
         let res = match bundle {
             "com.googlecode.iterm2" => Terminal::Iterm,
+            "com.mitchellh.ghostty" | "com.mitchellh.ghostty.debug" => Terminal::Ghostty,
             "com.apple.Terminal" => Terminal::TerminalApp,
             "co.zeit.hyper" => Terminal::Hyper,
             "com.microsoft.VSCode" => Terminal::VSCode,
@@ -255,6 +271,16 @@ impl Terminal {
         };
 
         Some(res)
+    }
+
+    pub fn completion_anchor(&self) -> CompletionAnchor {
+        if matches!(self, Self::Ghostty) {
+            CompletionAnchor::InputMethod
+        } else if self.is_xterm() {
+            CompletionAnchor::Xterm
+        } else {
+            CompletionAnchor::TextRange
+        }
     }
 
     pub fn is_xterm(&self) -> bool {
@@ -275,6 +301,7 @@ impl Terminal {
 
     pub fn executable_names(&self) -> &'static [&'static str] {
         match self {
+            Terminal::Ghostty => &["ghostty", "Ghostty"],
             Terminal::VSCode => &["code"],
             Terminal::VSCodeInsiders => &["code-insiders"],
             Terminal::Hyper => &["hyper"],
@@ -303,6 +330,7 @@ impl Terminal {
     pub fn from_term_program(term_program: &str, env: &fig_os_shim::Env) -> Option<Self> {
         Some(match term_program {
             "iTerm.app" => Terminal::Iterm,
+            "ghostty" => Terminal::Ghostty,
             "Apple_Terminal" => Terminal::TerminalApp,
             "Hyper" => Terminal::Hyper,
             "Tabby" => Terminal::Tabby,
@@ -318,6 +346,29 @@ impl Terminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ghostty_identification_uses_native_caret_path() {
+        assert_eq!(
+            Terminal::from_bundle_id("com.mitchellh.ghostty"),
+            Some(Terminal::Ghostty)
+        );
+        assert_eq!(
+            Terminal::from_bundle_id("com.mitchellh.ghostty.debug"),
+            Some(Terminal::Ghostty)
+        );
+        assert_eq!(
+            Terminal::from_term_program("ghostty", Context::new().env()),
+            Some(Terminal::Ghostty)
+        );
+        assert_eq!(
+            Terminal::try_from_cmdline("/Applications/Ghostty.app/Contents/MacOS/ghostty", MACOS_TERMINALS),
+            Some(Terminal::Ghostty)
+        );
+        assert!(!Terminal::Ghostty.is_xterm());
+        assert_eq!(Terminal::Ghostty.completion_anchor(), CompletionAnchor::InputMethod);
+        assert_eq!(Terminal::Ghostty.internal_id(), "ghostty");
+    }
 
     #[test]
     fn test_from_process_info() {

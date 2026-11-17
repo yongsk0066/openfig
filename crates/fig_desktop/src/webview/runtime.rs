@@ -8,7 +8,10 @@ use tracing::warn;
 
 use super::notification::WebviewNotificationsState;
 use super::window::WindowState;
-use crate::event::WindowEvent;
+use crate::event::{
+    EventSender,
+    WindowEvent,
+};
 use crate::platform::PlatformState;
 impl WindowState {
     pub(super) fn handle_runtime(
@@ -57,6 +60,12 @@ impl WindowState {
                     false
                 };
                 self.update_watch();
+                if self.delivery.lock().phase == super::delivery::Phase::Failed {
+                    warn!(
+                        retry_after_seconds = 60,
+                        "Autocomplete recovery paused; automatic retry after cooldown"
+                    );
+                }
                 if matches!(event, WindowEvent::RuntimeReset) {
                     self.eval("window.figRuntime?.hello();");
                 }
@@ -87,6 +96,10 @@ impl WindowState {
                 }
                 tracing::info!(epoch, "Autocomplete runtime ready");
                 self.delivery.lock().ready();
+                self.proxy.send_event_or_log(crate::event::Event::WindowEvent {
+                    window_id: self.window_id.clone(),
+                    window_event: WindowEvent::ReconcileVisibility,
+                });
                 self.update_watch();
                 // A new page has no context. Send a full authoritative snapshot immediately.
                 let snapshot = shell_sessions.most_recent().map(|session| {

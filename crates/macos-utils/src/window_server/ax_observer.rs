@@ -29,6 +29,7 @@ use core_foundation::runloop::{
     kCFRunLoopDefaultMode,
 };
 use core_foundation::string::CFString;
+use objc2::MainThreadMarker;
 
 /// An `AXObserverRef` plus the heap cell that backs the `refcon` handed to the
 /// HIServices callback.
@@ -50,19 +51,13 @@ use core_foundation::string::CFString;
 ///   — captured so `Drop` removes the source from that run loop rather than from whichever thread's
 ///   run loop happens to be current.
 pub struct AXObserver<T> {
+    _main_thread: MainThreadMarker,
     inner: AXObserverRef,
     ax_ref: AXUIElementRef,
     run_loop: CFRunLoopRef,
     subscriptions: Vec<CFString>,
     callback_data: Pin<Box<T>>,
 }
-
-// SAFETY: CF references are retained and T must be Send. Drop unregisters notifications and
-// removes the source from the captured run loop. Creation/drop must still occur on its owner
-// thread: removing a source off-thread does not wait for an in-flight callback to stop using
-// callback_data. Current main-loop call sites uphold this, but the type does not enforce it.
-// See docs/architecture.md (native thread ownership).
-unsafe impl<T: Send> Send for AXObserver<T> {}
 
 impl<T> AXObserver<T> {
     /// Create an observer for `pid` and attach its run-loop source to the *current* run loop.
@@ -76,7 +71,8 @@ impl<T> AXObserver<T> {
     ///    afterwards.
     /// 2. `callback` is a function whose ABI is `AXObserverCallback` and which is prepared to be
     ///    invoked with `refcon == &*callback_data` — that is, it must reinterpret `refcon` as `*mut
-    ///    T` and nothing else — for as long as the returned value lives.
+    ///    T` for shared reads only, never creating `&mut T` — for as long as the returned value
+    ///    lives.
     /// 3. `callback` runs on the thread whose run loop is current at this call.
     /// 4. The process is AX-trusted (`AXIsProcessTrusted`), otherwise `AXObserverCreate` fails and
     ///    this returns `Err` — that is an error, not UB, but callers rely on it.
@@ -85,6 +81,7 @@ impl<T> AXObserver<T> {
     /// one reference on `ax_ref`, and a pinned `T` whose address is stable for the value's
     /// lifetime. All three are released in `Drop`.
     pub unsafe fn create(
+        main_thread: MainThreadMarker,
         pid: pid_t,
         ax_ref: AXUIElementRef,
         data: T,
@@ -108,7 +105,7 @@ impl<T> AXObserver<T> {
         // - `pid` is a plain `i32`; an unknown pid yields `kAXErrorInvalidUIElement`, not UB.
         // Postcondition: on `Ok`, `observer` is a live `AXObserverRef` that this function now
         // owns the sole `+1` on.
-        let observer = ax_call(|x: *mut AXObserverRef| AXObserverCreate(pid, callback, x))?;
+        let observer = unsafe { ax_call(|x: *mut AXObserverRef| AXObserverCreate(pid, callback, x)) }?;
 
         // SAFETY:
         // Operations: `CFRunLoopGetCurrent`, `AXObserverGetRunLoopSource`, `CFRunLoopAddSource`,
@@ -125,9 +122,15 @@ impl<T> AXObserver<T> {
         //   written by this program, so there is no data race.
         // Postcondition: the observer's source is attached to *this thread's* run loop. That
         // pairing is the premise of the `Drop` impl below and of `create`'s `# Safety` clause 3.
-        let run_loop = CFRunLoopGetCurrent();
-        tracing::trace!(pid, on_main = (run_loop == CFRunLoopGetMain()), "AX observer created");
-        CFRunLoopAddSource(run_loop, AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+        let run_loop = unsafe { CFRunLoopGetCurrent() };
+        tracing::trace!(
+            pid,
+            on_main = (run_loop == unsafe { CFRunLoopGetMain() }),
+            "AX observer created"
+        );
+        unsafe {
+            CFRunLoopAddSource(run_loop, AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+        }
 
         // SAFETY:
         // Operation: the `CFRetain` FFI call.
@@ -136,9 +139,12 @@ impl<T> AXObserver<T> {
         // by one; it is documented thread-safe.
         // Evidence: `ax_ref`'s liveness at this point is this function's `# Safety` clause 1.
         // Postcondition: this observer owns a reference on ax_ref, balanced in Drop.
-        CFRetain(ax_ref.cast());
+        unsafe {
+            CFRetain(ax_ref.cast());
+        }
 
         Ok(Self {
+            _main_thread: main_thread,
             inner: observer,
             ax_ref,
             run_loop,
@@ -147,33 +153,24 @@ impl<T> AXObserver<T> {
         })
     }
 
-    /// Register `ax_event` on the observed element, passing `&mut *self.callback_data` as the
-    /// `refcon`.
+    /// Register `ax_event` on the observed element, passing the address of `self.callback_data` as
+    /// the `refcon`.
     ///
     /// # Safety
     ///
     /// The caller must ensure that `ax_event` is one of the `kAX*Notification` names accepted by
     /// HIServices for `self.ax_ref`, and that every precondition of [`AXObserver::create`] still
     /// holds — in particular that `self.ax_ref` is still live. On success the callback passed to
-    /// `create` becomes reachable from the run loop with `refcon = &raw mut *self.callback_data`,
+    /// `create` becomes reachable from the run loop with `refcon = &raw const *self.callback_data`,
     /// and stays reachable until `Drop` removes the run-loop source.
     pub unsafe fn subscribe(&mut self, ax_event: &str) -> Result<(), AXError> {
         // Bound to a local so the CFString outlives the call below rather than relying on
         // temporary-lifetime rules inside an argument list.
         let name = CFString::from(ax_event);
 
-        // SAFETY:
-        // Operation: `Pin::get_unchecked_mut(self.callback_data.as_mut())`.
-        // Contract (std `Pin::get_unchecked_mut`): the caller must never move the pointee out of
-        // the returned `&mut T` afterwards.
-        // Evidence: the reference is immediately decayed to a raw pointer and only its address is
-        // used; no `T` value is read, written or moved through it here, and no other method of
-        // this type moves out of `callback_data` (it is only ever dropped in place).
-        // Why `get_unchecked_mut` and not `&*self.callback_data as *const T`: the `refcon` is
-        // later reconstituted as `&mut AccessibilityCallbackData` in `application_ax_callback`.
-        // The Rust Reference forbids writing through a pointer whose provenance derives from a
-        // shared reference, so the pointer must be derived from a mutable borrow.
-        let callback_data: *mut T = unsafe { Pin::get_unchecked_mut(self.callback_data.as_mut()) };
+        // HIServices returns refcon unchanged. The callback contract permits shared reads
+        // only; pinning stabilizes the allocation without inventing an exclusive borrow.
+        let callback_data = std::ptr::from_ref(self.callback_data.as_ref().get_ref()).cast_mut();
 
         // SAFETY:
         // Operation: the `AXObserverAddNotification` FFI call.

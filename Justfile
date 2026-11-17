@@ -61,6 +61,7 @@ rust:
 bundle:
     rm -rf "{{app}}"
     mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
+    cp "{{tdir}}/fig_native_worker" "{{app}}/Contents/MacOS/fig_native_worker"
     cp "{{tdir}}/fig_desktop" "{{app}}/Contents/MacOS/$DESKTOP_BIN"
     cp "{{tdir}}/fig_cli"     "{{app}}/Contents/MacOS/$CLI_BIN"
     VERSION='{{version}}' MIN_MACOS='{{min_macos}}' \
@@ -73,6 +74,7 @@ bundle:
     cp -R packages/dashboard-app/dist/    "{{app}}/Contents/Resources/dashboard/"
     cp -R resources/themes/               "{{app}}/Contents/Resources/themes/"
     cp -R specs/dist/                     "{{app}}/Contents/Resources/specs/"
+    bash scripts/build-input-method.sh "{{app}}/Contents/Helpers/FigInputMethod.app"
 
 # Inner executables first and the bundle last, because the top level seals what is under it.
 # Signing identity: any "Apple Development" / "Developer ID Application" certificate in the
@@ -85,17 +87,20 @@ sign:
         | awk -F'"' '/Developer ID Application|Apple Development|Mac Developer/ {print $2; exit}')}"; \
     identity="${identity:--}"; \
     echo "codesign identity: $identity"; \
+    codesign --force --sign "$identity" --identifier "local.openfig.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.nativeworker" "{{app}}/Contents/MacOS/fig_native_worker"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
     codesign --verify --deep --strict --verbose=2 "{{app}}"
 
+# Prepare a signed update without stopping the running app or changing enrollment.
+stage:
+    bash scripts/install-app.sh --stage-only "{{app}}" "/Applications/.fig-updates/$APP_NAME-$(date +%Y%m%d-%H%M%S).app" "$CLI_BIN" "$DESKTOP_BIN"
+
 # Install at the path used by app_bundle_path(), register with LaunchServices, and set up zsh.
 # Preserve regular files at the CLI link target. See docs/development.md for signing/rollback.
 install:
-    -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
-    for _ in $(seq 1 50); do pgrep -x "$DESKTOP_BIN" >/dev/null || break; sleep 0.1; done
-    rm -rf "/Applications/$APP_NAME.app"
-    ditto "{{app}}" "/Applications/$APP_NAME.app"
+    bash scripts/install-app.sh "{{app}}" "/Applications/$APP_NAME.app" "$CLI_BIN" "$DESKTOP_BIN"
     mkdir -p "$HOME/.local/bin"
     link="$HOME/.local/bin/$CLI_BIN"; \
     if [ -f "$link" ] && [ ! -L "$link" ]; then \
@@ -106,16 +111,17 @@ install:
     ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" "$link"
     # Remove obsolete CLI links left by the old PTY integration.
     rm -f "$HOME/.local/bin/figterm" "$HOME/.local/bin/zsh (figterm)" "$HOME/.local/bin/bash (figterm)"
-    open "/Applications/$APP_NAME.app" --args --no-dashboard
     "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" setup --dotfiles --no-confirm
+    bash scripts/install-input-method.sh "/Applications/$APP_NAME.app/Contents/Helpers/FigInputMethod.app"
 
 # Two vite servers for the debug binary to point at.
 dev-web:
     pnpm -C packages/autocomplete-app dev & pnpm -C packages/dashboard-app dev; wait
 
 dev:
+    cargo build --locked -p fig_desktop --bin fig_native_worker
     -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
-    AUTOCOMPLETE_URL=http://localhost:3124 DASHBOARD_URL=http://localhost:3433 cargo run -p fig_desktop
+    AUTOCOMPLETE_URL=http://localhost:3124 DASHBOARD_URL=http://localhost:3433 cargo run --locked -p fig_desktop
 
 lint:
     cargo clippy --locked --target {{target}} --workspace -- -D warnings

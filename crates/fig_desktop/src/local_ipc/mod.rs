@@ -32,8 +32,10 @@ use tracing::{
     warn,
 };
 
-use crate::event::Event;
-use crate::platform::PlatformState;
+use crate::event::{
+    Event,
+    EventSender,
+};
 use crate::webview::notification::WebviewNotificationsState;
 use crate::{
     AUTOCOMPLETE_ID,
@@ -50,7 +52,6 @@ pub enum LocalResponse {
 pub type LocalResult = Result<LocalResponse, LocalResponse>;
 
 pub async fn start_local_ipc(
-    platform_state: Arc<PlatformState>,
     shell_sessions: Arc<ShellSessions>,
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
@@ -87,7 +88,6 @@ pub async fn start_local_ipc(
 
         tokio::spawn(handle_local_ipc(
             BufferedUnixStream::new(stream),
-            platform_state.clone(),
             shell_sessions.clone(),
             webview_notifications_state.clone(),
             proxy.clone(),
@@ -97,7 +97,6 @@ pub async fn start_local_ipc(
 
 async fn handle_local_ipc(
     mut stream: BufferedUnixStream,
-    platform_state: Arc<PlatformState>,
     shell_sessions: Arc<ShellSessions>,
     webview_notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
@@ -146,12 +145,9 @@ async fn handle_local_ipc(
                             OpenBrowser(command) => commands::open_browser(command).await,
                             PromptAccessibility(_) => commands::prompt_for_accessibility_permission(&Env::new()).await,
                             LogLevel(command) => commands::log_level(command),
-                            DumpState(command) => commands::dump_state(
-                                command,
-                                &shell_sessions,
-                                &webview_notifications_state,
-                                &platform_state,
-                            ),
+                            DumpState(command) => {
+                                commands::dump_state(command, &shell_sessions, &webview_notifications_state)
+                            },
                             Devtools(command) => {
                                 let window_id = match command.window() {
                                     fig_proto::local::devtools_command::Window::DevtoolsAutocomplete => AUTOCOMPLETE_ID,
@@ -166,6 +162,28 @@ async fn handle_local_ipc(
                                     .ok();
 
                                 Ok(LocalResponse::Success(None))
+                            },
+                            TerminalIntegration(command)
+                                if command.identifier == "input-method"
+                                    && command.action == fig_proto::local::IntegrationAction::Install as i32 =>
+                            {
+                                let (response, result) = tokio::sync::oneshot::channel();
+                                proxy.send_event_or_log(Event::PlatformBoundEvent(
+                                    crate::platform::PlatformBoundEvent::RequestInputMethodActivation { response },
+                                ));
+                                match tokio::time::timeout(Duration::from_secs(5), result).await {
+                                    Ok(Ok(Ok(()))) => Ok(LocalResponse::Success(Some(
+                                        "Activation requested; verify enabled state from a fresh process".into(),
+                                    ))),
+                                    Ok(Ok(Err(code))) => Err(LocalResponse::Error {
+                                        code: Some(code),
+                                        message: Some("TIS activation request failed".into()),
+                                    }),
+                                    _ => Err(LocalResponse::Error {
+                                        code: None,
+                                        message: Some("Desktop activation request timed out".into()),
+                                    }),
+                                }
                             },
                             TerminalIntegration(_)
                             | ListTerminalIntegrations(_)

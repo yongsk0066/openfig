@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::cell::{
+    Cell,
+    RefCell,
+};
 use std::sync::atomic::{
     AtomicBool,
     Ordering,
@@ -6,13 +9,9 @@ use std::sync::atomic::{
 use std::sync::{
     Arc,
     LazyLock,
-    Mutex,
 };
 
-use accessibility_sys::{
-    AXError,
-    pid_t,
-};
+use accessibility_sys::pid_t;
 use anyhow::Context;
 use core_graphics::display::CGRect;
 use core_graphics::window::CGWindowID;
@@ -24,25 +23,27 @@ use fig_proto::fig::{
 use fig_util::Terminal;
 use fig_util::consts::APP_BUNDLE_ID;
 use macos_utils::accessibility::accessibility_is_enabled;
-use macos_utils::caret_position::{
-    CaretPosition,
-    get_caret_position,
-};
 use macos_utils::window_server::{
+    CGWindowInfo,
     CGWindowLevelForKey,
     UIElement,
 };
 use macos_utils::{
     NotificationCenter,
+    NotificationSubscription,
     WindowServer,
     WindowServerEvent,
 };
-use objc2_app_kit::NSWorkspace;
+use objc2::MainThreadMarker;
+use objc2_app_kit::{
+    NSEvent,
+    NSEventMask,
+    NSWorkspace,
+};
 use objc2_foundation::{
     NSOperationQueue,
     ns_string,
 };
-use serde::Serialize;
 use tao::dpi::{
     LogicalPosition,
     LogicalSize,
@@ -65,11 +66,6 @@ use crate::event::{
     WindowEvent,
     WindowPosition,
 };
-use crate::protocol::icons::{
-    AssetKind,
-    AssetSpecifier,
-    ProcessedAsset,
-};
 use crate::utils::Rect;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::webview::{
@@ -83,8 +79,6 @@ use crate::{
     EventLoopWindowTarget,
 };
 
-pub const DEFAULT_CARET_WIDTH: f64 = 10.0;
-
 // See for other window level keys
 // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.8.sdk/System/Library/Frameworks/CoreGraphics.framework/Versions/A/Headers/CGWindowLevel.h
 #[allow(non_upper_case_globals)]
@@ -92,42 +86,73 @@ const kCGFloatingWindowLevelKey: i32 = 5;
 
 static ACCESSIBILITY_ENABLED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(accessibility_is_enabled()));
 
-pub static ACTIVATION_POLICY: Mutex<ActivationPolicy> = Mutex::new(ActivationPolicy::Regular);
+#[derive(Debug)]
+struct ScrollMonitor {
+    token: objc2::rc::Retained<objc2::runtime::AnyObject>,
+    _main_thread: MainThreadMarker,
+}
 
-#[derive(Debug, Serialize)]
+impl ScrollMonitor {
+    fn new(main_thread: MainThreadMarker, proxy: EventLoopProxy) -> Option<Self> {
+        let handler = block2::RcBlock::new(move |_| {
+            if let Some(app) = NSWorkspace::sharedWorkspace().frontmostApplication() {
+                proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::ExternalScroll {
+                    pid: app.processIdentifier(),
+                }));
+            }
+        });
+        NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::ScrollWheel, &handler).map(|token| Self {
+            token,
+            _main_thread: main_thread,
+        })
+    }
+}
+
+impl Drop for ScrollMonitor {
+    fn drop(&mut self) {
+        // SAFETY: token is the live value returned by addGlobalMonitor, removed once on main.
+        unsafe { NSEvent::removeMonitor(&self.token) };
+    }
+}
+
+#[derive(Debug)]
 pub struct PlatformState {
-    #[serde(skip)]
+    main_thread: MainThreadMarker,
+    activation_policy: Cell<ActivationPolicy>,
+    accessibility_subscription: RefCell<Option<NotificationSubscription>>,
+    _scroll_monitor: Option<ScrollMonitor>,
     proxy: EventLoopProxy,
-    #[serde(skip)]
-    focused_window: Mutex<Option<PlatformWindowImpl>>,
-    /// The AX observer registry.
-    ///
-    /// This is the only owner: dropping it drops every `AXObserver`. It used to live in a
-    /// `static`, which is what forced the (unproven) `unsafe impl Sync for WindowServer`;
-    /// hanging it off the state that already reaches every user removes that requirement and
-    /// gives `AccessibilityUpdated` a handle to re-register with.
-    #[serde(skip)]
-    window_server: Mutex<Option<WindowServer>>,
-    /// Set by the autocomplete window's Show/Hide; the frame-watch timer only ticks while true.
-    #[serde(skip)]
+    focused_window: RefCell<Option<PlatformWindowImpl>>,
+    // Native callbacks enqueue events; they never re-enter these main-loop RefCells.
+    window_server: RefCell<Option<WindowServer>>,
+    activation_queries: tokio::sync::watch::Sender<Option<macos_utils::window_server::ApplicationSpecifier>>,
+    /// Visibility and outstanding show intent are separate: geometry misses keep a slow retry.
     autocomplete_visible: Arc<AtomicBool>,
-    /// Last observed frame of the followed terminal window, compared on every tick.
-    #[serde(skip)]
-    watched_frame: Mutex<Option<CGRect>>,
-    #[serde(skip)]
+    autocomplete_tracking: Arc<AtomicBool>,
+    caret_tracking: RefCell<super::caret_tracking::CaretTracking>,
+    frame_watch: RefCell<fig_desktop::native::frame_watch::FrameWatch>,
+    frame_watch_queued: Arc<AtomicBool>,
+    frame_watch_wake: Arc<tokio::sync::Notify>,
+    /// One serial worker; only identity-checked owned geometry returns to the main loop.
+    window_frames: tokio::sync::watch::Sender<Option<super::focus_validation::FocusTarget>>,
     focus_generation: std::sync::atomic::AtomicU64,
-    #[serde(skip)]
+    caret_worker: super::caret_worker::CaretWorker,
+    input_method: Option<super::input_method::InputMethod>,
+    input_method_ready: Cell<bool>,
+    input_method_recovery: RefCell<super::input_method_recovery::Coordinator>,
+    input_method_scrolled: Cell<bool>,
+    input_method_focus_validation: tokio::sync::watch::Sender<Option<super::focus_validation::FocusTarget>>,
+    caret_sequence: Cell<u64>,
+    input_method_refreshed_at: Cell<Option<std::time::Instant>>,
     focus_validation: tokio::sync::watch::Sender<Option<super::focus_validation::FocusTarget>>,
 }
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct PlatformWindowImpl {
+#[derive(Debug)]
+struct PlatformWindowImpl {
     window_id: CGWindowID,
-    ui_element: UIElement,
-    x_term_tree_cache: Option<Vec<UIElement>>,
     pub bundle_id: String,
     pub pid: pid_t,
+    frame: Option<(u64, CGWindowInfo)>,
 }
 
 impl From<CGRect> for Rect {
@@ -140,118 +165,363 @@ impl From<CGRect> for Rect {
 }
 
 impl PlatformWindowImpl {
-    pub fn new(bundle_id: String, pid: pid_t, ui_element: UIElement) -> Result<Self, AXError> {
-        // SAFETY:
-        // Operation: `UIElement::get_window_id`, an unsafe fn.
-        // Contract (see macos-utils `UIElement::get_window_id`): the element must still be
-        // live, and the caller accepts the `_AXUIElementGetWindow` SPI premise (it writes a
-        // `CGWindowID` exactly on `kAXErrorSuccess`).
-        // Evidence: `ui_element` is an owned `UIElement`, whose type invariant is that it holds
-        // a live `+1` on its `AXUIElementRef`; it was just moved in from a
-        // `WindowServerEvent::FocusChanged`. The SPI premise is inherited and recorded in
-        // docs/architecture.md (native thread ownership).
-        let window_id = unsafe { ui_element.get_window_id()? };
-        Ok(Self {
+    fn new(bundle_id: String, pid: pid_t, window_id: CGWindowID) -> Self {
+        Self {
             window_id,
-            ui_element,
             pid,
-            x_term_tree_cache: None,
             bundle_id,
-        })
-    }
-
-    pub fn get_window_id(&self) -> CGWindowID {
-        self.window_id
+            frame: None,
+        }
     }
 
     pub fn bundle_id(&self) -> &str {
         self.bundle_id.as_str()
     }
 
-    pub fn get_bounds(&self) -> Option<CGRect> {
-        let info = UIElement::window_info_for_id(self.window_id)?;
-        (info.owner_pid == self.pid as u64).then_some(info.bounds)
-    }
-
-    pub fn get_level(&self) -> Option<i64> {
-        let info = UIElement::window_info_for_id(self.window_id)?;
-        (info.owner_pid == self.pid as u64).then_some(info.level)
-    }
-
-    pub fn get_x_term_cursor_elem(&mut self) -> Option<UIElement> {
-        let tree = self
-            .x_term_tree_cache
-            .as_ref()
-            .and_then(|cached| {
-                debug!("About to walk through {:?}", cached.len());
-                let result: Option<Vec<UIElement>> =
-                    cached.iter().fold(None::<Vec<UIElement>>, |accum, item| match accum {
-                        Some(mut x) => {
-                            x.push(item.clone());
-                            Some(x)
-                        },
-                        None => item.find_x_term_caret_tree().ok(),
-                    });
-                result
-            })
-            .or_else(|| self.ui_element.find_x_term_caret_tree().ok());
-
-        self.x_term_tree_cache = tree;
-        self.x_term_tree_cache.as_ref()?.first().cloned()
+    pub fn get_bounds(&self, generation: u64) -> Option<CGRect> {
+        let (cached_generation, frame) = self.frame.as_ref()?;
+        (*cached_generation == generation).then_some(frame.bounds)
     }
 }
 
 impl PlatformState {
-    pub fn new(proxy: EventLoopProxy) -> Self {
+    pub fn new(
+        main_thread: MainThreadMarker,
+        activation_policy: ActivationPolicy,
+        proxy: EventLoopProxy,
+    ) -> anyhow::Result<Self> {
         let focused_window: Option<PlatformWindowImpl> = None;
-        let result_proxy = proxy.clone();
-        let focus_validation = super::focus_validation::start(
-            |pid| {
-                let _measure = crate::latency::Measure::new("focus-validation-worker");
-                // Each query owns a fresh AX application element and uses it serially on one
-                // worker; no observer/run-loop source or shared UIElement crosses threads.
-                UIElement::application(pid).focused_window().ok().and_then(|window| {
-                    // SAFETY: window owns a live AX element; inherit the documented SPI premise.
-                    unsafe { window.get_window_id().ok() }
-                })
+        let activation_proxy = proxy.clone();
+        let activation_queries = fig_desktop::native::start_latest(
+            |app: macos_utils::window_server::ApplicationSpecifier| fig_desktop::native::Request::Activation(app.pid),
+            move |app, reply| {
+                if let fig_desktop::native::Reply::Activation { window, fullscreen } = reply {
+                    activation_proxy.send_event_or_log(Event::PlatformBoundEvent(
+                        PlatformBoundEvent::ApplicationResolved {
+                            app,
+                            window_id: window,
+                            fullscreen,
+                        },
+                    ));
+                }
             },
-            move |target, focused_window_id| {
-                result_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::WindowFocusValidated {
-                    target,
-                    focused_window_id,
+        )?;
+        let result_proxy = proxy.clone();
+        let focus_validation =
+            fig_desktop::native::start_latest(fig_desktop::native::Request::Focus, move |target, reply| {
+                if let fig_desktop::native::Reply::Focus(focused_window_id) = reply {
+                    result_proxy.send_event_or_log(Event::PlatformBoundEvent(
+                        PlatformBoundEvent::WindowFocusValidated {
+                            target,
+                            focused_window_id,
+                        },
+                    ));
+                }
+            })?;
+        let frame_proxy = proxy.clone();
+        let window_frames =
+            fig_desktop::native::start_latest(fig_desktop::native::Request::Frame, move |target, reply| {
+                if let fig_desktop::native::Reply::Frame(frame) = reply {
+                    frame_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::WindowFrameResolved {
+                        target,
+                        frame: frame.map(fig_desktop::native::Frame::into_window),
+                    }));
+                }
+            })?;
+        let caret_proxy = proxy.clone();
+        let caret_worker = super::caret_worker::CaretWorker::start(move |request, rect| {
+            caret_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::CaretResolved {
+                request,
+                rect,
+                frame: None,
+                suppressed: false,
+            }));
+        })?;
+        let ime_proxy = proxy.clone();
+        let ime_focus_proxy = proxy.clone();
+        let input_method = super::input_method::InputMethod::start(
+            move |request, rect, frame, suppressed| {
+                ime_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::CaretResolved {
+                    request,
+                    rect,
+                    frame,
+                    suppressed,
                 }));
             },
-        );
-        Self {
+            move |event| {
+                ime_focus_proxy.send_event_or_log(Event::PlatformBoundEvent(PlatformBoundEvent::InputMethodLifecycle(
+                    event,
+                )));
+            },
+        )
+        .map_err(|error| warn!(%error, "Input method bridge unavailable; other caret providers remain active"))
+        .ok();
+        let ime_validation_proxy = proxy.clone();
+        let input_method_focus_validation =
+            fig_desktop::native::start_latest(fig_desktop::native::Request::TextFocus, move |target, reply| {
+                if let fig_desktop::native::Reply::Focus(window) = reply {
+                    ime_validation_proxy.send_event_or_log(Event::PlatformBoundEvent(
+                        PlatformBoundEvent::InputMethodFocusValidated { target, window },
+                    ));
+                }
+            })?;
+        Ok(Self {
+            _scroll_monitor: ScrollMonitor::new(main_thread, proxy.clone()),
+            caret_worker,
+            activation_queries,
+            input_method,
+            input_method_ready: Cell::new(false),
+            input_method_recovery: RefCell::new(super::input_method_recovery::Coordinator::new(
+                main_thread,
+                proxy.clone(),
+            )),
+            input_method_scrolled: Cell::new(false),
+            input_method_focus_validation,
+            caret_sequence: Cell::new(0),
+            input_method_refreshed_at: Cell::new(None),
+            main_thread,
+            activation_policy: Cell::new(activation_policy),
+            accessibility_subscription: RefCell::new(None),
             proxy,
-            focused_window: Mutex::new(focused_window),
-            window_server: Mutex::new(None),
+            focused_window: RefCell::new(focused_window),
+            window_server: RefCell::new(None),
             autocomplete_visible: Arc::new(AtomicBool::new(false)),
-            watched_frame: Mutex::new(None),
+            autocomplete_tracking: Arc::new(AtomicBool::new(false)),
+            caret_tracking: RefCell::default(),
+            frame_watch: RefCell::default(),
+            frame_watch_queued: Arc::default(),
+            frame_watch_wake: Arc::default(),
+            window_frames,
             focus_generation: Default::default(),
             focus_validation,
+        })
+    }
+
+    pub fn set_activation_policy(&self, target: &EventLoopWindowTarget, policy: ActivationPolicy) {
+        if self.activation_policy.replace(policy) != policy {
+            debug!(?policy, "Setting application policy");
+            target.set_activation_policy_at_runtime(policy);
         }
     }
 
     /// Called by the autocomplete window's Show/Hide handling; gates the frame watch.
+    pub fn set_autocomplete_tracking(&self, tracking: bool) {
+        if self.autocomplete_tracking.swap(tracking, Ordering::AcqRel) != tracking {
+            self.frame_watch_wake.notify_one();
+        }
+        if !tracking {
+            self.frame_watch.borrow_mut().clear();
+            self.caret_tracking.borrow_mut().clear();
+        }
+    }
+
     pub fn set_autocomplete_visible(&self, visible: bool) {
-        self.autocomplete_visible.store(visible, Ordering::Release);
-        if visible {
-            // Start from the current frame so the first tick does not trigger a spurious move.
-            let guard = self.focused_window.lock().unwrap();
-            *self.watched_frame.lock().unwrap() = guard.as_ref().and_then(|w| w.get_bounds());
+        crate::latency::record(
+            if visible { "window-visible" } else { "window-hidden" },
+            "",
+            None,
+            None,
+            None,
+        );
+        if self.autocomplete_visible.swap(visible, Ordering::AcqRel) != visible {
+            self.frame_watch_wake.notify_one();
         }
     }
 
     pub fn handle(
-        self: &Arc<Self>,
+        &self,
         event: PlatformBoundEvent,
         window_target: &EventLoopWindowTarget,
         window_map: &FigIdMap,
         notifications_state: &Arc<WebviewNotificationsState>,
+        shell_sessions: &fig_shell_ipc::session::ShellSessions,
     ) -> anyhow::Result<()> {
         debug!("Handling platform event: {:?}", event);
         match event {
+            PlatformBoundEvent::RequestInputMethodActivation { response } => {
+                if !response.is_closed() {
+                    let _ = response.send(macos_utils::input_source::request_activation(
+                        self.main_thread,
+                        &format!("{APP_BUNDLE_ID}.inputmethod"),
+                    ));
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::ExternalScroll { pid } => {
+                let is_current_ime = self.focused_window.borrow().as_ref().is_some_and(|window| {
+                    window.pid == pid
+                        && Terminal::from_bundle_id(window.bundle_id()).is_some_and(|terminal| {
+                            terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod
+                        })
+                });
+                if is_current_ime {
+                    // Ghostty's IME geometry describes the active grid even in scrollback.
+                    // Keep session eligibility, but invalidate coordinates until the next input.
+                    self.invalidate_caret_requests();
+                    self.input_method_scrolled.set(true);
+                    self.caret_tracking.borrow_mut().clear();
+                    self.proxy.send_event_or_log(Event::WindowEvent {
+                        window_id: AUTOCOMPLETE_ID,
+                        window_event: WindowEvent::Hide,
+                    });
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::FinishInputMethodRecovery => {
+                self.input_method_recovery
+                    .borrow_mut()
+                    .finish(std::time::Instant::now());
+                self.validate_input_method_focus();
+                Ok(())
+            },
+            PlatformBoundEvent::InputMethodLifecycle(super::input_method::LifecycleEvent::Attachment {
+                request,
+                attached,
+            }) => {
+                // The main-loop focus may have changed after the socket reader validated this
+                // reply.
+                if self.accepts_caret(request) {
+                    self.input_method_recovery
+                        .borrow_mut()
+                        .observe(attached, std::time::Instant::now());
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::InputMethodLifecycle(event) => {
+                if event == super::input_method::LifecycleEvent::Connected {
+                    self.input_method_recovery.borrow_mut().connected();
+                } else if event == super::input_method::LifecycleEvent::Retiring {
+                    self.input_method_recovery
+                        .borrow_mut()
+                        .retiring(std::time::Instant::now());
+                }
+                crate::latency::record("ime-focus-change", "", None, None, None);
+                let is_ime = self
+                    .focused_window
+                    .borrow()
+                    .as_ref()
+                    .and_then(|window| Terminal::from_bundle_id(window.bundle_id()))
+                    .is_some_and(|terminal| {
+                        terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod
+                    });
+                if is_ime {
+                    self.cancel_caret();
+                    let generation = self.focus_generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+                    if let Some(window) = self.focused_window.borrow().as_ref() {
+                        self.input_method_focus_validation
+                            .send_replace(Some(super::focus_validation::FocusTarget {
+                                pid: window.pid,
+                                window_id: window.window_id,
+                                generation,
+                            }));
+                    }
+                    self.proxy.send_event_or_log(Event::WindowEvent {
+                        window_id: AUTOCOMPLETE_ID,
+                        window_event: if self.input_method_recovery.borrow().reconnecting() {
+                            WindowEvent::SuspendGeometry
+                        } else {
+                            WindowEvent::Hide
+                        },
+                    });
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::InputMethodFocusValidated { target, window } => {
+                let current =
+                    self.focused_window
+                        .borrow()
+                        .as_ref()
+                        .map(|window| super::focus_validation::FocusTarget {
+                            pid: window.pid,
+                            window_id: window.window_id,
+                            generation: self.focus_generation.load(Ordering::Relaxed),
+                        });
+                crate::latency::record(
+                    "ime-focus-validation",
+                    "",
+                    None,
+                    None,
+                    Some(usize::from(current == Some(target)) + 2 * usize::from(window == Some(target.window_id))),
+                );
+                if current == Some(target) && window == Some(target.window_id) {
+                    self.input_method_ready.set(true);
+                    self.refresh_window_position()?;
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::CaretResolved {
+                request,
+                rect,
+                frame,
+                suppressed,
+            } => {
+                let accepted = self.accepts_caret(request);
+                crate::latency::record(
+                    "caret-result",
+                    "",
+                    None,
+                    None,
+                    Some(usize::from(accepted) + 2 * usize::from(rect.is_some())),
+                );
+                if accepted && suppressed {
+                    self.caret_tracking.borrow_mut().clear();
+                    if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
+                        window.handle(
+                            WindowEvent::Hide,
+                            shell_sessions,
+                            self,
+                            notifications_state,
+                            window_target,
+                        );
+                    }
+                    return Ok(());
+                }
+                let moving = request.anchor == fig_util::terminal::CompletionAnchor::InputMethod
+                    && self.caret_tracking.borrow().moving(std::time::Instant::now());
+                if accepted
+                    && !moving
+                    && let Some(rect) = rect
+                    && let Some(window) = window_map.get(&AUTOCOMPLETE_ID)
+                    && window.enabled()
+                {
+                    if let Some(frame) = frame {
+                        let frame = CGRect::new(
+                            &core_graphics::geometry::CGPoint::new(frame.x, frame.y),
+                            &core_graphics::geometry::CGSize::new(frame.width, frame.height),
+                        );
+                        self.caret_tracking.borrow_mut().remember(
+                            request.target,
+                            rect,
+                            frame,
+                            std::time::Instant::now(),
+                        );
+                    }
+                    let position = LogicalPosition::new(rect.x, rect.y).into();
+                    let size = LogicalSize::new(rect.width, rect.height).into();
+                    let anchor = WindowPosition::RelativeToCaret {
+                        caret_position: position,
+                        caret_size: size,
+                    };
+                    window.queue_caret_update(request, anchor);
+                }
+                if accepted
+                    && !moving
+                    && request.anchor == fig_util::terminal::CompletionAnchor::InputMethod
+                    && rect.is_none()
+                    && let Some(window) = window_map.get(&AUTOCOMPLETE_ID)
+                {
+                    // An IMK miss during a drag is not a user dismissal. Keep the show intent
+                    // and frame watch; only a newly verified anchor can resume presentation.
+                    window.handle(
+                        WindowEvent::SuspendGeometry,
+                        shell_sessions,
+                        self,
+                        notifications_state,
+                        window_target,
+                    );
+                }
+                Ok(())
+            },
             PlatformBoundEvent::Initialize => {
                 if accessibility_is_enabled() {
                     UIElement::set_global_messaging_timeout(0.25);
@@ -259,57 +529,52 @@ impl PlatformState {
 
                 let (tx, rx) = flume::unbounded::<WindowServerEvent>();
 
-                self.window_server.lock().unwrap().replace(WindowServer::new(
+                self.window_server.borrow_mut().replace(WindowServer::new(
+                    self.main_thread,
                     tx,
                     APP_BUNDLE_ID,
                     fig_util::terminal::xterm_bundle_ids(),
                 ));
 
                 let accessibility_proxy = self.proxy.clone();
-                let mut distributed = NotificationCenter::distributed_center();
+                let distributed = NotificationCenter::distributed_center();
                 let ax_notification_name = ns_string!("com.apple.accessibility.api");
                 let queue = NSOperationQueue::new();
-                distributed.subscribe(ax_notification_name, Some(&queue), move |_| {
-                    accessibility_proxy
-                        .clone()
-                        .send_event(Event::PlatformBoundEvent(
-                            PlatformBoundEvent::AccessibilityUpdateRequested,
-                        ))
-                        .ok();
-                });
+                let subscription =
+                    distributed.subscribe(self.main_thread, ax_notification_name, Some(&queue), move |_| {
+                        accessibility_proxy
+                            .clone()
+                            .send_event(Event::PlatformBoundEvent(
+                                PlatformBoundEvent::AccessibilityUpdateRequested,
+                            ))
+                            .ok();
+                    });
+
+                self.accessibility_subscription.replace(Some(subscription));
 
                 let observer_proxy = self.proxy.clone();
+                let activation_queries = self.activation_queries.clone();
                 tokio::runtime::Handle::current().spawn(async move {
                     while let std::result::Result::Ok(result) = rx.recv_async().await {
                         let mut events: Vec<Event> = vec![];
 
                         match result {
-                            WindowServerEvent::FocusChanged { window, app } => {
-                                events.push(Event::WindowEvent {
-                                    window_id: AUTOCOMPLETE_ID,
-                                    window_event: WindowEvent::Hide,
-                                });
-
-                                if let Ok(window) = PlatformWindowImpl::new(app.bundle_id, app.pid, window) {
-                                    events.push(Event::PlatformBoundEvent(
-                                        PlatformBoundEvent::ExternalWindowFocusChanged { window },
-                                    ));
-                                }
+                            WindowServerEvent::FocusRequested { app } => {
+                                activation_queries.send_replace(Some(app));
+                            },
+                            WindowServerEvent::Workspace(event) => {
+                                events.push(Event::PlatformBoundEvent(PlatformBoundEvent::WorkspaceNotification(
+                                    event,
+                                )));
                             },
                             WindowServerEvent::WindowDestroyed { app } => {
                                 events.push(Event::PlatformBoundEvent(PlatformBoundEvent::WindowDestroyed { app }));
                             },
-                            WindowServerEvent::ActiveSpaceChanged { is_fullscreen } => {
-                                events.extend([
-                                    Event::WindowEvent {
-                                        window_id: AUTOCOMPLETE_ID.clone(),
-                                        window_event: WindowEvent::Hide,
-                                    },
-                                    Event::PlatformBoundEvent(PlatformBoundEvent::FullscreenStateUpdated {
-                                        fullscreen: is_fullscreen,
-                                        dashboard_visible: None,
-                                    }),
-                                ]);
+                            WindowServerEvent::ActiveSpaceChanged => {
+                                events.push(Event::WindowEvent {
+                                    window_id: AUTOCOMPLETE_ID,
+                                    window_event: WindowEvent::Hide,
+                                });
                             },
                             WindowServerEvent::RequestCaretPositionUpdate => {
                                 events.push(Event::PlatformBoundEvent(
@@ -333,15 +598,26 @@ impl PlatformState {
                     super::webview_host::install_focus_behavior(&window.webview)?;
                 }
 
-                // Frame watch: 20 Hz while the autocomplete window is visible, nothing otherwise.
+                // Observe drag state at 20 Hz; idle native frame queries run at 4 Hz.
+                // Only one tick may wait in the main queue.
                 let proxy = self.proxy.clone();
                 let visible = self.autocomplete_visible.clone();
+                let tracking = self.autocomplete_tracking.clone();
+                let queued = self.frame_watch_queued.clone();
+                let wake = self.frame_watch_wake.clone();
                 tokio::runtime::Handle::current().spawn(async move {
-                    let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
-                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                     loop {
-                        interval.tick().await;
-                        if visible.load(Ordering::Acquire)
+                        if !tracking.load(Ordering::Acquire) {
+                            wake.notified().await;
+                            continue;
+                        }
+                        let period = if visible.load(Ordering::Acquire) { 50 } else { 250 };
+                        tokio::select! {
+                            () = wake.notified() => continue,
+                            () = tokio::time::sleep(std::time::Duration::from_millis(period)) => {},
+                        }
+                        if tracking.load(Ordering::Acquire)
+                            && !queued.swap(true, Ordering::AcqRel)
                             && proxy
                                 .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::FrameWatchTick))
                                 .is_err()
@@ -377,6 +653,9 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::EditBufferChanged => {
+                self.caret_tracking.borrow_mut().clear();
+                self.request_window_frame();
+                self.input_method_scrolled.set(false);
                 // Tracking for the terminal in use can have failed at activation time
                 // (`macos_utils::window_server::register`: the 0.25 s AX messaging timeout
                 // while the terminal was busy) and nothing else retried it, so the autocomplete
@@ -384,16 +663,8 @@ impl PlatformState {
                 // edit-buffer update proves the terminal is responsive right now; retry here. When
                 // the app is already tracked this is one `frontmostApplication` call and a map
                 // lookup.
-                if let Some(window_server) = self.window_server.lock().unwrap().as_mut() {
-                    // SAFETY:
-                    // Operation: `WindowServer::ensure_frontmost_tracked`, an unsafe fn.
-                    // Contract (see its `# Safety`): must run on the thread owning the run loop
-                    // the AX sources are attached to.
-                    // Evidence: `PlatformBoundEvent`s are dispatched from `webview/mod.rs`,
-                    // inside `event_loop.run`, i.e. the tao main thread — the same thread
-                    // `WindowServer::new` was called on during `Initialize` (as for
-                    // `reregister_all` in `AccessibilityUpdated` below).
-                    unsafe { window_server.ensure_frontmost_tracked() };
+                if let Some(window_server) = self.window_server.borrow_mut().as_mut() {
+                    window_server.ensure_frontmost_tracked();
                 }
 
                 // `debug!`, to match `CaretPositionUpdateRequested` below, which calls the exact
@@ -404,17 +675,81 @@ impl PlatformState {
                 }
                 Ok(())
             },
-            PlatformBoundEvent::ExternalWindowFocusChanged { window } => {
+            PlatformBoundEvent::ApplicationResolved {
+                app,
+                window_id,
+                fullscreen,
+            } => {
+                let front = frontmost_application();
+                debug!(?app, ?window_id, ?front, "Isolated activation resolved");
+                if front.as_ref() == Some(&app) {
+                    self.proxy.send_event_or_log(Event::PlatformBoundEvent(
+                        PlatformBoundEvent::ExternalWindowFocusChanged { app, window_id },
+                    ));
+                    if let Some(fullscreen) = fullscreen {
+                        self.proxy.send_event_or_log(Event::PlatformBoundEvent(
+                            PlatformBoundEvent::FullscreenStateUpdated {
+                                fullscreen,
+                                dashboard_visible: None,
+                            },
+                        ));
+                    }
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::WorkspaceNotification(event) => {
+                if matches!(&event, macos_utils::window_server::WorkspaceEvent::Activated(app)
+                    if app.bundle_id != APP_BUNDLE_ID && frontmost_application().as_ref() == Some(app))
+                {
+                    self.cancel_caret();
+                }
+                if let Some(server) = self.window_server.borrow_mut().as_mut() {
+                    server.handle_workspace(event);
+                }
+                Ok(())
+            },
+            PlatformBoundEvent::ExternalWindowFocusChanged { window_id, app } => {
+                let front = frontmost_application();
+                let decision = super::focus_validation::classify_focus_change(
+                    front.as_ref(),
+                    &app,
+                    window_id,
+                    self.focused_window
+                        .borrow()
+                        .as_ref()
+                        .map(|window| (window.pid, window.bundle_id.as_str(), window.window_id)),
+                );
+                match decision {
+                    super::focus_validation::FocusChange::Stale => return Ok(()),
+                    super::focus_validation::FocusChange::Duplicate => {
+                        self.validate_input_method_focus();
+                        self.refresh_window_position()?;
+                        return Ok(());
+                    },
+                    super::focus_validation::FocusChange::Changed => {},
+                }
+                // Only a verified change may hide suggestions. Delayed or duplicate AX
+                // notifications must not dismiss a list produced by a newer shell edit.
+                self.cancel_caret();
+                self.focus_generation.fetch_add(1, Ordering::Relaxed);
+                let had_focus = self.focused_window.borrow_mut().take().is_some();
+                if (had_focus || window_id.is_none() || Terminal::from_bundle_id(app.bundle_id.clone()).is_none())
+                    && let Some(autocomplete) = window_map.get(&AUTOCOMPLETE_ID)
+                {
+                    // Commit the hide in this transition; a queued Hide could overtake the
+                    // next shell edit and erase its newly established show intent.
+                    autocomplete.handle(
+                        WindowEvent::Hide,
+                        shell_sessions,
+                        self,
+                        notifications_state,
+                        window_target,
+                    );
+                }
+                let Some(window_id) = window_id else { return Ok(()) };
+                let window = PlatformWindowImpl::new(app.bundle_id, app.pid, window_id);
                 let current_terminal = Terminal::from_bundle_id(window.bundle_id.clone());
-                let level = window.get_level();
 
-                // Neither of these depends on the window level. `get_level()` returns `None`
-                // whenever `CGWindowListCopyWindowInfo` has nothing for the window — an iTerm2
-                // hotkey window (level != 0), a fullscreen transition, a failed
-                // `_AXUIElementGetWindow` — and gating them on `Some(0)` left `focused_window`
-                // permanently `None` there, so the autocomplete window never moved again and
-                // every keystroke failed in `refresh_window_position`. Only the level *sync*
-                // below cares about the level.
                 let enabled_proxy = self.proxy.clone();
                 tokio::spawn(async move {
                     let is_terminal_disabled = current_terminal.as_ref().is_some_and(|terminal| {
@@ -437,62 +772,120 @@ impl PlatformState {
                     });
                 });
 
-                self.focus_generation.fetch_add(1, Ordering::Relaxed);
-                self.focused_window.lock().unwrap().replace(window);
-
-                if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
-                    // Handle iTerm Quake mode by explicitly setting window level. See
-                    // https://github.com/gnachman/iTerm2/blob/1a5a09f02c62afcc70a647603245e98862e51911/sources/iTermProfileHotKey.m#L276-L310
-                    // for more on window levels.
-                    let above = match level {
-                        // SAFETY:
-                        // Operation: the `CGWindowLevelForKey` FFI call.
-                        // Contract (see the `unsafe extern` block in macos-utils'
-                        // `ui_element.rs`): takes a `CGWindowLevelKey` (`i32`) and returns an
-                        // `i32`; no pointers, no state, no thread affinity.
-                        // Evidence: `kCGFloatingWindowLevelKey` is the literal 5, a documented
-                        // member of `CGWindowLevelKey`.
-                        None | Some(0) => unsafe { CGWindowLevelForKey(kCGFloatingWindowLevelKey) as i64 },
-                        Some(level) => level,
-                    };
-                    debug!("Setting window level to {level:?}");
-                    super::webview_host::set_level(&window.window, above);
-                }
+                self.focused_window.borrow_mut().replace(window);
+                self.request_window_frame();
+                self.validate_input_method_focus();
+                self.refresh_window_position()?;
 
                 Ok(())
             },
-            PlatformBoundEvent::FrameWatchTick => {
-                if !self.autocomplete_visible.load(Ordering::Acquire) {
+            PlatformBoundEvent::WindowFrameResolved { target, frame } => {
+                let mut focused = self.focused_window.borrow_mut();
+                let Some(window) = focused.as_mut() else { return Ok(()) };
+                if target
+                    != (super::focus_validation::FocusTarget {
+                        pid: window.pid,
+                        window_id: window.window_id,
+                        generation: self.focus_generation.load(Ordering::Relaxed),
+                    })
+                {
                     return Ok(());
                 }
-                let current = self
-                    .focused_window
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .and_then(|w| w.get_bounds());
-                let mut watched = self.watched_frame.lock().unwrap();
-                let same = |a: &CGRect, b: &CGRect| {
-                    a.origin.x == b.origin.x
-                        && a.origin.y == b.origin.y
-                        && a.size.width == b.size.width
-                        && a.size.height == b.size.height
+                let changed = match (&window.frame, &frame) {
+                    (Some((generation, before)), Some(now)) => {
+                        *generation != target.generation
+                            || before.bounds.origin.x != now.bounds.origin.x
+                            || before.bounds.origin.y != now.bounds.origin.y
+                            || before.bounds.size.width != now.bounds.size.width
+                            || before.bounds.size.height != now.bounds.size.height
+                            || before.level != now.level
+                    },
+                    (None, None) => false,
+                    _ => true,
                 };
-                let moved = match (&current, &*watched) {
-                    (Some(now), Some(before)) => !same(now, before),
-                    (Some(_), None) => true,
-                    (None, _) => false,
-                };
-                if moved {
-                    *watched = current;
-                    drop(watched);
-                    if let Err(e) = self.refresh_window_position() {
-                        debug!(%e, "Failed to refresh window position after the terminal moved");
+                let translated = frame.as_ref().and_then(|frame| {
+                    self.caret_tracking
+                        .borrow_mut()
+                        .translate(target, frame.bounds, std::time::Instant::now())
+                });
+                let available = frame.is_some();
+                let level = frame.as_ref().map(|info| info.level);
+                window.frame = frame.map(|frame| (target.generation, frame));
+                drop(focused);
+                if changed
+                    && !available
+                    && let Some(window) = window_map.get(&AUTOCOMPLETE_ID)
+                {
+                    window.handle(
+                        WindowEvent::SuspendGeometry,
+                        shell_sessions,
+                        self,
+                        notifications_state,
+                        window_target,
+                    );
+                }
+                if changed {
+                    self.frame_watch.borrow_mut().changed(std::time::Instant::now());
+                    if let Some(window) = window_map.get(&AUTOCOMPLETE_ID) {
+                        // SAFETY: the documented numeric level key has no pointer/thread contract.
+                        let above = level
+                            .filter(|level| *level != 0)
+                            .unwrap_or_else(|| unsafe { CGWindowLevelForKey(kCGFloatingWindowLevelKey) as i64 });
+                        super::webview_host::set_level(self.main_thread, &window.window, above);
+                    }
+                    self.refresh_window_position()?;
+                    if let Some(rect) = translated {
+                        let request = super::caret_worker::Request {
+                            target,
+                            sequence: self.caret_sequence.get(),
+                            anchor: fig_util::terminal::CompletionAnchor::InputMethod,
+                        };
+                        if self.accepts_caret(request)
+                            && let Some(window) = window_map.get(&AUTOCOMPLETE_ID)
+                        {
+                            window.queue_caret_update(request, WindowPosition::RelativeToCaret {
+                                caret_position: LogicalPosition::new(rect.x, rect.y).into(),
+                                caret_size: LogicalSize::new(rect.width, rect.height).into(),
+                            });
+                            crate::latency::record("caret-window-translation", "", None, None, None);
+                        }
                     }
                 }
                 Ok(())
             },
+            PlatformBoundEvent::FrameWatchTick => {
+                self.frame_watch_queued.store(false, Ordering::Release);
+                if !self.autocomplete_tracking.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                if self.frame_watch.borrow_mut().due(
+                    std::time::Instant::now(),
+                    true,
+                    self.autocomplete_visible.load(Ordering::Acquire),
+                    NSEvent::pressedMouseButtons() != 0,
+                ) {
+                    self.request_window_frame();
+                }
+                let input_method_due = self
+                    .focused_window
+                    .borrow()
+                    .as_ref()
+                    .and_then(|window| Terminal::from_bundle_id(window.bundle_id()))
+                    .is_some_and(|terminal| {
+                        terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod
+                    })
+                    && self
+                        .input_method_refreshed_at
+                        .get()
+                        .is_none_or(|time| time.elapsed() >= std::time::Duration::from_millis(250));
+                if input_method_due {
+                    self.refresh_window_position()?;
+                }
+                Ok(())
+            },
             PlatformBoundEvent::CaretPositionUpdateRequested => {
+                self.frame_watch.borrow_mut().changed(std::time::Instant::now());
+                self.request_window_frame();
                 if let Err(e) = self.refresh_window_position() {
                     debug!(%e, "Failed to refresh window position");
                 }
@@ -518,12 +911,7 @@ impl PlatformState {
                     }
                 };
 
-                let mut policy_lock = ACTIVATION_POLICY.lock().unwrap();
-                if *policy_lock != policy {
-                    debug!(?policy, "Setting application policy");
-                    *policy_lock = policy;
-                    window_target.set_activation_policy_at_runtime(policy);
-                }
+                self.set_activation_policy(window_target, policy);
                 Ok(())
             },
             PlatformBoundEvent::AccessibilityUpdateRequested => {
@@ -545,6 +933,9 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::AccessibilityUpdated { enabled } => {
+                if !enabled {
+                    self.cancel_caret();
+                }
                 let was_enabled = ACCESSIBILITY_ENABLED.swap(enabled, Ordering::SeqCst);
 
                 // `WindowServer::new` is the only thing that ever registered AX observers, and
@@ -554,16 +945,9 @@ impl PlatformState {
                 // followed the caret — until the next restart.
                 if enabled
                     && !was_enabled
-                    && let Some(window_server) = self.window_server.lock().unwrap().as_mut()
+                    && let Some(window_server) = self.window_server.borrow_mut().as_mut()
                 {
-                    // SAFETY:
-                    // Operation: `WindowServer::reregister_all`, an unsafe fn.
-                    // Contract (see its `# Safety`): must run on the thread owning the run loop
-                    // the AX sources are attached to.
-                    // Evidence: `PlatformBoundEvent`s are dispatched from `webview/mod.rs:503`,
-                    // inside `event_loop.run`, i.e. the tao main thread — the same thread
-                    // `WindowServer::new` was called on during `Initialize`.
-                    unsafe { window_server.reregister_all() };
+                    window_server.reregister_all();
                 }
 
                 let proxy = self.proxy.clone();
@@ -608,7 +992,7 @@ impl PlatformState {
                 Ok(())
             },
             PlatformBoundEvent::WindowDestroyed { app } => {
-                let focused = self.focused_window.lock().unwrap();
+                let focused = self.focused_window.borrow();
                 if let Some(window) = focused.as_ref()
                     && window.bundle_id() == app.bundle_id
                     && window.pid == app.pid
@@ -626,7 +1010,7 @@ impl PlatformState {
                 target,
                 focused_window_id,
             } => {
-                let mut focused = self.focused_window.lock().unwrap();
+                let mut focused = self.focused_window.borrow_mut();
                 if let Some(window) = focused.as_ref() {
                     let current = super::focus_validation::FocusTarget {
                         pid: window.pid,
@@ -634,6 +1018,7 @@ impl PlatformState {
                         generation: self.focus_generation.load(Ordering::Relaxed),
                     };
                     if super::focus_validation::should_clear(current, target, focused_window_id) {
+                        self.cancel_caret();
                         focused.take();
                         self.focus_generation.fetch_add(1, Ordering::Relaxed);
                         self.proxy.send_event_or_log(Event::WindowEvent {
@@ -647,47 +1032,137 @@ impl PlatformState {
         }
     }
 
+    fn request_window_frame(&self) {
+        if let Some(window) = self.focused_window.borrow().as_ref() {
+            self.window_frames
+                .send_replace(Some(super::focus_validation::FocusTarget {
+                    pid: window.pid,
+                    window_id: window.window_id,
+                    generation: self.focus_generation.load(Ordering::Relaxed),
+                }));
+        }
+    }
+
+    fn validate_input_method_focus(&self) {
+        if let Some(window) = self.focused_window.borrow().as_ref()
+            && Terminal::from_bundle_id(window.bundle_id()).is_some_and(|terminal| {
+                terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod
+            })
+        {
+            self.input_method_focus_validation
+                .send_replace(Some(super::focus_validation::FocusTarget {
+                    pid: window.pid,
+                    window_id: window.window_id,
+                    generation: self.focus_generation.load(Ordering::Relaxed),
+                }));
+        }
+    }
+
+    fn cancel_caret(&self) {
+        self.caret_tracking.borrow_mut().clear();
+        self.frame_watch.borrow_mut().clear();
+        self.invalidate_caret_requests();
+        self.input_method_ready.set(false);
+        self.input_method_scrolled.set(false);
+        self.input_method_focus_validation.send_replace(None);
+        self.window_frames.send_replace(None);
+    }
+
+    fn invalidate_caret_requests(&self) {
+        // Invalidate events already queued to main as well as the worker's pending retry.
+        self.caret_sequence.set(self.caret_sequence.get().wrapping_add(1));
+        self.caret_worker.cancel();
+        if let Some(input_method) = &self.input_method {
+            input_method.cancel();
+        }
+    }
+
+    pub fn accepts_caret(&self, request: super::caret_worker::Request) -> bool {
+        let focused = self.focused_window.borrow();
+        let Some(window) = focused.as_ref() else { return false };
+        let target = super::focus_validation::FocusTarget {
+            pid: window.pid,
+            window_id: window.window_id,
+            generation: self.focus_generation.load(Ordering::Relaxed),
+        };
+        let reason = if window.get_bounds(target.generation).is_none() {
+            Some("caret-wait-frame")
+        } else if request.anchor == fig_util::terminal::CompletionAnchor::InputMethod
+            && (!self.input_method_ready.get() || self.input_method_scrolled.get())
+        {
+            Some("caret-wait-ime")
+        } else if !super::caret_worker::accepts(target, self.caret_sequence.get(), request) {
+            Some("caret-stale")
+        } else if NSWorkspace::sharedWorkspace()
+            .frontmostApplication()
+            .map(|app| app.processIdentifier())
+            != Some(target.pid)
+        {
+            Some("caret-not-foreground")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            crate::latency::record(reason, "", None, None, None);
+        }
+        reason.is_none()
+    }
+
     fn refresh_window_position(&self) -> anyhow::Result<()> {
-        let mut guard = self.focused_window.lock().unwrap();
-        let active_window = guard.as_mut().context("No active window")?;
-        let current_terminal = Terminal::from_bundle_id(active_window.bundle_id());
-        let frontmost_pid = NSWorkspace::sharedWorkspace()
+        if self.focused_window.borrow().as_ref().is_some_and(|window| {
+            window
+                .get_bounds(self.focus_generation.load(Ordering::Relaxed))
+                .is_none()
+        }) {
+            self.request_window_frame();
+        }
+        let sequence = self.caret_sequence.get().wrapping_add(1);
+        self.caret_sequence.set(sequence);
+        let guard = self.focused_window.borrow();
+        let active = guard.as_ref().context("No active window")?;
+        let terminal = Terminal::from_bundle_id(active.bundle_id());
+        let frontmost = NSWorkspace::sharedWorkspace()
             .frontmostApplication()
             .map(|app| app.processIdentifier());
-        // AX notifications can already be queued when focus leaves the terminal. A system-wide
-        // caret read would then query an unrelated application (and can wait for its AX timeout).
-        if !should_query_caret(current_terminal.is_some(), active_window.pid, frontmost_pid) {
+        if !should_query_caret(terminal.is_some(), active.pid, frontmost) {
+            self.cancel_caret();
             return Ok(());
         }
-        let _measure = crate::latency::Measure::new("caret-query");
-        let is_xterm = current_terminal.is_some_and(|t| t.is_xterm());
-
-        let caret = if is_xterm {
-            active_window
-                .get_x_term_cursor_elem()
-                .and_then(|c| c.frame().ok())
-                .map(Rect::from)
-        } else {
-            self.get_cursor_position()
-        };
-
-        let caret = caret.context("Failed to get cursor position")?;
-        debug!("Sending caret update {:?}", caret);
-
-        self.proxy.send_event_or_log(Event::WindowEvent {
-            window_id: AUTOCOMPLETE_ID,
-            window_event: WindowEvent::UpdateWindowGeometry {
-                position: Some(WindowPosition::RelativeToCaret {
-                    caret_position: caret.position,
-                    caret_size: caret.size,
-                }),
-                size: None,
-                anchor: None,
-                tx: None,
-                dry_run: false,
+        if terminal
+            .as_ref()
+            .is_some_and(|terminal| terminal.completion_anchor() == fig_util::terminal::CompletionAnchor::InputMethod)
+        {
+            // AppKit text clients may not service IMK requests inside a mouse-tracking loop.
+            // Follow the verified window-relative anchor instead; no input-event monitor is needed.
+            if NSEvent::pressedMouseButtons() != 0 || self.caret_tracking.borrow().moving(std::time::Instant::now()) {
+                return Ok(());
+            }
+            self.input_method_refreshed_at.set(Some(std::time::Instant::now()));
+        }
+        let request = super::caret_worker::Request {
+            target: super::focus_validation::FocusTarget {
+                pid: active.pid,
+                window_id: active.window_id,
+                generation: self.focus_generation.load(Ordering::Relaxed),
             },
-        });
-
+            sequence,
+            anchor: terminal.map_or(fig_util::terminal::CompletionAnchor::TextRange, |terminal| {
+                terminal.completion_anchor()
+            }),
+        };
+        if request.anchor == fig_util::terminal::CompletionAnchor::InputMethod {
+            self.caret_worker.cancel();
+            if let Some(input_method) = &self.input_method
+                && !self.input_method_scrolled.get()
+            {
+                input_method.request(request);
+            }
+        } else {
+            if let Some(input_method) = &self.input_method {
+                input_method.cancel();
+            }
+            self.caret_worker.request(request);
+        }
         Ok(())
     }
 
@@ -702,81 +1177,24 @@ impl PlatformState {
         std::result::Result::Ok(())
     }
 
-    #[allow(clippy::unused_self)]
-    pub fn get_cursor_position(&self) -> Option<Rect> {
-        // SAFETY:
-        // Operation: `macos_utils::caret_position::get_caret_position`, an unsafe fn.
-        // Contract (see its `# Safety`): the AX API must be usable from this thread, and the
-        // caller accepts the `AXValueGetValue` / `kAXValueType*` layout premises.
-        // Evidence: `get_cursor_position` is reached from `refresh_window_position`, which runs
-        // on the tao event loop (main thread) for `EditBufferChanged` and
-        // `CaretPositionUpdateRequested`. The layout premises are recorded in
-        // docs/architecture.md (native thread ownership) and are inherited from the vendored
-        // `accessibility-sys` bindings.
-        let caret: CaretPosition = unsafe { get_caret_position(true) };
-
-        if caret.valid {
-            Some(Rect {
-                position: LogicalPosition::new(caret.x, caret.y).into(),
-                size: LogicalSize::new(DEFAULT_CARET_WIDTH, caret.height).into(),
-            })
-        } else {
-            None
-        }
-    }
-
-    /// The bottom edge of the focused window, in logical pixels.
-    ///
-    /// This used to return a whole `PlatformWindow`, which meant cloning the `PlatformWindowImpl`
-    /// — a `UIElement` `CFRetain` plus the entire `x_term_tree_cache` `Vec`, each element
-    /// retained — so that the caller could read `rect.bottom()` and drop the rest.
-    /// `PlatformWindow::inner` had no reader at all.
+    /// Latest worker-validated bounds for the current focused window. Never queries AppKit/CG.
     pub fn active_window_bottom(&self, scale: f64) -> Option<f64> {
-        let guard = self.focused_window.lock().unwrap();
+        let guard = self.focused_window.borrow();
         let active_window = guard.as_ref()?;
-        Some(Rect::from(active_window.get_bounds()?).bottom(scale))
-    }
-
-    pub async fn icon_lookup(asset: &AssetSpecifier<'_>) -> Option<ProcessedAsset> {
-        // SAFETY: UNPROVEN — see docs/architecture.md (native thread ownership).
-        // Operations: the five calls to `macos_utils::image::png_for_name` /
-        // `png_for_path`, all unsafe fns.
-        // Contract (see their `# Safety`): AppKit must be usable from the calling thread.
-        // Evidence: this is an `async fn` driven by the tokio runtime, so it runs on a worker
-        // thread, not the main thread. `NSImage`, `NSBitmapImageRep` and `NSWorkspace`'s icon
-        // accessors are documented as usable from secondary threads, and
-        // `NSGraphicsContext::currentContext()` simply returns `None` off the main thread — so
-        // the missing premise is narrow (no documented main-thread-only call is reached) rather
-        // than obviously violated. It is nevertheless not discharged by anything authoritative,
-        // and it is the reason `png_for_*` are `unsafe fn` at all.
-        let data = match asset {
-            AssetSpecifier::Named(name) => unsafe { macos_utils::image::png_for_name(name)? },
-            AssetSpecifier::PathBased(path) => (unsafe { macos_utils::image::png_for_path(path) })
-                .or_else(|| {
-                    if path.to_str()?.ends_with('/') {
-                        // /bin will always exist and looks like the default folder
-                        // TODO: replace with `iconForContentType`
-                        unsafe { macos_utils::image::png_for_path(Path::new("/bin")) }
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    if let Some(ext) = path.extension() {
-                        unsafe { macos_utils::image::png_for_name(ext.to_str()?) }
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| unsafe { macos_utils::image::png_for_name("file") })?,
-        };
-
-        Some((Arc::new(data.into()), AssetKind::Png))
+        Some(Rect::from(active_window.get_bounds(self.focus_generation.load(Ordering::Relaxed))?).bottom(scale))
     }
 
     pub fn accessibility_is_enabled() -> Option<bool> {
         Some(ACCESSIBILITY_ENABLED.load(Ordering::SeqCst))
     }
+}
+
+fn frontmost_application() -> Option<macos_utils::window_server::ApplicationSpecifier> {
+    let current = NSWorkspace::sharedWorkspace().frontmostApplication()?;
+    Some(macos_utils::window_server::ApplicationSpecifier {
+        pid: current.processIdentifier(),
+        bundle_id: current.bundleIdentifier()?.to_string(),
+    })
 }
 
 fn should_query_caret(is_terminal: bool, tracked_pid: pid_t, frontmost_pid: Option<pid_t>) -> bool {
@@ -785,7 +1203,29 @@ fn should_query_caret(is_terminal: bool, tracked_pid: pid_t, frontmost_pid: Opti
 
 #[cfg(test)]
 mod caret_target_tests {
-    use super::should_query_caret;
+    use super::{
+        CGRect,
+        CGWindowInfo,
+        PlatformWindowImpl,
+        should_query_caret,
+    };
+    #[test]
+    fn cached_window_bounds_cannot_cross_a_focus_generation() {
+        let mut window = PlatformWindowImpl::new("terminal".into(), 12, 34);
+        assert!(window.get_bounds(1).is_none());
+        window.frame = Some((1, CGWindowInfo {
+            owner_pid: 12,
+            window_id: 34,
+            bounds: CGRect::new(
+                &core_graphics::geometry::CGPoint::new(0.0, 0.0),
+                &core_graphics::geometry::CGSize::new(100.0, 100.0),
+            ),
+            level: 0,
+        }));
+        assert!(window.get_bounds(1).is_some());
+        assert!(window.get_bounds(2).is_none());
+    }
+
     #[test]
     fn queued_caret_events_do_not_query_an_unrelated_foreground_app() {
         assert!(should_query_caret(true, 10, Some(10)));

@@ -119,7 +119,11 @@ pub enum WindowEvent {
     },
     /// Hides the window
     Hide,
+    /// Temporarily hide unavailable geometry without dismissing the current suggestions.
+    SuspendGeometry,
     Show,
+    /// Recheck an existing show request after an asynchronous caret/runtime result.
+    ReconcileVisibility,
     Emit {
         event_name: EmitEventName,
         payload: Cow<'static, str>,

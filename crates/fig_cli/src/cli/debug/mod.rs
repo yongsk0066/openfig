@@ -105,6 +105,8 @@ pub enum DebugSubcommand {
     },
     /// Prompt accessibility
     PromptAccessibility,
+    /// Request input-method activation on the running desktop main loop (not confirmation).
+    EnableInputMethod,
     /// Sample desktop process
     Sample,
     /// Accessibility
@@ -221,6 +223,31 @@ impl DebugSubcommand {
                     .args(log_paths)
                     .spawn()?
                     .wait()?;
+            },
+            DebugSubcommand::EnableInputMethod => {
+                use fig_proto::local::{
+                    IntegrationAction,
+                    TerminalIntegrationCommand,
+                    command,
+                    command_response,
+                };
+                let response = fig_ipc::local::send_recv_command_to_socket(command::Command::TerminalIntegration(
+                    TerminalIntegrationCommand {
+                        identifier: "input-method".into(),
+                        action: IntegrationAction::Install as i32,
+                    },
+                ))
+                .await?
+                .context("Desktop closed the activation response")?;
+                match response.response {
+                    Some(command_response::Response::Success(success)) => {
+                        println!("{}", success.message.unwrap_or_default());
+                    },
+                    Some(command_response::Response::Error(error)) => {
+                        bail!("{} (status {:?})", error.message.unwrap_or_default(), error.exit_code)
+                    },
+                    _ => bail!("Unexpected activation response"),
+                }
             },
             DebugSubcommand::PromptAccessibility => {
                 prompt_accessibility_command()

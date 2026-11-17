@@ -133,8 +133,8 @@ mod tests {
         Arc::new(ApplicationServices {
             page_epoch: Default::default(),
             processes: Default::default(),
+            native_icons: fig_desktop::native::Icons::new().ok(),
             shell_sessions: Arc::new(ShellSessions::default()),
-            intercept_state: Default::default(),
             notifications_state: Arc::new(WebviewNotificationsState::default()),
             proxy: Box::new(NoEventLoop),
             position_window: Default::default(),

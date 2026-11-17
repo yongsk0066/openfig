@@ -1,32 +1,28 @@
-//! Serial, latest-request focus validation. Only numeric identities cross the worker boundary.
-use std::sync::Arc;
+//! Serial, latest-request focus and frame queries. Only owned identities/results cross threads.
+pub use fig_desktop::native::FocusTarget;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FocusTarget {
-    pub pid: i32,
-    pub window_id: u32,
-    pub generation: u64,
+#[derive(Debug, PartialEq, Eq)]
+pub enum FocusChange {
+    Stale,
+    Duplicate,
+    Changed,
 }
 
-pub fn start(
-    query: impl Fn(i32) -> Option<u32> + Send + Sync + 'static,
-    publish: impl Fn(FocusTarget, Option<u32>) + Send + 'static,
-) -> tokio::sync::watch::Sender<Option<FocusTarget>> {
-    let (sender, mut receiver) = tokio::sync::watch::channel(None::<FocusTarget>);
-    let query = Arc::new(query);
-    tokio::spawn(async move {
-        while receiver.changed().await.is_ok() {
-            let Some(target) = *receiver.borrow_and_update() else {
-                continue;
-            };
-            let query = query.clone();
-            // At most one blocking AX query at a time, with only the latest waiting request.
-            if let Ok(result) = tokio::task::spawn_blocking(move || query(target.pid)).await {
-                publish(target, result);
-            }
-        }
-    });
-    sender
+pub fn classify_focus_change(
+    front: Option<&macos_utils::window_server::ApplicationSpecifier>,
+    incoming: &macos_utils::window_server::ApplicationSpecifier,
+    window_id: Option<u32>,
+    current: Option<(i32, &str, u32)>,
+) -> FocusChange {
+    if front != Some(incoming) {
+        FocusChange::Stale
+    } else if current.is_some_and(|(pid, bundle, window)| {
+        pid == incoming.pid && bundle == incoming.bundle_id && Some(window) == window_id
+    }) {
+        FocusChange::Duplicate
+    } else {
+        FocusChange::Changed
+    }
 }
 
 pub fn should_clear(current: FocusTarget, requested: FocusTarget, focused: Option<u32>) -> bool {
@@ -49,41 +45,39 @@ mod tests {
         assert!(!should_clear(FocusTarget { generation: 4, ..a }, a, None));
         assert!(!should_clear(FocusTarget { pid: 2, ..a }, a, None));
     }
-    #[tokio::test]
-    async fn blocked_validation_does_not_block_runtime_and_coalesces_waiters() {
-        let (entered, mut starts) = tokio::sync::mpsc::unbounded_channel();
-        let (release, gate) = std::sync::mpsc::channel();
-        let gate = std::sync::Mutex::new(gate);
-        let (done, mut results) = tokio::sync::mpsc::unbounded_channel();
-        let sender = start(
-            move |pid| {
-                entered.send(pid).unwrap();
-                if pid == 1 {
-                    gate.lock().unwrap().recv().unwrap();
-                }
-                Some(pid as u32)
-            },
-            move |target, result| {
-                done.send((target.pid, result)).unwrap();
-            },
-        );
-        let request = |pid| {
-            Some(FocusTarget {
-                pid,
-                window_id: pid as u32,
-                generation: pid as u64,
-            })
+    #[test]
+    fn queued_focus_events_are_classified_before_any_hide_or_invalidation() {
+        use macos_utils::window_server::ApplicationSpecifier;
+        let a = ApplicationSpecifier {
+            pid: 10,
+            bundle_id: "terminal.a".into(),
         };
-        sender.send_replace(request(1));
-        assert_eq!(starts.recv().await, Some(1));
-        sender.send_replace(request(2));
-        sender.send_replace(request(3));
-        // This task runs on a single-thread runtime while query(1) is blocked.
-        tokio::task::yield_now().await;
-        release.send(()).unwrap();
-        assert_eq!(results.recv().await, Some((1, Some(1))));
-        assert_eq!(starts.recv().await, Some(3));
-        assert_eq!(results.recv().await, Some((3, Some(3))));
-        drop(sender);
+        let b = ApplicationSpecifier {
+            pid: 11,
+            bundle_id: "terminal.b".into(),
+        };
+        let current = Some((b.pid, b.bundle_id.as_str(), 22));
+        assert_eq!(
+            classify_focus_change(Some(&b), &a, Some(21), current),
+            FocusChange::Stale
+        );
+        assert_eq!(classify_focus_change(None, &b, Some(22), current), FocusChange::Stale);
+        assert_eq!(
+            classify_focus_change(Some(&b), &b, Some(22), current),
+            FocusChange::Duplicate
+        );
+        assert_eq!(
+            classify_focus_change(Some(&b), &b, Some(23), current),
+            FocusChange::Changed
+        );
+        assert_eq!(classify_focus_change(Some(&b), &b, None, current), FocusChange::Changed);
+        let reused = ApplicationSpecifier {
+            pid: b.pid,
+            bundle_id: "another.process".into(),
+        };
+        assert_eq!(
+            classify_focus_change(Some(&reused), &b, Some(22), current),
+            FocusChange::Stale
+        );
     }
 }

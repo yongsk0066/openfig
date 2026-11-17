@@ -12,6 +12,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+libc.workspace = true
 block2.workspace = true
 core-graphics.workspace = true
 core-foundation.workspace = true
@@ -34,11 +35,9 @@ objc2-foundation = { workspace = true, features = [
     "NSProcessInfo",
     "NSURL",
 ] }
-dashmap.workspace = true
 flume.workspace = true
 fnv = "1.0.7"
 accessibility-sys = { path = "./accessibility-master/accessibility-sys" }
 accessibility = { path = "./accessibility-master/accessibility" }
 thiserror.workspace = true
 tracing.workspace = true
-tokio.workspace = true

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>local.openfig.inputmethod</string>
+	<key>CFBundleName</key>
+	<string>Fig Input Method</string>
+	<key>CFBundleExecutable</key>
+	<string>fig_input_method</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>InputMethodConnectionName</key>
+	<string>local.openfig.inputmethod.connection</string>
+	<key>InputMethodServerControllerClass</key>
+	<string>FigInputController</string>
+	<key>InputMethodType</key>
+	<string>palette</string>
+	<key>ComponentInvisibleInSystemUI</key>
+	<true/>
+	<key>TISInputSourceID</key>
+	<string>local.openfig.inputmethod</string>
+	<key>TISIntendedLanguage</key>
+	<string>en</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon.icns</string>
+	<key>tsInputMethodIconFileKey</key>
+	<string>AppIcon</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>

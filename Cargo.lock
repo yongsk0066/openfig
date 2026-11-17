@@ -1088,6 +1088,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.23.1",
+ "block2",
  "bytes",
  "camino",
  "clap",
@@ -2239,14 +2240,13 @@ dependencies = [
  "block2",
  "core-foundation",
  "core-graphics",
- "dashmap",
  "flume",
  "fnv",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
  "thiserror 2.0.21",
- "tokio",
  "tracing",
 ]
 

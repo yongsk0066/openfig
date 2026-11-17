@@ -103,9 +103,7 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
             .collect();
         let any_full = subscribers.iter().any(|(_, _, needs_full, _)| *needs_full);
 
-        // Clone before taking the session lock. `clone_from` inside the closure held the
-        // `FairMutex` for the whole copy (13 KB per keystroke before F-01) while
-        // `request/window.rs`'s `most_recent()` contended for it.
+        // Allocate before locking so geometry reads are not blocked by buffer/context copies.
         let text = hook.text.clone();
         let cursor = hook.cursor;
         let terminal_cursor_coordinates = hook.terminal_cursor_coordinates;
@@ -274,15 +272,16 @@ impl fig_shell_ipc::ShellHookHandler for ShellHook {
                 Notification {
                     r#type: Some(fig_proto::fig::notification::Type::ProcessChangeNotification(
                         ProcessChangedNotification {
-                        session_id: Some(session_id.to_string()),
-                        new_process: // TODO: determine active application based on tty
-                        hook.context.as_ref().map(|ctx| Process {
-                            pid: ctx.pid,
-                            executable: ctx.process_name.clone(),
-                            directory: ctx.current_working_directory.clone(),
-                            env: vec![],
-                        }),
-                    },
+                            session_id: Some(session_id.to_string()),
+                            // This notification describes the shell hook process. UI foreground
+                            // application identity is owned separately by PlatformState.
+                            new_process: hook.context.as_ref().map(|ctx| Process {
+                                pid: ctx.pid,
+                                executable: ctx.process_name.clone(),
+                                directory: ctx.current_working_directory.clone(),
+                                env: vec![],
+                            }),
+                        },
                     )),
                 },
                 &self.proxy,

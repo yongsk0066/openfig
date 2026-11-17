@@ -1,5 +1,6 @@
 [package]
 name = "fig_desktop"
+default-run = "fig_desktop"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -45,7 +46,8 @@ muda = { version = "0.21.2", default-features = false }
 nix.workspace = true
 notify = "8.2.2"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSEvent", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication"] }
+block2.workspace = true
+objc2-app-kit = { workspace = true, features = ["block2", "NSApplication", "NSEvent", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication"] }
 objc2-foundation.workspace = true
 parking_lot = { workspace = true, features = ["serde"] }
 percent-encoding.workspace = true

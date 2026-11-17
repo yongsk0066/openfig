@@ -1,2 +1,5 @@
 pub mod notification_center;
-pub use notification_center::NotificationCenter;
+pub use notification_center::{
+    NotificationCenter,
+    NotificationSubscription,
+};

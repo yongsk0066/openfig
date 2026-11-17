@@ -31,7 +31,7 @@ pub async fn insert_text(
                 acknowledgement = Some(receiver);
                 ShellCommand::ApplyEdit {
                     expires_at: std::time::Instant::now() + std::time::Duration::from_millis(1500),
-                    revision: update.input_revision.unwrap(),
+                    revision: update.input_revision.ok_or("input_revision is required")?,
                     cursor_utf16: update.expected_cursor.ok_or("expected_cursor is required")?,
                     buffer: update.insertion_buffer.ok_or("insertion_buffer is required")?,
                     edit: fig_shell_ipc::hook::wire::Insert {
@@ -66,7 +66,7 @@ pub async fn insert_text(
             proxy.with_edit_buffer_barrier(Box::new(|| {
                 sent = Some(sender.send(command));
             }));
-            sent.expect("barrier executes synchronously")
+            sent.ok_or("edit barrier did not dispatch the shell command")?
                 .map_err(|err| format!("Failed sending command to shell session: {err}"))?;
             if let Some(receiver) = acknowledgement {
                 tokio::time::timeout(std::time::Duration::from_secs(2), receiver)

@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::sync::OnceLock;
 
 use anyhow::{
+    Context,
     Result,
     ensure,
 };
@@ -36,9 +37,7 @@ struct Overrides {
 static OVERRIDES: OnceLock<Overrides> = OnceLock::new();
 
 extern "C" fn should_delay_window_ordering(this: *mut NSView, _cmd: Sel, event: *mut NSEvent) -> Bool {
-    let state = OVERRIDES
-        .get()
-        .expect("overrides initialized before method registration");
+    let Some(state) = OVERRIDES.get() else { return Bool::NO };
     if this as usize == state.autocomplete {
         return Bool::YES;
     }
@@ -48,11 +47,10 @@ extern "C" fn should_delay_window_ordering(this: *mut NSView, _cmd: Sel, event: 
 }
 
 extern "C" fn mouse_down(this: *mut NSView, _cmd: Sel, event: *mut NSEvent) {
-    let state = OVERRIDES
-        .get()
-        .expect("overrides initialized before method registration");
-    if this as usize == state.autocomplete {
-        let mtm = MainThreadMarker::new().expect("AppKit mouseDown must run on the main thread");
+    let Some(state) = OVERRIDES.get() else { return };
+    if this as usize == state.autocomplete
+        && let Some(mtm) = MainThreadMarker::new()
+    {
         NSApplication::sharedApplication(mtm).preventWindowOrdering();
     }
     // SAFETY: the original Wry superclass implements the NSView mouseDown: ABI.
@@ -96,12 +94,12 @@ unsafe fn add_method<F: MethodImplementation>(class: &AnyClass, selector: Sel, i
 }
 
 pub(super) fn install(object: &AnyObject) -> Result<()> {
-    let _mtm = MainThreadMarker::new().expect("WebView setup must run on the main thread");
+    let _mtm = MainThreadMarker::new().context("WebView setup must run on the main thread")?;
     if OVERRIDES.get().is_some() {
         return Ok(());
     }
     let class = object.class();
-    let superclass = class.superclass().expect("Wry inherits WKWebView");
+    let superclass = class.superclass().context("Wry view has no superclass")?;
     let _ = OVERRIDES.set(Overrides {
         superclass,
         autocomplete: object as *const AnyObject as usize,

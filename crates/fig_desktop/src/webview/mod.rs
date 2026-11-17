@@ -95,7 +95,6 @@ pub use crate::webview::window_id::{
 use crate::{
     EventLoop,
     EventLoopProxy,
-    InterceptState,
     file_watcher,
     local_ipc,
     utils,
@@ -141,15 +140,15 @@ pub struct WebviewManager {
     event_loop: EventLoop,
     proxy: EventLoopProxy,
     shell_sessions: Arc<ShellSessions>,
-    platform_state: Arc<PlatformState>,
+    platform_state: PlatformState,
     notifications_state: Arc<WebviewNotificationsState>,
     api_state: Arc<ApplicationServices>,
 }
 
 impl WebviewManager {
-    #[allow(unused_variables)]
-    #[allow(unused_mut)]
-    pub fn new(visible: bool) -> Self {
+    pub fn new(visible: bool) -> anyhow::Result<Self> {
+        let main_thread = objc2::MainThreadMarker::new()
+            .ok_or_else(|| anyhow::anyhow!("WebviewManager must be created on the main thread"))?;
         let mut event_loop = EventLoopBuilder::with_user_event().build();
 
         if !visible {
@@ -158,29 +157,34 @@ impl WebviewManager {
                 EventLoopExtMacOS,
             };
 
-            use crate::platform::ACTIVATION_POLICY;
-
-            *ACTIVATION_POLICY.lock().unwrap() = ActivationPolicy::Accessory;
             event_loop.set_activation_policy(ActivationPolicy::Accessory);
         }
 
         let proxy = EventLoopProxy::new(event_loop.create_proxy());
 
         let shell_sessions = Arc::new(ShellSessions::default());
-        let platform_state = Arc::new(PlatformState::new(proxy.clone()));
+        let platform_state = PlatformState::new(
+            main_thread,
+            if visible {
+                tao::platform::macos::ActivationPolicy::Regular
+            } else {
+                tao::platform::macos::ActivationPolicy::Accessory
+            },
+            proxy.clone(),
+        )?;
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApplicationServices {
             page_epoch: Default::default(),
             processes: Default::default(),
+            native_icons: fig_desktop::native::Icons::new().ok(),
             shell_sessions: shell_sessions.clone(),
-            intercept_state: Arc::new(InterceptState::default()),
             notifications_state: notifications_state.clone(),
             proxy: Box::new(proxy.clone()),
             position_window: Default::default(),
         });
 
-        Self {
+        Ok(Self {
             fig_id_map: Default::default(),
             window_id_map: Default::default(),
             event_loop,
@@ -189,7 +193,7 @@ impl WebviewManager {
             platform_state,
             notifications_state,
             api_state,
-        }
+        })
     }
 
     fn insert_webview(
@@ -200,7 +204,7 @@ impl WebviewManager {
         context: WebContext,
         enabled: bool,
         url: Url,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut window_state = WindowState::new(
             window,
             window_id.clone(),
@@ -209,11 +213,12 @@ impl WebviewManager {
             enabled,
             url,
             self.proxy.clone(),
-        );
+        )?;
         window_state.page_epoch = self.api_state.page_epoch.clone();
         let webview_arc = Rc::new(window_state);
         self.fig_id_map.insert(window_id, webview_arc.clone());
         self.window_id_map.insert(webview_arc.window.id(), webview_arc);
+        Ok(())
     }
 
     pub fn build_webview<T>(
@@ -229,30 +234,26 @@ impl WebviewManager {
             .join(window_id.0.as_ref());
         let mut web_context = WebContext::new(Some(web_context_path));
         let (window, webview) = builder(Arc::clone(&self.api_state), &mut web_context, &self.event_loop, options)?;
-        self.insert_webview(window, window_id, webview, web_context, enabled, url_fn());
+        self.insert_webview(window, window_id, webview, web_context, enabled, url_fn())?;
         Ok(())
     }
 
-    #[allow(unused_mut)]
-    pub async fn run(mut self) -> wry::Result<()> {
-        self.platform_state
-            .handle(
-                PlatformBoundEvent::Initialize,
-                &self.event_loop,
-                &self.fig_id_map,
-                &self.notifications_state,
-            )
-            .expect("Failed to initialize platform state");
+    pub async fn run(self) -> anyhow::Result<()> {
+        self.platform_state.handle(
+            PlatformBoundEvent::Initialize,
+            &self.event_loop,
+            &self.fig_id_map,
+            &self.notifications_state,
+            &self.shell_sessions,
+        )?;
 
         // Start the local ipc task, listens for requests to the desktop socket.
         {
-            let platform_state = self.platform_state.clone();
             let shell_sessions = self.shell_sessions.clone();
             let notifications_state = self.notifications_state.clone();
             let event_loop = self.proxy.clone();
             tokio::spawn(async move {
-                match local_ipc::start_local_ipc(platform_state, shell_sessions, notifications_state, event_loop).await
-                {
+                match local_ipc::start_local_ipc(shell_sessions, notifications_state, event_loop).await {
                     Ok(_) => (),
                     Err(err) => error!("Unable to start local ipc: {:?}", err),
                 }
@@ -289,13 +290,13 @@ impl WebviewManager {
         let tray_visible = !fig_settings::settings::get_bool_or("app.hideMenubarIcon", false);
         let mut tray: Option<TrayIcon> = None;
 
-        let menu_bar = menu_bar();
+        let menu_bar = menu_bar()?;
         menu_bar.init_for_nsapp();
 
         let proxy = self.proxy.clone();
         proxy
             .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::InitializePostRun))
-            .expect("Failed to send post init event");
+            .map_err(|_closed| anyhow::anyhow!("Event loop closed during initialization"))?;
 
         // Push menu clicks instead of polling for them. `MenuEvent::receiver().try_recv()` ran
         // on *every* iteration of the event loop — measured at 25,391 iterations over seven
@@ -420,6 +421,7 @@ impl WebviewManager {
                                         window_target,
                                         &self.fig_id_map,
                                         &self.notifications_state,
+                            &self.shell_sessions,
                                     )
                                 {
                                     debug!(%err, "Failed to handle edit buffer position update");
@@ -466,7 +468,7 @@ impl WebviewManager {
                                 }
                             },
                             None => {
-                                // TODO(grant): figure out how to handle this gracefully
+                                // Late events for a removed window are discarded.
                                 warn!("No window {window_id} available for event");
                                 trace!(?window_event, "Event");
                             },
@@ -516,6 +518,7 @@ impl WebviewManager {
                                 window_target,
                                 &self.fig_id_map,
                                 &self.notifications_state,
+                            &self.shell_sessions,
                             ) {
                                 debug!(%err, "Failed to handle native event");
                             }
@@ -579,11 +582,7 @@ impl WebviewManager {
                         warn!(%err, "Error sending event");
                     }
                 },
-                // Dock icon clicked while the app has no visible window. tao raises this
-                // directly; the app used to try to inject its own
-                // `applicationShouldHandleReopen:hasVisibleWindows:` IMP into
-                // `TaoAppDelegateParent`, which `class_addMethod` refused because tao defines
-                // that selector itself — so it was a no-op with a `trace!` for a signal.
+                // Tao owns the AppKit reopen callback; route it to the dashboard.
                 WryEvent::Reopen { .. } => {
                     proxy.send_event_or_log(Event::WindowEvent {
                         window_id: DASHBOARD_ID,
@@ -729,15 +728,25 @@ pub fn build_autocomplete(
     let window = window_builder.build(event_loop)?;
 
     let runtime_state = state.clone();
+    // Completion keys belong to the terminal, including while the popup is clicked.
+    window.set_focusable(false);
+    let fig_icons = state.clone();
+    let native_icons = state.clone();
     let webview_builder = WebViewBuilder::new_with_web_context(web_context)
         .with_url(self::url::autocomplete().as_str())
         .with_asynchronous_custom_protocol(
             "fig".into(),
-            utils::wrap_custom_protocol("fig", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol("fig", AutocompleteId, move |request, id| {
+                let state = fig_icons.clone();
+                async move { icons::handle(request, id, state.native_icons.as_ref()).await }
+            }),
         )
         .with_asynchronous_custom_protocol(
             "icon".into(),
-            utils::wrap_custom_protocol("icon", AutocompleteId, icons::handle),
+            utils::wrap_custom_protocol("icon", AutocompleteId, move |request, id| {
+                let state = native_icons.clone();
+                async move { icons::handle(request, id, state.native_icons.as_ref()).await }
+            }),
         )
         .with_asynchronous_custom_protocol(
             "spec".into(),
@@ -771,7 +780,6 @@ pub fn build_autocomplete(
 }
 
 async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
-    #[allow(unused_macros)]
     macro_rules! watcher {
         ($type:ident, $name:expr, $on_update:expr) => {{
             let proxy = proxy.clone();
@@ -895,9 +903,7 @@ fn event_stage(event: &WryEvent<'_, Event>) -> &'static str {
 mod tests {
     use super::*;
 
-    /// The autocomplete window used to allow `r"localhost$"` — no start anchor — while the
-    /// dashboard used `r"^localhost$"`. `developer.autocomplete.host` can point the window at an
-    /// arbitrary origin, so an unanchored pattern let `evil-localhost` through.
+    /// Developer hosts must not bypass the exact localhost origin boundary.
     #[test]
     fn only_exactly_localhost_is_allowed() {
         let handler = navigation_handler(AUTOCOMPLETE_ID, &[r"^localhost$"]);

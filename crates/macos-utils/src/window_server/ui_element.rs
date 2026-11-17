@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt;
 
-use accessibility::AXAttribute;
-use accessibility::util::ax_call;
-use accessibility_sys::{
-    _AXUIElementGetWindow,
-    AXError,
+use accessibility::{
+    AXAttribute,
     AXUIElement,
+};
+use accessibility_sys::{
+    AXError,
     AXUIElementCreateSystemWide,
     AXUIElementRef,
     AXUIElementSetAttributeValue,
@@ -59,43 +59,33 @@ use core_graphics::window::{
     kCGWindowNumber,
     kCGWindowOwnerPID,
 };
-use tracing::warn;
 
+/// An owned AX reference confined to the thread that queries it. Worker messages carry
+/// numeric identities instead of sharing native objects.
+///
+/// ```compile_fail,E0277
+/// fn require_send<T: Send>() {}
+/// require_send::<macos_utils::window_server::UIElement>();
+/// ```
+///
+/// ```compile_fail,E0277
+/// fn require_sync<T: Sync>() {}
+/// require_sync::<macos_utils::window_server::UIElement>();
+/// ```
 pub struct UIElement(AXUIElement);
 
 impl Clone for UIElement {
     fn clone(&self) -> Self {
-        // SAFETY: self owns a live AX element for the duration of this retain.
-        unsafe { UIElement::from_borrowed(self.get_ref()) }
+        Self(self.0.clone())
     }
 }
 
 impl fmt::Debug for UIElement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let position = self.frame().map(|CGRect { origin, size }| {
-            format!(
-                "({:.3}, {:.3}) - ({:.3}, {:.3})",
-                origin.x,
-                origin.y,
-                origin.x + size.width,
-                origin.y + size.height
-            )
-        });
-        f.debug_struct("UIElement")
-            .field("role", &self.role())
-            .field("position", &position)
-            .finish()
+        // Formatting must not perform synchronous AX IPC on a logging path.
+        f.debug_struct("UIElement").finish_non_exhaustive()
     }
 }
-
-// SAFETY: Owns a retained AXUIElement; CF retain/release permit ownership transfer.
-// Focus events carry it to the desktop event loop. It owns no observer/run-loop source.
-unsafe impl Send for UIElement {}
-// SAFETY: The current shared PlatformWindow requires Sync, but concurrent AX attribute calls
-// are not established safe merely by CF reference-counting guarantees. This remains an
-// unresolved contract; prefer identity-based messages and worker-owned AX handles. See
-// docs/architecture.md (native thread ownership).
-unsafe impl Sync for UIElement {}
 
 impl From<AXUIElement> for UIElement {
     fn from(ax_ref: AXUIElement) -> Self {
@@ -150,18 +140,8 @@ pub struct CGWindowInfo {
 }
 
 thread_local! {
-    /// The `AXAttribute`s this file asks for, built once per thread.
-    ///
-    /// `get_attr`/`set_attr` used to call `CFString::new(attr)` on every attribute access, which
-    /// allocates a CoreFoundation string and a UTF-16 copy of the name. `caret_position` reads
-    /// three attributes per update, i.e. three allocations per keystroke, and
-    /// `find_window_by_bounds` walks a subtree reading `kAXChildrenAttribute` at every level
-    /// (F-65). The names are `&'static str` constants, so the strings can be built once.
-    ///
-    /// A `thread_local!` rather than a `LazyLock`: `CFString` and `AXAttribute` are `!Sync`
-    /// (core-foundation makes no thread-safety claim for its wrappers, and `AXAttribute` holds a
-    /// `PhantomData<*const T>`), so a `static` would need an `unsafe impl Sync`. Per-thread costs
-    /// one map at most — the AX calls all happen on the window-server thread.
+    /// Cache attribute names per thread: CF wrappers are not Sync. Return owned clones
+    /// before AX IPC, which may reenter a callback on the same run loop.
     static ATTRIBUTES: RefCell<HashMap<&'static str, AXAttribute<CFType>>> =
         RefCell::new(HashMap::new());
 }
@@ -196,48 +176,17 @@ impl UIElement {
     /// The `CGWindowID` of this element, if it is a window.
     ///
     /// # Safety
-    ///
-    /// The caller must ensure that this element's `AXUIElementRef` is still live — that is,
-    /// that the type invariant of `UIElement` (its `AXUIElement` field owns a live reference)
-    /// has not been broken by unsafe code elsewhere. `_AXUIElementGetWindow` is a private
-    /// HIServices SPI with no published contract, so this function additionally rests on the
-    /// TCB premise that it writes a `CGWindowID` through the out-parameter exactly when it
-    /// returns `kAXErrorSuccess`. See docs/architecture.md (native thread ownership).
-    ///
-    /// Given a safe `&self`, no caller can actually violate the first clause, so the `unsafe`
-    /// marker really only fences the SPI premise.
+    /// `_AXUIElementGetWindow` is a private HIServices SPI. The caller relies on its
+    /// declaration matching the OS ABI and accepting this live AX reference. The output
+    /// is initialized, so a success without a write is rejected rather than read as UB.
     pub unsafe fn get_window_id(&self) -> Result<CGWindowID> {
-        // TODO: cache this value on struct?
-        // SAFETY:
-        // Operations: `ax_call::<_, CGWindowID>` (whose tail is
-        // `MaybeUninit::<CGWindowID>::assume_init()`) and the `_AXUIElementGetWindow` FFI call.
-        // Contract of `ax_call`: the closure must initialize `*out` whenever it returns
-        // `kAXErrorSuccess`; `assume_init` is only reached on that path.
-        // Evidence: the SPI premise in the `# Safety` section above. `CGWindowID` is `u32`, so
-        // any bit pattern the SPI writes is a valid value; the only residual risk is reading
-        // uninitialized memory on a success return that did not write, which is precisely what
-        // the TCB premise excludes.
-        ax_call(|window_id: *mut CGWindowID| _AXUIElementGetWindow(self.get_ref(), window_id))
+        // SAFETY: self owns the live reference; the optional SPI boundary validates the result.
+        unsafe { super::window_id::get(self.get_ref()) }
     }
 
-    /// Read an accessibility attribute, delegating to the vendored `AXUIElement::attribute`.
-    ///
-    /// The vendored attribute accessor owns Copy-rule results; keep that ownership rather
-    /// than retaining the same result again. The typed getter below checks the CF type ID.
     fn get_attr_ref(&self, attr: &'static str) -> Result<CFType> {
         let attribute = cached_attribute(attr);
-
-        // SAFETY:
-        // Operation: `accessibility::AXUIElement::wrap_under_get_rule`.
-        // Contract (core-foundation `TCFType`): the reference must be non-null (asserted
-        // inside) and live; the call performs `CFRetain` and the wrapper `CFRelease`s on drop.
-        // Evidence: `self.get_ref()` is the `AXUIElementRef` this `UIElement` owns a reference
-        // on (TYPE FACT), live for the duration of `&self`.
-        // Postcondition: `element` borrows the same element with its own balanced reference;
-        // `self`'s reference count is unchanged once it drops at the end of this function.
-        let element = unsafe { accessibility::AXUIElement::wrap_under_get_rule(self.get_ref()) };
-
-        element.attribute(&attribute).map_err(|err| match err {
+        self.0.attribute(&attribute).map_err(|err| match err {
             accessibility::Error::Ax(code) => code,
             accessibility::Error::NotFound => kAXErrorNoValue,
         })
@@ -303,7 +252,7 @@ impl UIElement {
         self.get_attr::<CFString>(kAXRoleAttribute)
     }
 
-    pub(crate) fn is_fullscreen(&self) -> Result<bool> {
+    pub fn is_fullscreen(&self) -> Result<bool> {
         self.get_attr::<CFBoolean>(kAXFullScreenAttribute).map(|res| res.into())
     }
 
@@ -314,6 +263,21 @@ impl UIElement {
     pub fn focused_window(&self) -> Result<Self> {
         let window = self.get_attr::<AXUIElement>(kAXFocusedWindowAttribute)?;
         Ok(window.into())
+    }
+
+    /// Validate an IMK session's input target once on focus changes, not on each keystroke.
+    /// A search field in a terminal app must not receive shell completions.
+    pub fn focused_text_area_window_id(&self, budget: &mut crate::query_budget::QueryBudget) -> Option<u32> {
+        let focused: AXUIElement = self.query(budget, || self.0.attribute(&AXAttribute::focused_ui()).ok())?;
+        let focused = Self(focused);
+        if focused.query(budget, || focused.role().ok())? != accessibility_sys::kAXTextAreaRole {
+            return None;
+        }
+        let window = self.query(budget, || self.focused_window().ok())?;
+        // SAFETY: the window owns a live AX reference; inherit the optional window-ID SPI contract.
+        let id = window.query(budget, || unsafe { window.get_window_id().ok() })?;
+        let current: AXUIElement = self.query(budget, || self.0.attribute(&AXAttribute::focused_ui()).ok())?;
+        (focused.0 == current).then_some(id)
     }
 
     fn dom_class_list(&self) -> Result<Vec<String>> {
@@ -336,64 +300,78 @@ impl UIElement {
     }
 
     fn children(&self) -> Result<Vec<UIElement>> {
-        let children: Vec<_> = self
-            .get_attr::<CFArray<*const c_void>>(kAXChildrenAttribute)?
+        let children = self.get_attr::<CFArray<*const c_void>>(kAXChildrenAttribute)?;
+        children
             .iter()
+            // The search starts at the last sibling. Bound local conversion/allocation too,
+            // not only AX IPC; pathological remote arrays must not monopolize the worker.
+            .skip((children.len() as usize).saturating_sub(512))
             .map(|child| {
-                // SAFETY:
-                // Operations: `AXUIElementRef::from_void_ptr(*child)` (core-foundation 0.10
-                // `TCFTypeRef::from_void_ptr`, an unsafe pointer reinterpretation) and
-                // `UIElement::from_borrowed`.
-                // Contract of `from_void_ptr`: the pointer must be a valid reference of the
-                // target CF type. Contract of `UIElement::from_borrowed`: live, non-null element.
-                // Evidence: `kAXChildrenAttribute` is documented by HIServices to be a
-                // `CFArray` of `AXUIElementRef`, and the `CFArray<*const c_void>` returned by
-                // `get_attr` is alive for the whole `map`, so each element pointer is live at
-                // the moment `UIElement::from_borrowed` retains it (Get rule) — which is what keeps
-                // the child alive after the array is dropped.
-                // FFI contract: the element type is an Apple documentation lemma, not a
-                // checked fact; a non-`AXUIElement` entry would be retained as one and later
-                // passed to AX functions. `CFArray::iter` yields raw `*const c_void` here
-                // precisely because the element type is erased.
-                unsafe { UIElement::from_borrowed(AXUIElementRef::from_void_ptr(*child)) }
+                if child.is_null() {
+                    return Err(kAXErrorNoValue);
+                }
+                // SAFETY: the AX CFArray owns live CF objects during iteration. Retain
+                // generically, then check the concrete type before calling any AX API.
+                let value = unsafe { CFType::wrap_under_get_rule(*child) };
+                value
+                    .downcast_into::<AXUIElement>()
+                    .map(UIElement::from)
+                    .ok_or(kAXErrorNoValue)
             })
-            .collect();
-
-        Ok(children)
+            .collect()
     }
 
-    pub fn find_x_term_caret_tree(&self) -> Result<Vec<UIElement>> {
-        if self.role().is_ok_and(|role| role == kAXTextFieldRole)
-            && self.is_focused().unwrap_or(false)
-            && let Ok(classes) = self.dom_class_list()
-            && classes.iter().any(|cls| cls == "xterm-helper-textarea")
+    pub fn query<T>(
+        &self,
+        budget: &mut crate::query_budget::QueryBudget,
+        operation: impl FnOnce() -> Option<T>,
+    ) -> Option<T> {
+        budget.run(&self.0, operation)
+    }
+
+    pub fn find_x_term_caret_tree(&self, budget: &mut crate::query_budget::QueryBudget) -> Option<Vec<UIElement>> {
+        self.find_x_term_caret_tree_at(budget, 0)
+    }
+
+    fn find_x_term_caret_tree_at(
+        &self,
+        budget: &mut crate::query_budget::QueryBudget,
+        depth: usize,
+    ) -> Option<Vec<UIElement>> {
+        // Bound native work and Rust stack use even for a cyclic or unusually deep AX tree.
+        if depth >= 64 || budget.exhausted() {
+            return None;
+        }
+        let role = self.query(budget, || self.role().ok())?;
+        if role == kAXTextFieldRole
+            && self.query(budget, || self.is_focused().ok()) == Some(true)
+            && self
+                .query(budget, || self.dom_class_list().ok())
+                .is_some_and(|classes| classes.iter().any(|class| class == "xterm-helper-textarea"))
         {
-            // self.print_all_attribute_values();
-            return Ok(vec![self.clone()]);
+            return Some(vec![self.clone()]);
         }
-
-        let mut children_with_cursor: Vec<_> = self
-            .children()?
-            .into_iter()
-            .filter_map(|elem| {
-                elem.role().ok().and_then(|role| {
-                    let role: std::borrow::Cow<'_, str> = (&role).into();
-                    if XTERM_ROLES.contains(&role.as_ref()) {
-                        elem.find_x_term_caret_tree().ok()
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect();
-
-        if children_with_cursor.len() > 1 {
-            warn!("Found multiple candidate cursors");
+        let children = self.query(budget, || self.children().ok())?;
+        // Preserve the former last-match choice without scanning other matching subtrees.
+        for child in children.into_iter().rev() {
+            if budget.exhausted() {
+                break;
+            }
+            let Some(role) = child.query(budget, || child.role().ok()) else {
+                continue;
+            };
+            let role: std::borrow::Cow<'_, str> = (&role).into();
+            if XTERM_ROLES.contains(&role.as_ref())
+                && let Some(mut path) = child.find_x_term_caret_tree_at(budget, depth + 1)
+            {
+                path.push(self.clone());
+                return Some(path);
+            }
+            if budget.exhausted() {
+                break;
+            }
         }
-
-        let mut tree = children_with_cursor.pop().ok_or(-1)?;
-        tree.push(self.clone());
-        Ok(tree)
+        None
     }
 
     /// Query the known window directly; never enumerate all windows or make an AX round trip.

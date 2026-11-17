@@ -35,3 +35,5 @@ Read [architecture](docs/architecture.md), [development](docs/development.md), [
 ## License
 
 Project code is available under [MIT](LICENSE.MIT) or [Apache-2.0](LICENSE.APACHE). Original upstream notices and vendored component licenses are retained; see [NOTICE](NOTICE). This is an independent fork, not an Amazon or Fig supported product.
+
+This is a personal project without a support or release schedule. See [source publication](docs/publication.md) for component licenses, asset provenance and distribution checks.

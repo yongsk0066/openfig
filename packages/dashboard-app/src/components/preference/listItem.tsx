@@ -91,8 +91,13 @@ export function Setting({ data, disabled }: { data: Pref; disabled?: boolean }) 
                 </SelectTrigger>
                 <SelectContent className="max-h-64 overflow-auto">
                   <SelectGroup>
+                    {data.id === "autocomplete.theme" &&
+                      typeof localValue === "string" &&
+                      localValue &&
+                      !data.options?.includes(localValue) && (
+                        <SelectItem value={localValue}>{localValue}</SelectItem>
+                      )}
                     {data.options?.map((o, i) => {
-                      // console.log({ pref: data.id, localValue, inputValue: o, equal: localValue === o })
                       return (
                         <SelectItem value={o} key={i}>
                           {o}

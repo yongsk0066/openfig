@@ -71,7 +71,7 @@ info['CFBundleExecutable'] = 'fig_input_method_test'
 info['ComponentInvisibleInSystemUI'] = False
 (HELPER / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
 (CLIENT / 'Contents/Info.plist').write_bytes(plistlib.dumps({
-    'CFBundleIdentifier': 'local.openfig.imefixture', 'CFBundleName': 'OpenFig IMK Fixture',
+    'CFBundleIdentifier': 'local.openfig.fig.imefixture', 'CFBundleName': 'OpenFig IMK Fixture',
     'CFBundleExecutable': 'fig_ime_fixture', 'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}))
 identities = run('security', 'find-identity', '-v', '-p', 'codesigning')
 import re
@@ -123,7 +123,7 @@ try:
         # Session activation is asynchronous. Null during startup is not a successful coordinate.
         for attempt in range(20):
             identifier = str(uuid.uuid4())
-            query = {'v': 1, 'type': 'query', 'id': identifier, 'pid': state['pid'], 'window': state['window'], 'bundle': 'local.openfig.imefixture'}
+            query = {'v': 1, 'type': 'query', 'id': identifier, 'pid': state['pid'], 'window': state['window'], 'bundle': 'local.openfig.fig.imefixture'}
             connection.sendall((json.dumps(query) + '\n').encode())
             while True:
                 message = json.loads(reader.readline())

@@ -8,17 +8,17 @@
 
 #ifdef FIG_IME_FIXTURE
 #ifndef FIG_IME_TEST_BUNDLE_ID
-#define FIG_IME_TEST_BUNDLE_ID @"local.openfig.inputmethod.test"
+#define FIG_IME_TEST_BUNDLE_ID @"local.openfig.fig.inputmethod.test"
 #endif
 static NSString *const BundleID = FIG_IME_TEST_BUNDLE_ID;
 #ifndef FIG_IME_TEST_CONNECTION_NAME
-#define FIG_IME_TEST_CONNECTION_NAME @"local.openfig.inputmethod.test.connection"
+#define FIG_IME_TEST_CONNECTION_NAME @"local.openfig.fig.inputmethod.test.connection"
 #endif
 static NSString *const ConnectionName = FIG_IME_TEST_CONNECTION_NAME;
 static NSString *const SocketName = @"figrun/ime-test.sock";
 #else
-static NSString *const BundleID = @"local.openfig.inputmethod";
-static NSString *const ConnectionName = @"local.openfig.inputmethod.connection";
+static NSString *BundleID;
+static NSString *ConnectionName;
 static NSString *const SocketName = @"figrun/ime.sock";
 #endif
 static atomic_uint_fast64_t ProbeStarted;
@@ -92,7 +92,7 @@ static Transport *Bridge;
 
 static BOOL IsSupportedTarget(NSString *bundle) {
 #ifdef FIG_IME_FIXTURE
-    return [bundle isEqual:@"local.openfig.imefixture"];
+    return [bundle isEqual:@"local.openfig.fig.imefixture"];
 #else
     return [bundle isEqual:@"com.mitchellh.ghostty"] || [bundle isEqual:@"com.mitchellh.ghostty.debug"];
 #endif
@@ -200,7 +200,7 @@ static void Query(NSDictionary *request, uint64_t generation) {
 - (instancetype)init {
     if ((self = [super init])) {
         _lock = [NSLock new]; _fd = -1;
-        _writer = dispatch_queue_create("local.openfig.inputmethod.writer", DISPATCH_QUEUE_SERIAL);
+        _writer = dispatch_queue_create("local.openfig.fig.inputmethod.writer", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
@@ -291,6 +291,13 @@ static BOOL Property(TISInputSourceRef source, CFStringRef key) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
+#ifndef FIG_IME_FIXTURE
+        BundleID = NSBundle.mainBundle.bundleIdentifier;
+        ConnectionName = [NSBundle.mainBundle objectForInfoDictionaryKey:@"InputMethodConnectionName"];
+        if (!BundleID.length || !ConnectionName.length) {
+            fprintf(stderr, "Input method requires its configured app bundle\n"); return 2;
+        }
+#endif
         if (argc == 2 && strcmp(argv[1], "--stop-running") == 0) {
             NSArray<NSRunningApplication *> *running = [NSRunningApplication runningApplicationsWithBundleIdentifier:BundleID];
             for (NSRunningApplication *app in running) {

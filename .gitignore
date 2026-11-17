@@ -53,3 +53,10 @@ run-build.sh
 
 # Local Claude Code scratch (skills, session settings) - never part of the build
 .claude/
+
+# Private installation identity and user-supplied themes
+/bundle-id.local
+/themes.local/
+.codex/
+.codex-attachments/
+*.bundle

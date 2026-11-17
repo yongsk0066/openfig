@@ -11,7 +11,7 @@ target     := "aarch64-apple-darwin"
 tdir       := "target" / target / "release"
 build      := justfile_directory() / "build"
 app        := build / env("APP_NAME") + ".app"
-themes_src := env("FIG_THEMES_SRC", home_directory() / "oss/fig/themes")
+export BUNDLE_ID := if path_exists("bundle-id.local") == "true" { trim(read("bundle-id.local")) } else { env("BUNDLE_ID") }
 version    := `cargo metadata --format-version 1 --no-deps --offline | jq -r '.packages[] | select(.name=="fig_desktop") | .version'`
 min_macos  := `rustc --print deployment-target --target aarch64-apple-darwin | sed 's/^.*=//'`
 
@@ -49,6 +49,7 @@ specs:
 web:
     pnpm install --frozen-lockfile --ignore-scripts
     rm -rf packages/autocomplete-app/dist packages/dashboard-app/dist
+    python3 scripts/license-notices.py --check
     pnpm exec turbo build --force --filter=./packages/autocomplete-app --filter=./packages/dashboard-app
     test -f packages/autocomplete-app/dist/index.html
     test -f packages/dashboard-app/dist/index.html
@@ -72,7 +73,10 @@ bundle:
     cp bundle/macos/AppIcon.icns "{{app}}/Contents/Resources/AppIcon.icns"
     cp -R packages/autocomplete-app/dist/ "{{app}}/Contents/Resources/autocomplete/"
     cp -R packages/dashboard-app/dist/    "{{app}}/Contents/Resources/dashboard/"
-    cp -R resources/themes/               "{{app}}/Contents/Resources/themes/"
+    mkdir -p "{{app}}/Contents/Resources/themes"
+    for theme in resources/themes/*.json themes.local/*.json; do [ ! -f "$theme" ] || cp "$theme" "{{app}}/Contents/Resources/themes/"; done
+    mkdir -p "{{app}}/Contents/Resources/licenses"
+    cp LICENSE.MIT LICENSE.APACHE NOTICE "{{app}}/Contents/Resources/licenses/"
     cp -R specs/dist/                     "{{app}}/Contents/Resources/specs/"
     bash scripts/build-input-method.sh "{{app}}/Contents/Helpers/FigInputMethod.app"
 
@@ -87,7 +91,7 @@ sign:
         | awk -F'"' '/Developer ID Application|Apple Development|Mac Developer/ {print $2; exit}')}"; \
     identity="${identity:--}"; \
     echo "codesign identity: $identity"; \
-    codesign --force --sign "$identity" --identifier "local.openfig.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.nativeworker" "{{app}}/Contents/MacOS/fig_native_worker"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
@@ -182,12 +186,6 @@ golden-record cases="":
 # Correlate opt-in latency samples by session and input revision (docs/latency.md).
 latency-report log output:
     python3 scripts/latency-report.py "{{log}}" --output "{{output}}"
-
-# Run only to refresh them.
-# ~/oss/fig/themes -> resources/themes (committed)
-vendor-themes:
-    mkdir -p resources/themes
-    rsync -a --delete --include='*.json' --exclude='*' "{{themes_src}}/themes/" resources/themes/
 
 clean:
     cargo clean

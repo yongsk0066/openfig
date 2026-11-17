@@ -1,0 +1,1 @@
+Custom theme JSON files are optional. The application includes dark, light and system themes in its source. User-supplied themes may be placed in the ignored `themes.local/` directory for a private build; verify their licenses before distributing that build.

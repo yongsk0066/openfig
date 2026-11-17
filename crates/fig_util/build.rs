@@ -9,7 +9,7 @@ const BRANDING_ENV: &str = "../../branding.env";
 /// parser has to agree with just's dotenv parser on every shape it accepts.
 /// Where the two disagree the bundle directory name and `APP_BUNDLE_NAME` drift
 /// apart, the app silently falls back to `/Applications/<other name>.app` and
-/// every resource 404s with no log line (`06-branding.md` §2.8). Anything this
+/// every resource 404s with no log line. Anything this
 /// parser cannot read exactly the way just does is therefore a hard error, not
 /// a guess.
 ///
@@ -33,8 +33,27 @@ fn main() {
     let contents =
         std::fs::read_to_string(path).unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
+    let local_id = Path::new("../../bundle-id.local");
+    println!("cargo:rerun-if-changed={}", local_id.display());
+    let local_id = match std::fs::read_to_string(local_id) {
+        Ok(value) => Some(value.trim().to_owned()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => panic!("failed to read local bundle identity: {err}"),
+    };
+    if let Some(id) = &local_id {
+        assert!(
+            !id.is_empty() && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-'),
+            "invalid local bundle identity"
+        );
+    }
+
     for line in contents.lines() {
         if let Some((key, value)) = parse_line(line) {
+            let value = if key == "BUNDLE_ID" {
+                local_id.as_deref().unwrap_or(value)
+            } else {
+                value
+            };
             println!("cargo:rustc-env=FIG_BRAND_{key}={value}");
         }
     }

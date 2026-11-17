@@ -19,7 +19,6 @@ use serde::{
 };
 use serde_json::json;
 
-// var BuiltinThemes []string = []string{"dark", "light", "system"}
 const BUILT_IN_THEMES: [&str; 3] = ["dark", "light", "system"];
 const DEFAULT_THEME: &str = "dark";
 
@@ -56,12 +55,20 @@ impl ThemeArgs {
         }
 
         if self.list {
-            for theme_entry in std::fs::read_dir(&theme_dir)? {
-                if let Ok(theme_file_name) = theme_entry.map(|s| s.file_name())
-                    && let Some(theme) = theme_file_name.to_str()
-                {
-                    println!("{}", theme.trim_end_matches(".json"));
+            let mut names = std::collections::BTreeSet::from(BUILT_IN_THEMES.map(String::from));
+            if theme_dir.exists() {
+                for entry in fs::read_dir(&theme_dir)? {
+                    let path = entry?.path();
+                    if path.is_file()
+                        && path.extension().is_some_and(|extension| extension == "json")
+                        && let Some(name) = path.file_stem().and_then(|name| name.to_str())
+                    {
+                        names.insert(name.to_owned());
+                    }
                 }
+            }
+            for name in names {
+                println!("{name}");
             }
             return Ok(ExitCode::SUCCESS);
         }

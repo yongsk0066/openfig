@@ -74,6 +74,9 @@ step "oxfmt --check" pnpm exec oxfmt --check
 step "oxlint --type-aware (zero warnings)" pnpm exec oxlint --type-aware --max-warnings 0
 step "core architecture boundaries" node scripts/check-architecture.mjs
 step "documentation links" node scripts/check-docs.mjs
+step "third-party notices" python3 scripts/license-notices.py --check
+step "publication hygiene" python3 scripts/check-publication.py
+step "public/private bundle identity" python3 scripts/test-branding.py
 step "turbo boundaries" pnpm exec turbo boundaries
 step "turbo codegen zero-diff" codegen_zero_diff
 step "clippy --all-targets -D warnings" cargo clippy --locked --workspace --all-targets -- -D warnings

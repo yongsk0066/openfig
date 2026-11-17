@@ -1,3 +1,4 @@
+import type { Timing } from "@fig/shared/timing";
 import { LruCache } from "@fig/shared/lru";
 import { createPrefixIndex } from "./prefix-index";
 import type { Internal } from "@fig/spec-helpers";
@@ -26,7 +27,34 @@ import {
   walkSubcommand,
   type HistoryContext,
 } from "./helpers";
-import { MissingSpecError } from "./errors";
+// Keep a transition token in its parent segment before starting the replacement segment.
+// This preserves command/option argument history without shifting parser token indices.
+function historySegments(annotations: BasicAnnotation[]) {
+  const segments: {
+    spec: Extract<BasicAnnotation, { spec: unknown }>["spec"];
+    key: string;
+    annotations: BasicAnnotation[];
+  }[] = [];
+  for (const annotation of annotations) {
+    if ("spec" in annotation) {
+      segments.push({
+        spec: annotation.spec,
+        key: serializeSpecLocation(annotation.specLocation),
+        annotations: [],
+      });
+    } else {
+      segments.at(-1)?.annotations.push(annotation);
+    }
+    if (annotation.loadedSpec) {
+      segments.push({
+        spec: annotation.loadedSpec.spec,
+        key: annotation.loadedSpec.historyKey,
+        annotations: [],
+      });
+    }
+  }
+  return segments;
+}
 const awaitBatched = async <T>(
   batchSize: number,
   getPromiseArray: Array<() => Promise<T>>,
@@ -52,33 +80,11 @@ const indexArgumentValues = (
     if (parserResult) {
       const annotations = flattenAnnotations(parserResult.annotations);
 
-      // Split up annotations into separate loadSpec components.
-      // Each list of annotations in perSpecAnnotations starts with a { spec, specLocation };
-      const perSpecAnnotations = annotations.reduce((acc, annotation) => {
-        if ("spec" in annotation) {
-          acc.push([annotation]);
-        } else {
-          acc[acc.length - 1]?.push(annotation);
-        }
-        return acc;
-      }, [] as BasicAnnotation[][]);
-
-      // For each string of annotations, we
-      // 1. load/create the mirrored subcommand in the historyValueIndex.
-      // 2. Walk down the mirrored subcommand and add arg values from each annotation.
-      for (let i = 0; i < perSpecAnnotations.length; i += 1) {
-        const [root, ...other] = perSpecAnnotations[i];
-        if (!("spec" in root)) {
-          throw new MissingSpecError("Undefined spec or specLocation");
-        }
-
-        const { spec, specLocation } = root;
-        const specKey = serializeSpecLocation(specLocation);
-
+      for (const { spec, key: specKey, annotations: other } of historySegments(annotations)) {
         if (!historyValueIndex[specKey]) {
           historyValueIndex[specKey] = mirrorSubcommand(
             spec,
-            () => ({ values: [] }) as HistoryArgValues,
+            (arg) => ({ values: [], isVariadic: arg.isVariadic }) as HistoryArgValues,
             () => ({}),
             () => ({}),
           );
@@ -105,6 +111,7 @@ const historyLogger = getLogger("history");
 historyLogger.setDefaultLevel("warn");
 
 type HistoryArgValues = {
+  isVariadic?: boolean;
   values: { historyEntryIndex: number; value: string }[];
 };
 
@@ -123,16 +130,6 @@ const historyPrefix = createPrefixIndex<HistoryEntry>();
 
 const getFirstWord = (text: string) => text.split(" ", 1)[0] || "";
 
-export function findLastIndex<T>(
-  array: Array<T>,
-  predicate: (value: T, index: number) => boolean,
-): number {
-  for (let l = array.length - 1; l >= 0; l -= 1) {
-    if (predicate(array[l], l)) return l;
-  }
-  return -1;
-}
-
 export const getHistoryArgSuggestions = (
   annotations: Annotation[],
   currentProcess: string,
@@ -141,16 +138,9 @@ export const getHistoryArgSuggestions = (
 ): Fig.TemplateSuggestion[] => {
   const shell = currentProcess.slice(currentProcess.lastIndexOf("/") + 1);
   const basicAnnotations = flattenAnnotations(annotations);
-  const index = findLastIndex(basicAnnotations, (annotation) => "spec" in annotation);
-
-  const root = basicAnnotations[index];
-  const specAnnotations = basicAnnotations.slice(index + 1);
-
-  if (!root || !("spec" in root) || specAnnotations.length === 0) {
-    return [];
-  }
-
-  const specKey = serializeSpecLocation(root.specLocation);
+  const segment = historySegments(basicAnnotations).at(-1);
+  if (!segment || segment.annotations.length === 0) return [];
+  const { key: specKey, annotations: specAnnotations } = segment;
 
   const getValuesFromSource = (source: HistorySource) => {
     const subcommand = source.historyValueIndex?.[specKey];
@@ -187,6 +177,9 @@ export const getHistoryArgSuggestions = (
       return [];
     };
 
+    const type = specAnnotations.at(-1)?.type;
+    if (type === TokenType.SubcommandArg || type === TokenType.OptionArg)
+      return getValuesForArgType(type);
     return [
       ...getValuesForArgType(TokenType.SubcommandArg),
       ...getValuesForArgType(TokenType.OptionArg),
@@ -275,6 +268,7 @@ export const getFullHistorySuggestions = (
 };
 
 export type HistoryPorts = {
+  timing: Pick<Timing, "now" | "delay">;
   parseArguments: ReturnType<typeof createParser>["parseArguments"];
   getSpecPath: ReturnType<typeof createSpecRepository>["getSpecPath"];
   loadSubcommandCached: ReturnType<typeof createSpecRepository>["loadSubcommandCached"];
@@ -490,7 +484,7 @@ export function createHistoryRepository(
       signal?.throwIfAborted();
       const high = Number(watermark.id);
       let before = high + 1;
-      let lastYield = performance.now();
+      let lastYield = ports.timing.now();
       let entries: HistoryEntry[] = [];
       while (before > 1) {
         signal?.throwIfAborted();
@@ -507,9 +501,9 @@ export function createHistoryRepository(
         before = Number(rows[rows.length - 1].id);
         if (rows.length < 500) break;
         // IPC normally yields already; bound CPU slices without a timer for every small batch.
-        if (performance.now() - lastYield >= 8) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
-          lastYield = performance.now();
+        if (ports.timing.now() - lastYield >= 8) {
+          await ports.timing.delay(0, signal);
+          lastYield = ports.timing.now();
         }
       }
       signal?.throwIfAborted();
@@ -532,8 +526,8 @@ export function createHistoryRepository(
     getHistorySources,
     loadHistorySource,
     loadHistory,
-    getHistoryArgSuggestions: (annotations: Annotation[], process: string) =>
-      getHistoryArgSuggestions(annotations, process, historySources, {
+    getHistoryArgSuggestions: (annotations: Annotation[], currentProcess: string) =>
+      getHistoryArgSuggestions(annotations, currentProcess, historySources, {
         [SETTINGS.HISTORY_COMMAND]: getSetting(SETTINGS.HISTORY_COMMAND),
         [SETTINGS.HISTORY_MERGE_SHELLS]: getSetting(SETTINGS.HISTORY_MERGE_SHELLS),
       }),

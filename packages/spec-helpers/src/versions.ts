@@ -161,7 +161,7 @@ const makeNamedProcessor = <TDiff extends NamedObject, T extends TDiff>(
     }
     // eslint-disable-next-line guard-for-in
     for (const mapKey in propertyMapping) {
-      // TODO: For some reason typescript can't infer the type well here...
+      // for-in widens keys to string; this loop only visits keys from this mapping.
       const key = mapKey as keyof typeof propertyMapping;
       const propDiff =
         previous[key] && updated[key]
@@ -180,7 +180,7 @@ const makeNamedProcessor = <TDiff extends NamedObject, T extends TDiff>(
     const merged = { ...current, ...diff };
     // eslint-disable-next-line guard-for-in
     for (const mapKey in propertyMapping) {
-      // TODO: For some reason typescript can't infer the type well here...
+      // for-in widens keys to string; this loop only visits keys from this mapping.
       const key = mapKey as keyof typeof propertyMapping;
       const property = propertyMapping[key];
       if (diff[key] && property !== undefined) {

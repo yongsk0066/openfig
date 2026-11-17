@@ -56,8 +56,7 @@ const getEnvVarsMemoized = memoizeOne(
     a.every((elem, index) => elem.key === b[index].key && elem.value === b[index].value),
 );
 
-// `alias` output is `name=value` in zsh, the only shell the integration installs into. The separator used to be chosen per shell because fish prints `name value`; the
-// `shellPath` argument existed only for that test and went with the fish integration.
+// The installed zsh integration emits aliases as `name=value`.
 const getAliasMemoized = memoizeOne(
   (alias: string) =>
     alias

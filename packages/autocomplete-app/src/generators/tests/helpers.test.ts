@@ -1,5 +1,5 @@
 import { readSettings } from "@fig/shared/settings";
-import { sleep } from "@fig/shared/utils";
+import { sleep } from "@fig/shared/runtime-timing";
 import type { Annotation } from "@fig/autocomplete-parser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGeneratorCache, haveContextForGenerator, type GeneratorContext } from "../helpers";
@@ -351,5 +351,5 @@ it("isolates cached generators and terminal sessions even with identical tokens"
   expect(first).toHaveBeenCalledOnce();
 });
 
-const generatorCache = createGeneratorCache(readSettings({}));
+const generatorCache = createGeneratorCache(readSettings({}), () => Date.now());
 const { runCachedGenerator } = generatorCache;

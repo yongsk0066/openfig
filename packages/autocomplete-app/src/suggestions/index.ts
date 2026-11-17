@@ -260,8 +260,17 @@ export const getAllSuggestions = (
   return suggestions;
 };
 
-export const isTemplateSuggestion = (suggestion: unknown): suggestion is Fig.TemplateSuggestion =>
-  Object.prototype.hasOwnProperty.call(suggestion, "context");
+export const isTemplateSuggestion = (suggestion: unknown): suggestion is Fig.TemplateSuggestion => {
+  if (typeof suggestion !== "object" || suggestion === null || !("context" in suggestion))
+    return false;
+  const context = suggestion.context;
+  return (
+    typeof context === "object" &&
+    context !== null &&
+    "templateType" in context &&
+    ["filepaths", "folders", "history", "help"].includes(String(context.templateType))
+  );
+};
 
 const addAutoExecuteSuggestion = (
   suggestions: Suggestion[],
@@ -272,11 +281,7 @@ const addAutoExecuteSuggestion = (
   if (
     searchTerm === "." ||
     (searchTerm.endsWith("/") &&
-      suggestions.find(
-        (x) =>
-          // TODO: use a better way to determine if x.generators. is a folders generator
-          isTemplateSuggestion(x) && x.context.templateType === "folders",
-      ))
+      suggestions.find((x) => isTemplateSuggestion(x) && x.context.templateType === "folders"))
   ) {
     return [
       autoExecuteSuggestion(

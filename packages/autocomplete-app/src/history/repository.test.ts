@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { expect, it, vi } from "vitest";
 import { initialParserState } from "@fig/autocomplete-parser/core";
 import { readSettings } from "@fig/shared/settings";
@@ -12,6 +13,7 @@ const row = (id: number) => ({
 function fixture(count = 0) {
   const rows = Array.from({ length: count }, (_, i) => row(i + 1));
   const ports: HistoryPorts = {
+    timing: runtimeTiming,
     getSetting: readSettings({}),
     query: vi.fn(async (sql, params) => {
       if (sql.includes("MAX(id)")) return [{ id: rows.at(-1)?.id ?? 0 }];
@@ -100,4 +102,80 @@ it("does not reuse annotations across working directories", async () => {
   expect(
     vi.mocked(ports.parseArguments).mock.calls.map((call) => call[1].currentWorkingDirectory),
   ).toEqual(["/one", "/two"]);
+});
+
+it("tracks inline loadSpec boundaries through real parsing, history indexing and lookup", async () => {
+  const { createParser } = await import("@fig/autocomplete-parser/core");
+  const { convertSubcommand, initializeDefault } = await import("@fig/spec-helpers");
+  const { getCommand } = await import("@fig/shell-parser");
+  const { getHistoryArgSuggestions } = await import("./repository");
+  const { ports } = fixture();
+  const spec = convertSubcommand(
+    {
+      name: "tool",
+      args: {
+        name: "mode",
+        loadSpec: async (mode) => ({
+          name: mode,
+          args: { name: `${mode}-value`, template: "history", isVariadic: true },
+          options: [{ name: "--tag", args: { name: "tag", template: "history" } }],
+          subcommands: [
+            { name: "nested", loadSpec: { name: "inner", args: { name: "inner-value" } } },
+          ],
+        }),
+      },
+    },
+    initializeDefault,
+  );
+  ports.loadSubcommandCached = async () => spec;
+  const parser = createParser({
+    withTimeout: runtimeTiming.timeout,
+    specs: ports,
+    executeCommand: ports.executeCommand,
+    executeLoginShell: ports.executeLoginShell,
+    getSetting: ports.getSetting,
+    isInDevMode: () => false,
+  });
+  ports.parseArguments = parser.parseArguments;
+  const repository = createHistoryRepository(ports);
+  const source = await repository.loadHistorySource(
+    [
+      { text: "tool alpha first", context: { cwd: "/repo" }, commands: [] },
+      { text: "tool alpha one two three", context: { cwd: "/repo" }, commands: [] },
+      { text: "tool beta second", context: { cwd: "/repo" }, commands: [] },
+      { text: "tool alpha --tag tagged first", context: { cwd: "/repo" }, commands: [] },
+      { text: "tool alpha nested deep", context: { cwd: "/repo" }, commands: [] },
+      { text: "tool alpha elsewhere", context: { cwd: "/elsewhere" }, commands: [] },
+    ],
+    {},
+  );
+  const lookup = async (text: string) => {
+    const result = await parser.parseArguments(getCommand(text, {}), {
+      currentWorkingDirectory: "/repo",
+      currentProcess: "zsh",
+      sshPrefix: "",
+      environmentVariables: {},
+    });
+    return getHistoryArgSuggestions(result.annotations, "zsh", { fig: source }, {}).map(
+      (item) => item.name,
+    );
+  };
+  const context = {
+    currentWorkingDirectory: "/repo",
+    currentProcess: "zsh",
+    sshPrefix: "",
+    environmentVariables: {},
+  };
+  const quoted = await parser.parseArguments(getCommand("tool 'alpha beta' v", {}), context);
+  const split = await parser.parseArguments(getCommand("tool alpha beta v", {}), context);
+  expect(quoted.completionObj.name).toEqual(["alpha beta"]);
+  expect(split.completionObj.name).toEqual(["alpha"]);
+  expect(await lookup("tool alpha ")).toContain("first");
+  expect(await lookup("tool alpha ")).not.toContain("second");
+  expect(await lookup("tool alpha ")).not.toContain("elsewhere");
+  expect(await lookup("tool beta ")).toEqual(["second"]);
+  expect(await lookup("tool alpha one ")).toEqual(expect.arrayContaining(["one", "two", "three"]));
+  expect(await lookup("tool alpha --tag ")).toEqual(["tagged"]);
+  expect(await lookup("tool alpha nested ")).toEqual(["deep"]);
+  expect(await lookup("tool ")).toEqual(expect.arrayContaining(["alpha", "beta"]));
 });

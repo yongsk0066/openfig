@@ -2,7 +2,7 @@ import { ensureTrailingSlash, shellExpand } from "./resolve";
 
 export interface FilepathsOptions {
   /**
-   * Show suggestions with any of these extensions. Do not include the leading dot.
+   * Show suggestions with any of these extensions. A leading dot is optional.
    */
   extensions?: string[];
   /**
@@ -96,13 +96,12 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
     rootDirectory,
     showFolders = "always",
   } = options;
-  // TODO: automatically remove eventual leading dots
-  const extensionsSet = new Set(extensions);
-  const equalsSet = new Set(equals);
+  const extensionsSet = new Set(
+    extensions.map((extension) => extension.replace(/^\.+/u, "")).filter(Boolean),
+  );
+  const equalsSet = new Set(typeof equals === "string" ? [equals] : equals);
 
-  // NOTE: If no filter is provided we should not run the filterSuggestions fn.
-  // !! When new filtering parameters are added we should increase this function
-  const shouldFilterSuggestions = () => extensions.length > 0 || equals.length > 0 || matches;
+  const shouldFilterSuggestions = () => extensionsSet.size > 0 || equalsSet.size > 0 || matches;
 
   const filterSuggestions = (
     suggestions: Fig.TemplateSuggestion[] = [],
@@ -114,20 +113,9 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
 
       if (equalsSet.has(name)) return true;
       if (matches && !!name.match(matches)) return true;
-      // handle extensions
-      const [, ...suggestionExtensions] = name.split(".");
-      if (suggestionExtensions.length >= 1) {
-        let i = suggestionExtensions.length - 1;
-        let stackedExtensions = suggestionExtensions[i];
-        do {
-          if (extensionsSet.has(stackedExtensions)) {
-            return true;
-          }
-          i -= 1;
-          // `i` may become -1 which is not a valid index, but the extensionSet check at the beginning is not run in that case,
-          // so the wrong extension is not evaluated
-          stackedExtensions = [suggestionExtensions[i], stackedExtensions].join(".");
-        } while (i >= 0);
+      const parts = name.split(".");
+      for (let i = 1; i < parts.length; i++) {
+        if (extensionsSet.has(parts.slice(i).join("."))) return true;
       }
       return false;
     });
@@ -174,20 +162,21 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
         ) ?? "/";
 
       try {
-        const files = generatorContext.listDirectory
-          ? await generatorContext.listDirectory(currentInsertedDirectory)
-          : (
-              await executeCommand({
-                command: "ls",
-                args: ["-1ApL"],
-                cwd: currentInsertedDirectory,
-              })
-            ).stdout.split("\n");
+        let files: string[];
+        if (generatorContext.listDirectory) {
+          files = await generatorContext.listDirectory(currentInsertedDirectory);
+        } else {
+          const result = await executeCommand({
+            command: "ls",
+            args: ["-1ApL"],
+            cwd: currentInsertedDirectory,
+          });
+          if (result.status !== 0) return [];
+          files = result.stdout.split("\n");
+        }
         const sortedFiles = sortFilesAlphabetically(files, [".DS_Store"]);
 
         const generatorOutputArray: Fig.TemplateSuggestion[] = [];
-        // Then loop through them and add them to the generatorOutputArray
-        // depending on the template type
         for (const name of sortedFiles) {
           if (name) {
             const templateType = name.endsWith("/") ? "folders" : "filepaths";
@@ -206,8 +195,6 @@ function filepathsFn(options: FilepathsOptions = {}): Fig.Generator {
           }
         }
 
-        // Filter suggestions. This takes in the array of suggestions, filters it,
-        // and outputs an array of suggestions
         return postProcessSuggestions(filterSuggestions(generatorOutputArray));
       } catch {
         return [];

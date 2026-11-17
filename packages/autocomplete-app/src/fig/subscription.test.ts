@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import logger from "loglevel";
 import { subscribeWithRetry } from "../subscription";
@@ -18,7 +19,7 @@ it("recovers after transient failures and stops retrying once connected", async 
     .mockRejectedValueOnce(new Error("Load failed"))
     .mockRejectedValueOnce(new Error("desktop busy"))
     .mockResolvedValue({ unsubscribe });
-  const stop = subscribeWithRetry(getSubscription);
+  const stop = subscribeWithRetry(getSubscription, runtimeTiming.delay);
   await vi.advanceTimersByTimeAsync(30_000);
   expect(getSubscription).toHaveBeenCalledTimes(3);
   expect(unsubscribe).not.toHaveBeenCalled();
@@ -28,7 +29,7 @@ it("recovers after transient failures and stops retrying once connected", async 
 
 it("does not keep retrying an unmounted subscription", async () => {
   const getSubscription = vi.fn().mockRejectedValue(new Error("Load failed"));
-  const stop = subscribeWithRetry(getSubscription);
+  const stop = subscribeWithRetry(getSubscription, runtimeTiming.delay);
   await vi.advanceTimersByTimeAsync(0);
   stop();
   await vi.advanceTimersByTimeAsync(60_000);
@@ -38,7 +39,10 @@ it("does not keep retrying an unmounted subscription", async () => {
 it("cleans up a registration that finishes after unmount", async () => {
   let finish!: (value: { unsubscribe(): void }) => void;
   const unsubscribe = vi.fn();
-  const stop = subscribeWithRetry(() => new Promise((resolve) => (finish = resolve)));
+  const stop = subscribeWithRetry(
+    () => new Promise((resolve) => (finish = resolve)),
+    runtimeTiming.delay,
+  );
   stop();
   finish({ unsubscribe });
   await vi.advanceTimersByTimeAsync(0);

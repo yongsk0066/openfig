@@ -9,9 +9,22 @@ import type { Subcommand } from "@fig/shared/internal";
 
 type Execution = { sessionId?: string; cwd?: string; env: Record<string, string | undefined> };
 /** Catalog, execution facts and parsed specs have different invalidation boundaries. */
-export function createCompletionCaches() {
+export function createCompletionCaches({
+  now,
+  maxAgeMs = 60_000,
+}: {
+  now: () => number;
+  maxAgeMs?: number;
+}) {
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) {
+    throw new RangeError("Completion cache lifetime must be finite and positive");
+  }
+  let generation = 0;
   const catalog = createSpecCatalogCaches();
-  const facts = new LruCache<string, ReturnType<typeof createSpecLoaderCaches>>(8);
+  const facts = new LruCache<
+    string,
+    { loader: ReturnType<typeof createSpecLoaderCaches>; expiresAt: number; generation: number }
+  >(8);
   const parsed = new LruCache<
     string,
     {
@@ -34,13 +47,21 @@ export function createCompletionCaches() {
         Object.entries(execution.env).toSorted(([a], [b]) => a.localeCompare(b)),
         sourceSettings,
       ]);
-      let loader = facts.get(context);
-      if (!loader) {
-        loader = createSpecLoaderCaches(catalog);
-        facts.set(context, loader);
+      let entry = facts.get(context);
+      const time = now();
+      if (!entry || time >= entry.expiresAt) {
+        // Replace the whole execution scope: late requests still own the old loader and
+        // cannot repopulate this generation. Catalog imports have a separate lifetime.
+        entry = {
+          loader: createSpecLoaderCaches(catalog),
+          expiresAt: time + maxAgeMs,
+          generation: ++generation,
+        };
+        facts.set(context, entry);
       }
       const key = JSON.stringify([
         context,
+        entry.generation,
         ...[
           SETTINGS.DISABLE_FOR_COMMANDS,
           SETTINGS.PERSONAL_SHORTCUTS_TOKEN,
@@ -52,7 +73,7 @@ export function createCompletionCaches() {
         result = { parser: createParserCaches(), specs: new LruCache<string, Subcommand>(256) };
         parsed.set(key, result);
       }
-      return { ...result, loader };
+      return { ...result, loader: entry.loader };
     },
     clear() {
       facts.clear();

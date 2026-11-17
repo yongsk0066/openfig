@@ -1,13 +1,15 @@
+import type { Timing } from "@fig/shared/timing";
 import type { EditBufferNotifications, Settings, Shell } from "@fig/api-bindings";
 import { SETTINGS, type SettingsMap } from "@fig/shared/settings";
 import { startCompletionEngine } from "./engine";
 import { createParseCoordinator } from "./parser/coordinator";
 import type { createCompletionModel } from "./state/model";
-import { subscribeWithRetry } from "./subscription";
+import { subscribeWithRetry as retrySubscription } from "./subscription";
 import type { TraceContext } from "./telemetry";
 
 type Subscription = { unsubscribe(): void };
 export type RuntimePorts = {
+  timing: Timing;
   completion: {
     store: ReturnType<typeof createCompletionModel>;
     parse: Parameters<typeof createParseCoordinator>[0];
@@ -31,6 +33,8 @@ export type RuntimePorts = {
 };
 /** Each start owns a cancellation scope. Old continuations can never join a later start. */
 export function createCompletionRuntime(ports: RuntimePorts) {
+  const subscribeWithRetry = (subscribe: Parameters<typeof retrySubscription>[0]) =>
+    retrySubscription(subscribe, ports.timing.delay);
   let stop: (() => void) | undefined;
   let disposed = false;
   const { completion } = ports;
@@ -40,6 +44,8 @@ export function createCompletionRuntime(ports: RuntimePorts) {
     const scope = new AbortController();
     const active = () => !scope.signal.aborted;
     const engine = startCompletionEngine(completion.store, {
+      now: ports.timing.now,
+      defer: ports.timing.defer,
       coordinator: createParseCoordinator(completion.parse),
       dispatch: completion.store.dispatch,
       measure: ports.measure,

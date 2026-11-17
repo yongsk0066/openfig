@@ -1,3 +1,4 @@
+import type { Timing } from "@fig/shared/timing";
 import { makeArray } from "@fig/shared/utils";
 import type { Suggestion } from "@fig/shared/internal";
 
@@ -11,13 +12,16 @@ const MAX_ENTRIES = 10_000;
 const MAX_PER_COMMAND = 1_000;
 
 export function createRecencyRepository(
-  storage?: { getItem(key: string): string | null; setItem(key: string, value: string): void },
-  now: () => number = Date.now,
+  storage:
+    | { getItem(key: string): string | null; setItem(key: string, value: string): void }
+    | undefined,
+  now: () => number,
+  schedule: Timing["schedule"],
 ) {
   let recencyIndex: Index = Object.create(null);
   const order = new Map<string, [string, string]>();
   const commands = new Map<string, Set<string>>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelFlush: (() => void) | undefined;
   let dirty = false;
   const remove = (cmd: string, param: string) => {
     const values = { ...recencyIndex[cmd] };
@@ -80,8 +84,8 @@ export function createRecencyRepository(
   }
 
   const flush = () => {
-    clearTimeout(timer);
-    timer = undefined;
+    cancelFlush?.();
+    cancelFlush = undefined;
     if (!dirty) return;
     try {
       storage?.setItem(RECENCY_KEY, JSON.stringify(recencyIndex));
@@ -94,7 +98,7 @@ export function createRecencyRepository(
     if (param.includes("↪")) return;
     record(cmd, param, now());
     dirty = true;
-    timer ??= setTimeout(flush, 250);
+    cancelFlush ??= schedule(flush, 250);
   };
   return {
     getRecencyIndex: (): RecencyIndex => recencyIndex,

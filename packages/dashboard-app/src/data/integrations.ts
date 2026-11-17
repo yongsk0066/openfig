@@ -14,6 +14,14 @@ const integrationOptions = [
         inverted: true,
       },
       {
+        id: "integrations.ghostty.disabled",
+        title: "Ghostty",
+        description: `Show ${PRODUCT_NAME} at the cursor using the macOS text input integration`,
+        type: "boolean",
+        default: false,
+        inverted: true,
+      },
+      {
         id: "integrations.hyper.disabled",
         title: "Hyper",
         description: `Add ${PRODUCT_NAME} to Hyper`,

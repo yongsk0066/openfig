@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { longestCommonPrefix, withTimeout } from "./utils";
+import { longestCommonPrefix } from "./utils";
+import { withTimeout } from "./runtime-timing";
 afterEach(() => vi.useRealTimers());
 it("releases timeout and abort listeners on every settlement path", async () => {
   vi.useFakeTimers();

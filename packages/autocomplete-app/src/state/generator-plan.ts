@@ -53,7 +53,7 @@ export const planGenerators = (
     } else if (trigger === undefined) {
       // If trigger is undefined we never trigger, unless debounced in
       // which case we always trigger.
-      // TODO: move debounce to generator.
+      // Fig.Arg owns the public debounce setting; the generator effect owns the wait.
       shouldTrigger = Boolean(currentArg?.debounce);
     } else {
       let triggerFn: (a: string, b: string) => boolean;

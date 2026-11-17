@@ -53,3 +53,42 @@ it("observes replacement nodes, rounds sizes and ignores callbacks after cleanup
     vi.unstubAllGlobals();
   }
 });
+
+it("measures a hidden webview commit without waiting for ResizeObserver and never replays stale zero", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  let size = { width: 0, height: 0 };
+  const measured = vi
+    .spyOn(Element.prototype, "getBoundingClientRect")
+    .mockImplementation(() => size as DOMRect);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const first = vi.fn();
+  const visible = vi.fn();
+  function Probe({ onResize }: { onResize: typeof first }) {
+    const { ref } = useDynamicResizeObserver({ onResize, measureOnCommit: true });
+    return <div ref={ref} />;
+  }
+  try {
+    await act(async () => root.render(<Probe onResize={first} />));
+    expect(first).toHaveBeenLastCalledWith({ width: 0, height: 0 });
+    size = { width: 380, height: 220 };
+    await act(async () => root.render(<Probe onResize={visible} />));
+    expect(visible.mock.calls).toEqual([[{ width: 380, height: 220 }]]);
+    await act(async () => root.render(<Probe onResize={visible} />));
+    expect(visible).toHaveBeenCalledOnce();
+    size = { width: 380, height: 260 };
+    await act(async () => root.render(<Probe onResize={visible} />));
+    expect(visible).toHaveBeenLastCalledWith({ width: 380, height: 260 });
+    await act(async () => root.unmount());
+  } finally {
+    measured.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});

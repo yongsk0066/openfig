@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { EditBufferNotifications, Event, Settings, Shell } from "@fig/api-bindings";
 import { updateSettings } from "@fig/api-bindings/wrappers";
 import logger from "loglevel";
@@ -6,6 +7,7 @@ import { createCompletionRuntime } from "../runtime";
 import { createDesktopCompletion } from "./services";
 import { updateSelectSuggestionKeybindings } from "../actions";
 const runtime = createCompletionRuntime({
+  timing: runtimeTiming,
   completion: createDesktopCompletion(),
   beginInput,
   measure: recordTiming,

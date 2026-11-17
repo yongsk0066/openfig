@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { expect, it, vi } from "vitest";
 import {
   createSpecLoader,
@@ -7,6 +8,7 @@ import {
 } from "../src/specLoader";
 const spec: SpecFileImport = { default: () => ({ name: "tool" }) };
 const ports = (executeCommand: Fig.ExecuteCommandFunction): SpecLoaderPorts => ({
+  withTimeout: runtimeTiming.timeout,
   executeCommand,
   fread: vi.fn(),
   isInDevMode: () => false,

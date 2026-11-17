@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { createCompletionModel, type ModelPorts } from "./state/model";
 const createAutocompleteStore = (ports: Partial<ModelPorts> = {}) =>
   createCompletionModel({
@@ -22,7 +23,12 @@ import type { AutocompleteState } from "./state/types";
 it("schedules from inputs without React, coalesces synchronous updates and disposes", async () => {
   const run = vi.fn<ReturnType<typeof createParseCoordinator>["run"]>(() => vi.fn());
   const store = createStore<AutocompleteState>(() => ({ ...initialState }) as AutocompleteState);
-  const stop = startCompletionEngine(store, { coordinator: { run }, dispatch: vi.fn() });
+  const stop = startCompletionEngine(store, {
+    now: runtimeTiming.now,
+    defer: runtimeTiming.defer,
+    coordinator: { run },
+    dispatch: vi.fn(),
+  });
   store.setState({ figState: { ...store.getState().figState, cwd: "/a" } });
   store.setState({ figState: { ...store.getState().figState, cwd: "/b" } });
   await Promise.resolve();
@@ -44,7 +50,12 @@ it("runs the real store without window and keeps platform effects behind ports",
     generators: () => ({ reconcile: vi.fn(), runGenerator: vi.fn() }),
   });
   const run = vi.fn<ReturnType<typeof createParseCoordinator>["run"]>(() => vi.fn());
-  const stop = startCompletionEngine(store, { coordinator: { run }, dispatch: vi.fn() });
+  const stop = startCompletionEngine(store, {
+    now: runtimeTiming.now,
+    defer: runtimeTiming.defer,
+    coordinator: { run },
+    dispatch: vi.fn(),
+  });
   store
     .getState()
     .setFigState((state) => ({ ...state, buffer: "git ", cursorLocation: 4, cwd: "/repo" }));
@@ -71,7 +82,12 @@ it("restarts a cancelled parse when coalesced context returns to the dispatched 
   const cancel = vi.fn();
   const run = vi.fn<ReturnType<typeof createParseCoordinator>["run"]>(() => cancel);
   const store = createStore<AutocompleteState>(() => ({ ...initialState }) as AutocompleteState);
-  const stop = startCompletionEngine(store, { coordinator: { run }, dispatch: vi.fn() });
+  const stop = startCompletionEngine(store, {
+    now: runtimeTiming.now,
+    defer: runtimeTiming.defer,
+    coordinator: { run },
+    dispatch: vi.fn(),
+  });
   await Promise.resolve();
   const original = store.getState().figState;
   store.setState({ figState: { ...original, cwd: "/temporary" } });

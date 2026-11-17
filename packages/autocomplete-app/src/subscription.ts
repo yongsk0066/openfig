@@ -1,31 +1,36 @@
 import logger from "loglevel";
-
+import type { Timing } from "@fig/shared/timing";
 type Subscription = { unsubscribe(): void };
 
-/** Retry transient registration failures without needing to remount the app or restart Fig. */
-export function subscribeWithRetry(getSubscription: () => Promise<Subscription> | undefined) {
-  let stopped = false;
+/** Bounded backoff; cancellation owns both the pending wait and a late registration. */
+export function subscribeWithRetry(
+  getSubscription: () => Promise<Subscription> | undefined,
+  delay: Timing["delay"],
+) {
+  const scope = new AbortController();
   let subscription: Subscription | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let delay = 1000;
-
-  const connect = async () => {
-    try {
-      const result = await getSubscription();
-      if (stopped) result?.unsubscribe();
-      else subscription = result;
-    } catch (error) {
-      if (stopped) return;
-      logger.warn("Fig subscription failed; retrying", error);
-      timer = setTimeout(() => void connect(), delay);
-      delay = Math.min(delay * 2, 30_000);
+  void (async () => {
+    let backoff = 1000;
+    while (!scope.signal.aborted) {
+      try {
+        const result = await getSubscription();
+        if (scope.signal.aborted) result?.unsubscribe();
+        else subscription = result;
+        return;
+      } catch (error) {
+        if (scope.signal.aborted) return;
+        logger.warn("Fig subscription failed; retrying", error);
+        try {
+          await delay(backoff, scope.signal);
+        } catch {
+          return;
+        }
+        backoff = Math.min(backoff * 2, 30_000);
+      }
     }
-  };
-  void connect();
-
+  })();
   return () => {
-    stopped = true;
-    clearTimeout(timer);
+    scope.abort();
     subscription?.unsubscribe();
   };
 }

@@ -1,3 +1,4 @@
+import { withTimeout } from "@fig/shared/runtime-timing";
 import { executeCommand, fread, isInDevMode } from "@fig/api-bindings/wrappers";
 import { createSpecLoader } from "./specLoader";
 export {
@@ -8,6 +9,7 @@ export {
 } from "./specLoader";
 import { importSpecSource } from "./browser";
 export const defaultSpecLoader = createSpecLoader({
+  withTimeout,
   executeCommand: (input) => executeCommand(input),
   fread,
   isInDevMode,

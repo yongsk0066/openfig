@@ -1,10 +1,11 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRecencyRepository } from "./sorting";
 afterEach(() => vi.useRealTimers());
 it("keeps immutable ranking snapshots and coalesces persistence, including explicit disposal flush", () => {
   vi.useFakeTimers();
   const storage = { getItem: vi.fn(() => "{}"), setItem: vi.fn() };
-  const repo = createRecencyRepository(storage, () => 42);
+  const repo = createRecencyRepository(storage, () => 42, runtimeTiming.schedule);
   repo.updateAutocompleteIndexFromUserInsert("git", "one");
   const snapshot = repo.getRecencyIndex();
   repo.updateAutocompleteIndexFromUserInsert("git", "two");
@@ -29,7 +30,7 @@ it("loads only valid recent entries, bounds each command and retries failed pers
       throw new Error("full");
     }),
   };
-  const repo = createRecencyRepository(storage, () => 3000);
+  const repo = createRecencyRepository(storage, () => 3000, runtimeTiming.schedule);
   expect(Object.keys(repo.getRecencyIndex().git)).toHaveLength(1000);
   expect(repo.getRecencyIndex().git["branch-1999"]).toBe(1999);
   expect(repo.getRecencyIndex().other).toBeUndefined();

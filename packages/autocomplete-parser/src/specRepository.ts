@@ -1,10 +1,11 @@
+import type { Timing } from "@fig/shared/timing";
 import logger, { type Logger } from "loglevel";
 import {
   convertSubcommand,
   initializeDefault,
   getVersionFromVersionedSpec,
 } from "@fig/spec-helpers";
-import { withTimeout, SpecLocationSource, splitPath, ensureTrailingSlash } from "@fig/shared/utils";
+import { SpecLocationSource, splitPath, ensureTrailingSlash } from "@fig/shared/utils";
 import { LruCache } from "@fig/shared/lru";
 import type { Subcommand, SpecLocation } from "@fig/shared/internal";
 import { SETTINGS, type SettingsReader } from "@fig/shared/settings";
@@ -18,6 +19,7 @@ export const serializeSpecLocation = (location: SpecLocation): string => {
 };
 
 export type SpecRepositoryPorts = {
+  withTimeout: Timing["timeout"];
   signal?: AbortSignal;
   loader: ReturnType<typeof createSpecLoader>;
   executeCommand: Fig.ExecuteCommandFunction;
@@ -26,7 +28,15 @@ export type SpecRepositoryPorts = {
   isInDevMode(): boolean;
 };
 export function createSpecRepository(
-  { loader, executeCommand, getSetting, setSetting, isInDevMode, signal }: SpecRepositoryPorts,
+  {
+    withTimeout,
+    loader,
+    executeCommand,
+    getSetting,
+    setSetting,
+    isInDevMode,
+    signal,
+  }: SpecRepositoryPorts,
   specCache = new LruCache<string, Subcommand>(256),
 ) {
   const {

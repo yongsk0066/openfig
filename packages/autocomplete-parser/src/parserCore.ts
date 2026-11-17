@@ -1,3 +1,4 @@
+import type { Timing } from "@fig/shared/timing";
 import logger from "loglevel";
 import { convertSubcommand, initializeDefault } from "@fig/spec-helpers";
 import { filepaths, folders } from "@fig/spec-generators";
@@ -8,7 +9,6 @@ import {
   SpecLocationSource,
   SuggestionFlag,
   type SuggestionFlags,
-  withTimeout,
 } from "@fig/shared/utils";
 import { SETTINGS, type SettingsReader } from "@fig/shared/settings";
 import { type Command, substituteAlias } from "@fig/shell-parser";
@@ -19,13 +19,15 @@ const getCacheKey = (
   tokenArray: string[],
   context: Fig.ShellContext,
   specLocation: Internal.SpecLocation,
+  isParsingHistory: boolean,
 ): string =>
-  [
-    tokenArray.slice(0, -1).join(" "),
+  JSON.stringify([
+    tokenArray.slice(0, -1),
     serializeSpecLocation(specLocation),
     context.currentWorkingDirectory,
     context.currentProcess,
-  ].join(",");
+    isParsingHistory,
+  ]);
 const historyExecuteShellCommand: Fig.ExecuteCommandFunction = async () => {
   throw new ParsingHistoryError("Cannot run shell command while parsing history");
 };
@@ -47,7 +49,9 @@ export enum TokenType {
   Composite = "composite",
 }
 
-export type BasicAnnotation =
+export type LoadedSpec = { spec: Internal.Subcommand; historyKey: string };
+
+export type BasicAnnotation = { loadedSpec?: LoadedSpec } & (
   | {
       text: string;
       type: Exclude<TokenType, TokenType.Composite>;
@@ -61,7 +65,28 @@ export type BasicAnnotation =
       type: TokenType.Subcommand;
       spec: Internal.Subcommand;
       specLocation: Internal.SpecLocation;
-    };
+    }
+);
+
+// History identity describes argument slots, not generator closures or an invented file path.
+// Include the load path and cwd below so dynamic replacements do not borrow a parent's values.
+const historyArgsShape = (items: Internal.Arg[]) =>
+  items.map(({ name, isVariadic, isOptional }) => [name ?? null, !!isVariadic, !!isOptional]);
+const historyOptionsShape = (items: Record<string, Internal.Option>) =>
+  Object.keys(items)
+    .toSorted()
+    .map((key) => [key, historyArgsShape(items[key].args)]);
+function historyShape(spec: Internal.Subcommand): unknown {
+  return [
+    spec.name,
+    historyArgsShape(spec.args),
+    historyOptionsShape(spec.options),
+    historyOptionsShape(spec.persistentOptions),
+    Object.keys(spec.subcommands)
+      .toSorted()
+      .map((key) => [key, historyShape(spec.subcommands[key])]),
+  ];
+}
 
 type CompositeAnnotation = {
   text: string;
@@ -96,6 +121,28 @@ export type ArgumentParserResult = {
   annotations: Annotation[];
 };
 
+// Preserve generator identity for the execution cache without mutating shared generators.
+// Weak keys do not retain spec filter closures after their catalog owner is released.
+const filesystemFilters = new Map<
+  Fig.Generator,
+  WeakMap<NonNullable<Fig.Generator["filterTemplateSuggestions"]>, Fig.Generator>
+>([
+  [filepaths, new WeakMap()],
+  [folders, new WeakMap()],
+]);
+function withFilesystemFilter(
+  base: typeof filepaths | typeof folders,
+  filter: Fig.Generator["filterTemplateSuggestions"],
+): Fig.Generator {
+  if (!filter) return base;
+  const cache = filesystemFilters.get(base);
+  const cached = cache?.get(filter);
+  if (cached) return cached;
+  const generator = { ...base, filterTemplateSuggestions: filter };
+  cache?.set(filter, generator);
+  return generator;
+}
+
 export const createArgState = (args?: Internal.Arg[]): ArgArrayState => {
   const updatedArgs: Internal.Arg[] = [];
 
@@ -105,17 +152,21 @@ export const createArgState = (args?: Internal.Arg[]): ArgArrayState => {
       const generator = arg.generators[i];
       const templateArray = makeArray(generator.template ?? []);
 
-      let updatedGenerator: Fig.Generator | undefined;
-      if (templateArray.includes("filepaths")) {
-        updatedGenerator = filepaths;
-      } else if (templateArray.includes("folders")) {
-        updatedGenerator = folders;
+      const filesystem = templateArray.includes("filepaths")
+        ? filepaths
+        : templateArray.includes("folders")
+          ? folders
+          : undefined;
+      if (!filesystem) {
+        updatedGenerators.add(generator);
+        continue;
       }
-
-      if (updatedGenerator && generator.filterTemplateSuggestions) {
-        updatedGenerator.filterTemplateSuggestions = generator.filterTemplateSuggestions;
-      }
-      updatedGenerators.add(updatedGenerator ?? generator);
+      // Never attach a spec-specific filter to the shared exported generator function.
+      updatedGenerators.add(withFilesystemFilter(filesystem, generator.filterTemplateSuggestions));
+      const remaining = templateArray.filter(
+        (template) => template !== "filepaths" && template !== "folders",
+      );
+      if (remaining.length) updatedGenerators.add({ ...generator, template: remaining });
     }
 
     updatedArgs.push({
@@ -613,6 +664,7 @@ export const initialParserState = getResultFromState(
 // Keyed by every token but the last plus spec, cwd and shell: one entry per distinct command
 // prefix per directory, which never stops growing over a long session without a bound.
 export type ParserPorts = {
+  withTimeout: Timing["timeout"];
   signal?: AbortSignal;
   specs: Pick<ReturnType<typeof createSpecRepository>, "getSpecPath" | "loadSubcommandCached">;
   executeCommand: Fig.ExecuteCommandFunction;
@@ -634,7 +686,15 @@ export function createParserCaches() {
   };
 }
 export function createParser(
-  { specs, executeCommand, executeLoginShell, getSetting, isInDevMode, signal }: ParserPorts,
+  {
+    withTimeout,
+    specs,
+    executeCommand,
+    executeLoginShell,
+    getSetting,
+    isInDevMode,
+    signal,
+  }: ParserPorts,
   caches = createParserCaches(),
 ) {
   const { generateSpecCache, parseArgumentsCache, parseArgumentsGenerateSpecCache, figCaches } =
@@ -742,7 +802,6 @@ export function createParser(
   const parseArgumentsCached = async (
     command: Command,
     context: Fig.ShellContext,
-    // authClient: AuthClient,
     specLocations?: Internal.SpecLocation[],
     isParsingHistory?: boolean,
     startIndex = 0,
@@ -761,7 +820,7 @@ export function createParser(
 
     let cacheKey = "";
     for (let i = 0; i < locations.length; i += 1) {
-      cacheKey = getCacheKey(tokenText, context, locations[i]);
+      cacheKey = getCacheKey(tokenText, context, locations[i], !!isParsingHistory);
       if (
         !isInDevMode() &&
         (parseArgumentsCache.has(cacheKey) || parseArgumentsGenerateSpecCache.has(cacheKey))
@@ -787,7 +846,7 @@ export function createParser(
         const path = specPath.type === SpecLocationSource.LOCAL ? specPath.path : "";
         localLogger.warn(`Failed to load spec ${specPath.name} from ${specPath.type} ${path}`);
       } else {
-        cacheKey = getCacheKey(tokenText, context, specPath);
+        cacheKey = getCacheKey(tokenText, context, specPath, !!isParsingHistory);
         break;
       }
     }
@@ -820,7 +879,6 @@ export function createParser(
         state = await parseArgumentsCached(
           currentCommand,
           context,
-          // authClient,
           loadSpecResult,
           isParsingHistory,
           startIndex + index,
@@ -830,8 +888,29 @@ export function createParser(
       }
 
       if (loadSpecResult) {
+        const loadedSpec: LoadedSpec = {
+          spec: loadSpecResult,
+          historyKey: JSON.stringify([
+            "inline",
+            serializeSpecLocation(specPath),
+            tokens.slice(0, index + 1).map((item) => item.text),
+            context.currentWorkingDirectory,
+            historyShape(loadSpecResult),
+          ]),
+        };
+        const annotations = [...state.annotations];
+        const last = annotations.at(-1);
+        if (last?.type === TokenType.Composite) {
+          const subtokens = [...last.subtokens];
+          const tail = subtokens.at(-1);
+          if (tail) subtokens[subtokens.length - 1] = { ...tail, loadedSpec };
+          annotations[annotations.length - 1] = { ...last, subtokens };
+        } else if (last) {
+          annotations[annotations.length - 1] = { ...last, loadedSpec };
+        }
         state = {
           ...state,
+          annotations,
           completionObj: {
             ...loadSpecResult,
             parserDirectives: {
@@ -1008,7 +1087,6 @@ export function createParser(
   const parseArguments = async (
     command: Command | null,
     context: Fig.ShellContext,
-    // authClient: AuthClient,
     isParsingHistory = false,
     localLogger: logger.Logger = logger,
   ): Promise<ArgumentParserResult> => {
@@ -1037,7 +1115,6 @@ export function createParser(
     let state = await parseArgumentsCached(
       command,
       context,
-      // authClient,
       undefined,
       isParsingHistory,
       0,

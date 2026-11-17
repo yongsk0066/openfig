@@ -1,5 +1,3 @@
-import { createErrorInstance } from "./errors.js";
-
 // Use bitwise representation of suggestion flags.
 // See here: https://stackoverflow.com/questions/39359740/what-are-enum-flags-in-typescript/
 //
@@ -44,35 +42,6 @@ export function isOrHasValue(obj: string | Array<string>, valueToMatch: string) 
   return Array.isArray(obj) ? obj.includes(valueToMatch) : obj === valueToMatch;
 }
 
-export const TimeoutError = createErrorInstance("TimeoutError");
-
-/** Stops observing on timeout/abort; callers own cancellation of the underlying operation. */
-export async function withTimeout<T>(
-  time: number,
-  promise: Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        onAbort = () => reject(signal?.reason);
-        if (signal?.aborted) {
-          onAbort();
-          return;
-        }
-        signal?.addEventListener("abort", onAbort, { once: true });
-        timer = setTimeout(() => reject(new TimeoutError("Function timed out")), time);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-    if (onAbort) signal?.removeEventListener("abort", onAbort);
-  }
-}
-
 export const longestCommonPrefix = (strings: readonly string[]): string => {
   const first = strings[0] ?? "";
   let length = first.length;
@@ -105,11 +74,6 @@ export function compareNamedObjectsAlphabetically<A extends NamedObject, B exten
     typeof object === "string" ? object : makeArray(object.name)[0] || "";
   return getName(a).localeCompare(getName(b));
 }
-
-export const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 
 export type Func<S extends unknown[], T> = (...args: S) => T;
 type EqualFunc<T> = (args: T, newArgs: T) => boolean;
@@ -150,7 +114,6 @@ function isEmptyObject(v: unknown): v is Record<string, never> {
   return isNonNullObj(v) && Object.keys(v).length === 0;
 }
 
-// TODO: to fix this we may want to have the default fields as Object.keys(A)
 /**
  * If no fields are specified and A,B are not equal primitives/empty objects, this returns false
  * even if the objects are actually equal.

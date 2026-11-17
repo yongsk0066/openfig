@@ -21,14 +21,15 @@ const completionInputChanged = (state: AutocompleteState, previous?: Autocomplet
 
 type Ports = {
   coordinator: ReturnType<typeof createParseCoordinator>;
-  now?: () => number;
+  now: () => number;
+  defer(callback: () => void): void;
   dispatch: (event: CompletionEvent) => void;
   measure?: (stage: string, milliseconds: number, context?: TraceContext) => void;
 };
 /** One owner of parsing. Render/mount timing never schedules computation. */
 export function startCompletionEngine(store: StoreApi<AutocompleteState>, ports: Ports) {
   const coordinator = ports.coordinator;
-  const now = ports.now ?? (() => performance.now());
+  const now = ports.now;
   let cancel: (() => void) | undefined;
   let stopped = false;
   let invalidated = false;
@@ -58,7 +59,7 @@ export function startCompletionEngine(store: StoreApi<AutocompleteState>, ports:
   const schedule = () => {
     if (scheduled || stopped) return;
     scheduled = true;
-    queueMicrotask(() => {
+    ports.defer(() => {
       scheduled = false;
       if (!stopped) run(store.getState(), last);
     });

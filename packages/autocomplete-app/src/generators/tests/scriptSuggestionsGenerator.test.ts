@@ -89,11 +89,6 @@ describe("getScriptSuggestions", () => {
     expect(script).toHaveBeenCalledWith([]);
   });
 
-  // it("should call runCachedGenerator", async () => {
-  //   await getScriptSuggestions({ script: "ascript" }, context, 5000);
-  //   expect(runCachedGenerator).toHaveBeenCalled();
-  // });
-
   it("should call executeCommand", async () => {
     await getScriptSuggestions({ script: ["ascript"] }, context, 5000);
     expect(executeCommand).toHaveBeenCalledWith(

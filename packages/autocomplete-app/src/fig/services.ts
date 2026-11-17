@@ -2,7 +2,7 @@ import { importSpecSource } from "@fig/autocomplete-parser/browser";
 import { History, Settings, Shell, fs } from "@fig/api-bindings";
 import { executeCommandTimeout, executeLoginShell, fread } from "@fig/api-bindings/wrappers";
 import { SETTINGS, readSettings, type SettingsMap } from "@fig/shared/settings";
-import { withTimeout } from "@fig/shared/utils";
+import { withTimeout, runtimeTiming } from "@fig/shared/runtime-timing";
 import type { HistoryPorts } from "../history/repository";
 import { createCompletionCaches } from "../parser/cacheScopes";
 import {
@@ -48,7 +48,7 @@ export function createDesktopCompletion() {
 
   const getSetting = <T = unknown>(key: SETTINGS, fallback?: T): T =>
     readSettings(settings)(key, fallback);
-  const cacheScopes = createCompletionCaches();
+  const cacheScopes = createCompletionCaches({ now: () => performance.now() });
   const scope = (context: Context, signal?: AbortSignal) => {
     const snapshot = settings;
     const read = readSettings(snapshot);
@@ -67,6 +67,7 @@ export function createDesktopCompletion() {
     const caches = cacheScopes.scope(execution, snapshot);
     const loader = createSpecLoader(
       {
+        withTimeout,
         executeCommand: execute,
         executeVersionCommand: (input) => timedExecute(input, 5000, undefined, context),
         fread,
@@ -86,6 +87,7 @@ export function createDesktopCompletion() {
     );
     const specs = createSpecRepository(
       {
+        withTimeout,
         signal,
         loader,
         executeCommand: execute,
@@ -97,6 +99,7 @@ export function createDesktopCompletion() {
     );
     const parser = createParser(
       {
+        withTimeout,
         signal,
         specs,
         executeCommand: execute,
@@ -115,6 +118,7 @@ export function createDesktopCompletion() {
     sshPrefix: "",
   };
   const historyPorts = (signal?: AbortSignal): HistoryPorts => ({
+    timing: runtimeTiming,
     parseArguments: (...args) => scope(args[1], signal).parser.parseArguments(...args),
     getSpecPath: (...args) => scope(emptyContext, signal).specs.getSpecPath(...args),
     loadSubcommandCached: (...args) =>
@@ -128,14 +132,14 @@ export function createDesktopCompletion() {
     },
   });
   const history = createHistoryRepository(historyPorts(), historyPorts);
-  const generatorCache = createGeneratorCache(getSetting);
+  const generatorCache = createGeneratorCache(getSetting, runtimeTiming.now);
   let storage: Storage | undefined;
   try {
     storage = window.localStorage;
   } catch {
     /* optional persistence */
   }
-  const recency = createRecencyRepository(storage);
+  const recency = createRecencyRepository(storage, Date.now, runtimeTiming.schedule);
   window.addEventListener("pagehide", recency.flush);
   const servicesFor = (context: GeneratorContext) => ({
     invoke: runPipingConsoleMethods,
@@ -152,6 +156,7 @@ export function createDesktopCompletion() {
       timedExecute(input, timeout, signal, context),
     cached: generatorCache.runCachedGenerator,
     history: history.getHistoryArgSuggestions,
+    delay: runtimeTiming.delay,
     timeout: () => getSetting<number>(SETTINGS.SCRIPT_TIMEOUT, 5000),
   });
   const store = createCompletionModel({

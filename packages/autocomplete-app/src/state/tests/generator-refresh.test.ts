@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { expect, it, vi } from "vitest";
 import { readSettings } from "@fig/shared/settings";
 import {
@@ -26,8 +27,9 @@ it("publishes cached and refreshed suggestions through the reconciled store, nev
     annotations: [],
     searchTerm: "",
   };
-  const cache = createGeneratorCache(readSettings({}));
+  const cache = createGeneratorCache(readSettings({}), () => Date.now());
   const services: GeneratorServices = {
+    delay: runtimeTiming.delay,
     cached: cache.runCachedGenerator,
     execute: vi.fn(),
     invoke: (fn) => fn(),

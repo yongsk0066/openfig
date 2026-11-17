@@ -1,3 +1,4 @@
+import { withTimeout } from "@fig/shared/runtime-timing";
 import {
   executeCommand,
   executeLoginShell,
@@ -8,6 +9,7 @@ import { getSpecPath, loadSubcommandCached } from "./loadSpec";
 import { createParser } from "./parserCore";
 export * from "./parserCore";
 export const defaultParser = createParser({
+  withTimeout,
   specs: { getSpecPath, loadSubcommandCached },
   executeCommand,
   executeLoginShell,

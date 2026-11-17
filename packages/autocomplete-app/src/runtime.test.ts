@@ -1,3 +1,4 @@
+import { runtimeTiming } from "@fig/shared/runtime-timing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "@fig/shared/settings";
 import { createCompletionRuntime, type RuntimePorts } from "./runtime";
@@ -26,6 +27,7 @@ function fixture() {
   });
   const subscriptions = Array.from({ length: 5 }, () => ({ unsubscribe: vi.fn() }));
   const ports: RuntimePorts = {
+    timing: runtimeTiming,
     completion: {
       store,
       parse: vi.fn(async () => initialParserState),

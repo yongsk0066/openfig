@@ -362,7 +362,10 @@ function App() {
     ],
   );
 
-  const { ref: autocompleteWindowRef } = useDynamicResizeObserver({ onResize });
+  const { ref: autocompleteWindowRef } = useDynamicResizeObserver({
+    onResize,
+    measureOnCommit: true,
+  });
 
   if (isHidden) {
     return <div ref={autocompleteWindowRef} id="autocompleteWindow" />;

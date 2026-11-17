@@ -1,7 +1,12 @@
 import logger from "loglevel";
 import { SETTINGS, updateSettings } from "@fig/api-bindings/wrappers";
 import { SpecLocationSource } from "@fig/shared/utils";
-import { getSpecPath, loadFigSubcommand, loadSubcommandCached } from "../src/loadSpec";
+import {
+  getSpecPath,
+  loadFigSubcommand,
+  loadSubcommandCached,
+  defaultSpecRepository,
+} from "../src/loadSpec";
 import * as loadHelpers from "../src/loadHelpers";
 import { expect, it, beforeAll, describe, beforeEach, vi, Mock, afterEach } from "vitest";
 
@@ -19,7 +24,6 @@ vi.mock("@fig/api-bindings/wrappers", async () => ({
   executeCommand: vi.fn(),
 }));
 
-// TODO: remove this statement and move fig dir to shared
 const FIG_DIR = "~/.fig";
 
 beforeAll(() => {
@@ -170,24 +174,15 @@ describe("loadFigSubcommand", () => {
 });
 
 describe("loadSubcommandCached", () => {
-  // This is broken right now...
-  it.todo("works", async () => {
-    const oldLoadSpec = loadFigSubcommand;
-    (loadFigSubcommand as Mock) = vi.fn();
-    (loadFigSubcommand as Mock).mockResolvedValue({ name: "exampleSpec" });
-    const context: Fig.ShellContext = {
-      currentWorkingDirectory: "",
-      currentProcess: "",
-      sshPrefix: "",
-      environmentVariables: {},
-    };
-
-    await loadSubcommandCached({ name: "git", type: SpecLocationSource.LOCAL }, context);
-    await loadSubcommandCached({ name: "git", type: SpecLocationSource.LOCAL }, context);
-    expect(loadFigSubcommand).toHaveBeenCalledTimes(1);
-
-    await loadSubcommandCached({ name: "hg", type: SpecLocationSource.LOCAL }, context);
-    expect(loadFigSubcommand).toHaveBeenCalledTimes(2);
-    (loadFigSubcommand as unknown) = oldLoadSpec;
+  it("caches by location and name without replacing an imported binding", async () => {
+    defaultSpecRepository.clear();
+    vi.mocked(importSpecFromFile).mockClear();
+    const location = { name: "git", type: SpecLocationSource.LOCAL, path: "/specs/" } as const;
+    const first = await loadSubcommandCached(location);
+    expect(await loadSubcommandCached(location)).toBe(first);
+    expect(importSpecFromFile).toHaveBeenCalledTimes(1);
+    await loadSubcommandCached({ ...location, name: "hg" });
+    await loadSubcommandCached({ ...location, path: "/other/" });
+    expect(importSpecFromFile).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,3 +1,4 @@
+import type { Timing } from "@fig/shared/timing";
 import type { Annotation } from "@fig/autocomplete-parser/core";
 import type { Suggestion } from "@fig/shared/internal";
 import { getCWDForFilesAndFolders } from "@fig/shared/utils";
@@ -24,8 +25,8 @@ export type GeneratorState = {
 export const haveContextForGenerator = (context: GeneratorContext): boolean =>
   Boolean(context.currentWorkingDirectory);
 
-export function createGeneratorCache(read: SettingsReader) {
-  const generatorCache = new Cache();
+export function createGeneratorCache(read: SettingsReader, now: () => number) {
+  const generatorCache = new Cache(now);
   const generatorIds = new WeakMap<Fig.Generator, number>();
   let nextGeneratorId = 0;
   function generatorId(generator: Fig.Generator) {
@@ -80,6 +81,7 @@ export function createGeneratorCache(read: SettingsReader) {
   };
 }
 export type GeneratorServices = {
+  delay: Timing["delay"];
   listDirectory?(path: string, signal?: AbortSignal): Promise<string[]>;
   invoke<T>(fn: () => T): T;
   execute(
@@ -88,6 +90,6 @@ export type GeneratorServices = {
     signal?: AbortSignal,
   ): Promise<Fig.ExecuteCommandOutput>;
   cached: ReturnType<typeof createGeneratorCache>["runCachedGenerator"];
-  history(annotations: Annotation[], process: string): Fig.TemplateSuggestion[];
+  history(annotations: Annotation[], currentProcess: string): Fig.TemplateSuggestion[];
   timeout(): number;
 };

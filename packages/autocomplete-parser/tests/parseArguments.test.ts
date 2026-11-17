@@ -74,7 +74,12 @@ describe("createArgState", () => {
     ];
     const baseArgs: Internal.Arg[] = [{ generators }];
     const state = createArgState(baseArgs);
-    expect(state.args![0].generators).toEqual([{ script: ["foo"] }, folders, filepaths]);
+    expect(state.args![0].generators).toEqual([
+      { script: ["foo"] },
+      folders,
+      { template: ["help"] },
+      filepaths,
+    ]);
   });
 
   it("should prefer filepaths generator over folders", () => {
@@ -103,9 +108,23 @@ describe("createArgState", () => {
     const baseArgs: Internal.Arg[] = [{ generators }];
     const state = createArgState(baseArgs);
     expect(state.args![0].generators).toEqual([
-      Object.assign(filepaths, { filterTemplateSuggestions }),
+      { ...filepaths, filterTemplateSuggestions },
       { script: ["foo"] },
     ]);
+  });
+  it("does not leak one argument's filter into another argument", () => {
+    const originalFilter = filepaths.filterTemplateSuggestions;
+    const filtered = createArgState([
+      { generators: [{ template: "filepaths", filterTemplateSuggestions }] },
+    ]);
+    const unfiltered = createArgState([{ generators: [{ template: "filepaths" }] }]);
+    expect(filtered.args![0].generators[0]).not.toBe(filepaths);
+    const repeated = createArgState([
+      { generators: [{ template: "filepaths", filterTemplateSuggestions }] },
+    ]);
+    expect(repeated.args![0].generators[0]).toBe(filtered.args![0].generators[0]);
+    expect(unfiltered.args![0].generators).toEqual([filepaths]);
+    expect(filepaths.filterTemplateSuggestions).toBe(originalFilter);
   });
 });
 describe("updateArgState", () => {

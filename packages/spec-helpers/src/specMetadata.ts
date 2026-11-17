@@ -3,7 +3,7 @@ import type { Initializer, Subcommand } from "./convert";
 import { makeArray, SpecLocationSource } from "./utils";
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-type FigLoadSpecFn = Fig.LoadSpec extends infer U ? (U extends Function ? U : never) : never;
+type FigLoadSpecFn = Extract<Fig.LoadSpec, (...args: never[]) => unknown>;
 export type LoadSpec<ArgT = ArgMeta, OptionT = OptionMeta, SubcommandT = SubcommandMeta> =
   | Fig.SpecLocation[]
   | Subcommand<ArgT, OptionT, SubcommandT>

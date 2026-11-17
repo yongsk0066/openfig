@@ -14,7 +14,7 @@ const defaultContext: GeneratorContext = {
   environmentVariables: {},
 };
 
-describe.todo("getTemplateSuggestions", () => {
+describe("getTemplateSuggestions", () => {
   describe("help template", () => {
     const spec: Subcommand = {
       name: ["foo"],
@@ -117,6 +117,7 @@ describe.todo("getTemplateSuggestions", () => {
             text: "foo",
             type: TokenType.Subcommand,
             spec,
+            specLocation: { type: "global", name: "foo" },
           },
           {
             text: "help",
@@ -142,11 +143,11 @@ describe.todo("getTemplateSuggestions", () => {
             text: "foo",
             type: TokenType.Subcommand,
             spec,
+            specLocation: { type: "global", name: "foo" },
           },
           {
             text: "cat",
             type: TokenType.Subcommand,
-            spec,
           },
           {
             text: "help",
@@ -168,6 +169,7 @@ describe.todo("getTemplateSuggestions", () => {
             text: "foo",
             type: TokenType.Subcommand,
             spec,
+            specLocation: { type: "global", name: "foo" },
           },
           {
             text: "bar",

@@ -77,11 +77,37 @@
     {
       "files": [
         "packages/autocomplete-parser/src/{core,parserCore,specLoader,specRepository}.ts",
-        "packages/autocomplete-app/src/state/{model,transitions,effects,generator-plan,pipeline,insertion,keypress,types,fig-state}.ts",
-        "packages/autocomplete-app/src/{runtime,engine,parser/coordinator,history/repository,suggestions/index,suggestions/sorting}.ts"
+        "packages/autocomplete-app/src/state/{generators,model,transitions,effects,generator-plan,pipeline,insertion,keypress,types,fig-state}.ts",
+        "packages/autocomplete-app/src/{runtime,engine,subscription,parser/coordinator,parser/cacheScopes,generators/cache,generators/helpers,history/repository,suggestions/index,suggestions/sorting}.ts"
       ],
       "rules": {
-        "no-restricted-globals": ["error", "window", "document", "localStorage", "globalThis"]
+        "no-restricted-globals": [
+          "error",
+          "window",
+          "document",
+          "localStorage",
+          "globalThis",
+          "global",
+          "self",
+          "performance",
+          "Date",
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "queueMicrotask",
+          "setImmediate",
+          "clearImmediate",
+          "requestIdleCallback",
+          "cancelIdleCallback",
+          "process",
+          "fetch",
+          "crypto",
+          "eval",
+          "Function"
+        ]
       }
     },
     {

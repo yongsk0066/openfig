@@ -1,3 +1,4 @@
+import { withTimeout } from "@fig/shared/runtime-timing";
 import { Settings } from "@fig/api-bindings";
 import { executeCommand, getSetting, isInDevMode } from "@fig/api-bindings/wrappers";
 import * as loader from "./loadHelpers";
@@ -8,6 +9,7 @@ export {
   type SpecRepositoryPorts,
 } from "./specRepository";
 export const defaultSpecRepository = createSpecRepository({
+  withTimeout,
   loader: { ...loader, clear: () => loader.defaultSpecLoader.clear() },
   executeCommand,
   getSetting,

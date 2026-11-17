@@ -1,5 +1,4 @@
 import logger from "loglevel";
-import { sleep } from "@fig/shared/utils";
 import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
 import { getCustomSuggestions } from "../generators/customSuggestionsGenerator";
@@ -30,26 +29,14 @@ const requestSuggestions = (
     );
   } else {
     const filter = (suggestions: Fig.Suggestion[]) =>
-      generator.filterTemplateSuggestions && suggestions[0] && isTemplateSuggestion(suggestions[0])
-        ? generator.filterTemplateSuggestions(suggestions as Fig.TemplateSuggestion[])
+      generator.filterTemplateSuggestions &&
+      suggestions.length > 0 &&
+      suggestions.every(isTemplateSuggestion)
+        ? generator.filterTemplateSuggestions(suggestions)
         : suggestions;
     request = getCustomSuggestions(generator, context, signal, services, (values) =>
       onRefresh(filter(values)),
-    );
-    // filepaths/folders templates are now a sugar for two custom generators, we need to filter
-    // the suggestion created by those two custom generators
-    if (generator.filterTemplateSuggestions) {
-      request = (async () => {
-        // TODO: use symbols to detect if the the generator fn is filepaths/folders
-        // If the first custom suggestion has template meta properties then all the custom
-        // suggestions are too
-        const suggestions = await request;
-        if (suggestions[0] && isTemplateSuggestion(suggestions[0])) {
-          return generator.filterTemplateSuggestions!(suggestions as Fig.TemplateSuggestion[]);
-        }
-        return suggestions;
-      })();
-    }
+    ).then(filter);
   }
   return request;
 };
@@ -115,12 +102,13 @@ export const createGeneratorRunner = (
     };
     void (async () => {
       try {
-        if (debounceMs !== undefined) await sleep(debounceMs);
+        const services = servicesFor(generatorState.context);
+        if (debounceMs !== undefined) await services.delay(debounceMs, controller.signal);
         controller.signal.throwIfAborted();
         const result = await requestSuggestions(
           generatorState,
           controller.signal,
-          servicesFor(generatorState.context),
+          services,
           (values) => {
             if (initialized) publish(values);
             else refreshed = values;

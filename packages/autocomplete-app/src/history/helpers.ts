@@ -165,9 +165,9 @@ type WalkSubcommandCallbacks<ArgT, OptionT, SubcommandT> = {
   arg?: WalkCallback<ArgT>;
 };
 
-// TODO: handle loadSpec on args.
+// Consumes one loaded-spec segment; the repository splits file and inline transitions.
 export const walkSubcommand = <
-  ArgT = Metadata.ArgMeta,
+  ArgT extends { isVariadic?: boolean } = Metadata.ArgMeta,
   OptionT = Metadata.OptionMeta,
   SubcommandT = Metadata.SubcommandMeta,
 >(
@@ -202,14 +202,18 @@ export const walkSubcommand = <
           if (callbacks?.option && option) {
             callbacks.option(option, annotation);
           }
-          return { ...state, option, optionArgIndex: 0 };
+          return { ...state, option, optionArgIndex: 0, currentArg: undefined };
         }
         if (type === TokenType.OptionArg) {
           const arg = state.option?.args[state.optionArgIndex];
           if (callbacks?.arg && arg) {
             callbacks.arg(arg, annotation);
           }
-          return { ...state, optionArgIndex: state.optionArgIndex + 1 };
+          return {
+            ...state,
+            currentArg: arg,
+            optionArgIndex: state.optionArgIndex + (arg?.isVariadic ? 0 : 1),
+          };
         }
         if (type === TokenType.SubcommandArg) {
           const arg = state.subcommand.args[state.subcommandArgIndex];
@@ -219,7 +223,8 @@ export const walkSubcommand = <
           return {
             ...state,
             option: undefined,
-            subcommandArgIndex: state.subcommandArgIndex + 1,
+            currentArg: arg,
+            subcommandArgIndex: state.subcommandArgIndex + (arg?.isVariadic ? 0 : 1),
           };
         }
         return state;
@@ -229,6 +234,7 @@ export const walkSubcommand = <
         option?: Internal.Option<ArgT, OptionT>;
         optionArgIndex: number;
         subcommandArgIndex: number;
+        currentArg?: ArgT;
       },
     );
 
@@ -241,12 +247,12 @@ export const walkSubcommand = <
       case TokenType.OptionArg:
         return {
           type,
-          arg: finalState.option?.args[finalState.optionArgIndex - 1],
+          arg: finalState.currentArg,
         };
       case TokenType.SubcommandArg:
         return {
           type,
-          arg: finalState.subcommand.args[finalState.subcommandArgIndex - 1],
+          arg: finalState.currentArg,
         };
       case TokenType.None:
       default:

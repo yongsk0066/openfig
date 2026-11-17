@@ -1,7 +1,8 @@
+import type { Timing } from "@fig/shared/timing";
 import logger, { type Logger } from "loglevel";
 import * as semver from "semver";
 import { LruCache } from "@fig/shared/lru";
-import { ensureTrailingSlash, withTimeout } from "@fig/shared/utils";
+import { ensureTrailingSlash } from "@fig/shared/utils";
 import { MOST_USED_SPECS } from "./constants.js";
 import { LoadLocalSpecError } from "./errors.js";
 function parseSpecIndex(value: unknown): {
@@ -32,6 +33,7 @@ export type SpecFileImport =
     };
 
 export type SpecLoaderPorts = {
+  withTimeout: Timing["timeout"];
   executeCommand: Fig.ExecuteCommandFunction;
   /** Shared version requests must not inherit one input subscriber's abort signal. */
   executeVersionCommand?: Fig.ExecuteCommandFunction;
@@ -58,6 +60,7 @@ export function createSpecLoaderCaches(catalog = createSpecCatalogCaches()) {
 }
 export function createSpecLoader(
   {
+    withTimeout,
     executeCommand,
     executeVersionCommand = executeCommand,
     fread,
@@ -107,7 +110,7 @@ export function createSpecLoader(
     return importString(result);
   }
 
-  // TODO: this is a problem for diff-versioned specs
+  // The repository supplies the version-qualified path (for example, git/2.40).
   async function importBundledSpec<T = SpecFileImport>(name: string): Promise<T> {
     return withTimeout(20000, importModule(`spec://localhost/${name}.js`) as Promise<T>);
   }
@@ -116,7 +119,7 @@ export function createSpecLoader(
     return readJson(`spec://localhost/${path}.json`);
   }
 
-  // TODO: this is a problem for diff-versioned specs
+  // The repository supplies the version-qualified path (for example, git/2.40).
   async function importFromLocalhost<T = SpecFileImport>(
     name: string,
     port: number | string,

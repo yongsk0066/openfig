@@ -15,10 +15,11 @@ workspace = true
 clap.workspace = true
 fig_desktop_api.workspace = true
 fig_os_shim.workspace = true
+fig_shell_ipc.workspace = true
+fig_proto.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 base64.workspace = true
-fig_proto.workspace = true
 insta.workspace = true
 tempfile.workspace = true

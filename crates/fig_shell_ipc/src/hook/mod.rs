@@ -91,6 +91,7 @@ pub async fn start_hook_ipc(
     socket_path: PathBuf,
     shell_sessions: Arc<ShellSessions>,
     hook: impl ShellHookHandler + Send + Clone + 'static,
+    io: process::Service,
 ) -> Result<()> {
     if let Some(parent) = socket_path.parent() {
         if !parent.exists() {
@@ -106,10 +107,10 @@ pub async fn start_hook_ipc(
     tokio::fs::remove_file(&socket_path).await.ok();
     let listener = UnixListener::bind(&socket_path).with_context(|| format!("binding {}", socket_path.display()))?;
 
-    while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(handle_connection(stream, shell_sessions.clone(), hook.clone()));
-    }
-    Ok(())
+    fig_ipc::serve_connections(listener, 128, nix::unistd::getuid().as_raw(), move |stream| {
+        handle_connection(stream, shell_sessions.clone(), hook.clone(), io.clone())
+    })
+    .await
 }
 
 /// Lines off the socket, at most [`MAX_LINE_LEN`] bytes each. A longer line is skipped whole.
@@ -219,10 +220,29 @@ impl Session {
     }
 }
 
+/// Nested writer/command tasks and the session registration cannot outlive their connection.
+struct ConnectionOwner {
+    writer: tokio::task::AbortHandle,
+    commands: Option<tokio::task::AbortHandle>,
+    session: Option<(Arc<ShellSessions>, Uuid)>,
+}
+impl Drop for ConnectionOwner {
+    fn drop(&mut self) {
+        self.writer.abort();
+        if let Some(commands) = &self.commands {
+            commands.abort();
+        }
+        if let Some((sessions, id)) = &self.session {
+            sessions.remove_id(id);
+        }
+    }
+}
+
 async fn handle_connection(
     stream: UnixStream,
     shell_sessions: Arc<ShellSessions>,
     mut hook: impl ShellHookHandler + Send,
+    io: process::Service,
 ) {
     let (reader, writer) = stream.into_split();
     let mut lines = Lines {
@@ -231,6 +251,11 @@ async fn handle_connection(
     };
     let (out, out_rx) = mpsc::channel(64);
     let mut writer_task = tokio::spawn(write_lines(writer, out_rx));
+    let mut owner = ConnectionOwner {
+        writer: writer_task.abort_handle(),
+        commands: None,
+        session: None,
+    };
 
     let hello = match tokio::time::timeout(HELLO_TIMEOUT, lines.next()).await {
         Ok(Ok(Some(line))) if line == wire::PING => {
@@ -318,7 +343,9 @@ async fn handle_connection(
         intercept: InterceptMode::Unlocked,
         intercept_global: InterceptMode::Unlocked,
     });
-    let command_task = tokio::spawn(handle_commands(command_rx, session.clone(), out.clone()));
+    owner.session = Some((shell_sessions.clone(), session_id));
+    let command_task = tokio::spawn(handle_commands(command_rx, session.clone(), out.clone(), io));
+    owner.commands = Some(command_task.abort_handle());
     let _ = out.send(DaemonLine::Welcome).await;
     info!(%session_id, "zsh hook session connected");
 
@@ -505,6 +532,7 @@ async fn handle_commands(
     commands: flume::Receiver<ShellCommand>,
     session: Arc<Mutex<Session>>,
     out: mpsc::Sender<DaemonLine>,
+    io: process::Service,
 ) {
     let mut processes = tokio::task::JoinSet::new();
     loop {
@@ -640,8 +668,9 @@ async fn handle_commands(
                         cwd: session.cwd.clone(),
                     }
                 };
+                let io = io.clone();
                 processes.spawn(async move {
-                    let run = process::run(
+                    let run = io.run(
                         process::Request {
                             executable,
                             arguments,
@@ -703,7 +732,12 @@ mod tests {
     async fn exchange(first: &str) -> (Vec<String>, bool) {
         let (desktop, shell) = UnixStream::pair().unwrap();
         let state = Arc::new(ShellSessions::new());
-        tokio::spawn(handle_connection(desktop, state.clone(), NoHooks));
+        tokio::spawn(handle_connection(
+            desktop,
+            state.clone(),
+            NoHooks,
+            process::Service::new("unused-test-worker".into()),
+        ));
         let (reader, mut writer) = shell.into_split();
         writer.write_all(format!("{first}\n").as_bytes()).await.unwrap();
         let mut lines = BufReader::new(reader).lines();
@@ -713,6 +747,40 @@ mod tests {
         }
         let session = state.most_recent().is_some();
         (got, session)
+    }
+
+    #[tokio::test]
+    async fn aborted_connection_unregisters_session_and_closes_writer() {
+        let (desktop, mut shell) = UnixStream::pair().unwrap();
+        let state = Arc::new(ShellSessions::new());
+        let task = tokio::spawn(handle_connection(
+            desktop,
+            state.clone(),
+            NoHooks,
+            process::Service::new("unused-test-worker".into()),
+        ));
+        shell
+            .write_all(format!("HELLO {HOOK_PROTOCOL_VERSION} 1.2 zsh 1 /dev/ttys0 user\n").as_bytes())
+            .await
+            .unwrap();
+        let mut reader = BufReader::new(shell);
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(state.most_recent().is_some(), "{line}");
+        task.abort();
+        let _ = task.await;
+        assert!(state.most_recent().is_none());
+        line.clear();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
     }
 
     #[tokio::test]

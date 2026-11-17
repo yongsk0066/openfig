@@ -69,7 +69,7 @@ use crate::event::{
 };
 use crate::notification_bus::{
     JsonNotification,
-    NOTIFICATION_BUS,
+    NotificationBus,
 };
 use crate::platform::{
     PlatformBoundEvent,
@@ -165,7 +165,10 @@ impl WebviewManager {
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApplicationServices {
+            settings_bus: Default::default(),
+            icon_cache: Default::default(),
             page_epoch: Default::default(),
+            io: fig_shell_ipc::process::Service::installed()?,
             processes: Default::default(),
             native_icons: fig_desktop::native::Icons::new().ok(),
             shell_sessions: shell_sessions.clone(),
@@ -256,12 +259,13 @@ impl WebviewManager {
             proxy: self.proxy.clone(),
         };
 
+        let io = self.api_state.io.clone();
         // zsh shells that report through `fig.zsh`; `doctor` asks it whether it answers.
         {
             let shell_sessions = self.shell_sessions.clone();
             tokio::spawn(async move {
                 let result = match fig_util::directories::hook_socket_path() {
-                    Ok(path) => fig_shell_ipc::hook::start_hook_ipc(path, shell_sessions, shell_hook).await,
+                    Ok(path) => fig_shell_ipc::hook::start_hook_ipc(path, shell_sessions, shell_hook, io).await,
                     Err(err) => Err(err.into()),
                 };
                 if let Err(err) = result {
@@ -270,9 +274,14 @@ impl WebviewManager {
             });
         }
 
-        file_watcher::setup_listeners(self.notifications_state.clone(), self.proxy.clone()).await;
+        file_watcher::setup_listeners(
+            self.notifications_state.clone(),
+            self.proxy.clone(),
+            self.api_state.settings_bus.clone(),
+        )
+        .await;
 
-        init_webview_notification_listeners(self.proxy.clone()).await;
+        init_webview_notification_listeners(self.proxy.clone(), &self.api_state.settings_bus).await;
 
         // The tray icon is created inside the loop, at `StartCause::Init`, not here: tray-icon
         // (0.24) requires the macOS event loop to be running on the main thread when the status
@@ -734,14 +743,14 @@ pub fn build_autocomplete(
             "fig".into(),
             utils::wrap_custom_protocol("fig", AutocompleteId, move |request, id| {
                 let state = fig_icons.clone();
-                async move { icons::handle(request, id, state.native_icons.as_ref()).await }
+                async move { icons::handle(request, id, state.native_icons.as_ref(), &state.icon_cache).await }
             }),
         )
         .with_asynchronous_custom_protocol(
             "icon".into(),
             utils::wrap_custom_protocol("icon", AutocompleteId, move |request, id| {
                 let state = native_icons.clone();
-                async move { icons::handle(request, id, state.native_icons.as_ref()).await }
+                async move { icons::handle(request, id, state.native_icons.as_ref(), &state.icon_cache).await }
             }),
         )
         .with_asynchronous_custom_protocol(
@@ -775,12 +784,12 @@ pub fn build_autocomplete(
     Ok((window, webview))
 }
 
-async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
+async fn init_webview_notification_listeners(proxy: EventLoopProxy, bus: &NotificationBus) {
     macro_rules! watcher {
         ($type:ident, $name:expr, $on_update:expr) => {{
             let proxy = proxy.clone();
+            let mut rx = bus.$type($name.into());
             tokio::spawn(async move {
-                let mut rx = NOTIFICATION_BUS.$type($name.into());
                 loop {
                     let res = rx.recv().await;
                     match res {

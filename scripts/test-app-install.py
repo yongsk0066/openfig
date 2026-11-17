@@ -16,7 +16,7 @@ class AppInstallTests(BashTests):
             root = Path(directory)
             source, destination = root/'new.app', root/'Fig.app'
             for app, marker in [(source, 'new'), (destination, 'old')]:
-                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
+                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
                     binary = app/'Contents'/relative
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_text('#!/bin/sh\nexit 0\n'); binary.chmod(0o700)
@@ -24,7 +24,7 @@ class AppInstallTests(BashTests):
             if failure in ['changed-ime', 'resigned-ime']:
                 helper = source/'Contents/Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method'
                 helper.write_text('#!/bin/sh\necho "helper $1"\nexit 0\n')
-            if failure == 'helper': (source/'Contents/MacOS/fig_native_worker').unlink()
+            if failure in ['helper', 'io-helper']: (source/'Contents/MacOS'/('fig_io_worker' if failure == 'io-helper' else 'fig_native_worker')).unlink()
             code = '''source "$1"
 ditto() { [[ "$FAILURE" != copy ]] || return 1; cp -R "$1" "$2"; }
 codesign() {
@@ -72,6 +72,9 @@ replace_app "$2" "$3" q fig_desktop
     def test_missing_native_helper_preserves_installed_app(self):
         result, current, _ = self.run_case('helper')
         self.assertNotEqual(result.returncode,0); self.assertEqual(current,'old')
+    def test_missing_io_helper_preserves_installed_app(self):
+        result, current, _ = self.run_case('io-helper')
+        self.assertNotEqual(result.returncode,0); self.assertEqual(current,'old')
     def test_invalid_signature_preserves_installed_app(self):
         result, current, _ = self.run_case('signature')
         self.assertNotEqual(result.returncode,0); self.assertEqual(current,'old')
@@ -85,16 +88,16 @@ replace_app "$2" "$3" q fig_desktop
 
 class AppStageTests(BashTests):
     def test_stage_never_stops_launches_or_replaces_live_app(self):
-        for failure in ['none', 'copy', 'signature', 'helper']:
+        for failure in ['none', 'copy', 'signature', 'helper', 'io-helper']:
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 source, destination, live = root/'new.app', root/'updates/pending.app', root/'Fig.app'
                 live.mkdir(); (live/'marker').write_text('running-old')
-                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
+                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
                     binary = source/'Contents'/relative
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_text('#!/bin/sh\nexit 99\n'); binary.chmod(0o700)
-                if failure == 'helper': (source/'Contents/MacOS/fig_native_worker').unlink()
+                if failure in ['helper', 'io-helper']: (source/'Contents/MacOS'/('fig_io_worker' if failure == 'io-helper' else 'fig_native_worker')).unlink()
                 code = '''source "$1"
                 ditto() { [[ "$FAILURE" != copy ]] || return 1; cp -R "$1" "$2"; }
                 codesign() { [[ "$FAILURE" != signature ]]; }

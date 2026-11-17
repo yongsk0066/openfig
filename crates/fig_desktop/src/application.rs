@@ -8,8 +8,11 @@ use crate::webview::notification::WebviewNotificationsState;
 use crate::webview::page_epoch::PageEpoch;
 
 pub struct ApplicationServices {
+    pub settings_bus: Arc<crate::notification_bus::NotificationBus>,
+    pub icon_cache: crate::protocol::icons::Cache,
     pub page_epoch: Arc<PageEpoch>,
     pub native_icons: Option<fig_desktop::native::Icons>,
+    pub io: fig_shell_ipc::process::Service,
     pub processes: crate::request::process::Processes,
     pub shell_sessions: Arc<ShellSessions>,
     pub notifications_state: Arc<WebviewNotificationsState>,

@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use dashmap::DashMap;
 use fnv::FnvBuildHasher;
 use serde_json::Value;
@@ -9,8 +7,6 @@ use tokio::sync::broadcast::{
 };
 
 const CHANNEL_SIZE: usize = 8;
-
-pub static NOTIFICATION_BUS: LazyLock<NotificationBus> = LazyLock::new(NotificationBus::new);
 
 #[derive(Debug, Clone)]
 pub enum JsonNotification {
@@ -38,15 +34,25 @@ impl JsonNotification {
 }
 
 /// Fan-out for `settings.json` changes, from the file watcher to the webview watchers.
-///
-/// There used to be a parallel set of `state_channels` with `send_state*`/`subscribe_state*`
-/// and no subscriber anywhere — left over from before state moved into sqlite.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct NotificationBus {
+    lifetime: tokio::sync::watch::Sender<()>,
     settings_channels: DashMap<String, Sender<JsonNotification>, FnvBuildHasher>,
 }
 
+impl Default for NotificationBus {
+    fn default() -> Self {
+        Self {
+            settings_channels: Default::default(),
+            lifetime: tokio::sync::watch::channel(()).0,
+        }
+    }
+}
 impl NotificationBus {
+    pub fn lifetime(&self) -> tokio::sync::watch::Receiver<()> {
+        self.lifetime.subscribe()
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -87,5 +93,29 @@ impl NotificationBus {
             })
             .ok();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn owners_do_not_share_notifications_and_drop_closes_their_subscriptions() {
+        let first = NotificationBus::new();
+        let second = NotificationBus::new();
+        let mut a = first.subscribe_settings("key".into());
+        let mut b = second.subscribe_settings("key".into());
+        let mut lifetime = first.lifetime();
+        first.send_settings_new("key", &Value::Bool(true));
+        assert_eq!(a.recv().await.unwrap().as_bool(), Some(true));
+        assert!(b.try_recv().is_err());
+        drop(first);
+        assert!(lifetime.changed().await.is_err());
+        assert!(matches!(
+            a.recv().await,
+            Err(tokio::sync::broadcast::error::RecvError::Closed)
+        ));
+        second.send_settings_new("key", &Value::Bool(false));
+        assert_eq!(b.recv().await.unwrap().as_bool(), Some(false));
     }
 }

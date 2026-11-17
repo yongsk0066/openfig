@@ -1028,6 +1028,7 @@ dependencies = [
  "fig_desktop_api",
  "fig_os_shim",
  "fig_proto",
+ "fig_shell_ipc",
  "insta",
  "tempfile",
  "tokio",
@@ -1255,6 +1256,7 @@ version = "1.19.7"
 dependencies = [
  "anyhow",
  "async-trait",
+ "fig_ipc",
  "fig_proto",
  "fig_settings",
  "fig_util",
@@ -1262,6 +1264,7 @@ dependencies = [
  "nix 0.32.0",
  "parking_lot 0.13.0",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

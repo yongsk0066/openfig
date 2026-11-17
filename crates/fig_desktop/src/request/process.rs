@@ -107,6 +107,7 @@ pub async fn run(
     window: WindowId,
     processes: &Processes,
     shell_sessions: &ShellSessions,
+    io: &process::Service,
 ) -> RequestResult {
     let token = request
         .cancellation_token
@@ -135,7 +136,7 @@ pub async fn run(
     if uuid.is_some() && shell.is_none() {
         return Err("Terminal session has disconnected".into());
     }
-    let run = process::run(
+    let run = io.run(
         Request {
             executable: request.executable,
             arguments: request.arguments,

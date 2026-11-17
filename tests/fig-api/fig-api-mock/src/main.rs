@@ -20,6 +20,15 @@ enum Cli {
 /// that needs the app is unimplemented.
 async fn desktop(_message_id: i64, request: DesktopRequest) -> RequestResult {
     match request {
+        DesktopRequest::Directory { path, classify } => {
+            let io = fig_shell_ipc::process::Service::installed().map_err(|e| e.to_string())?;
+            let file_names = io.directory(path, classify).await?;
+            Ok(Box::new(
+                fig_proto::fig::server_originated_message::Submessage::ContentsOfDirectoryResponse(
+                    fig_proto::fig::ContentsOfDirectoryResponse { file_names },
+                ),
+            ))
+        },
         DesktopRequest::Notification(_) => RequestResult::success(),
         DesktopRequest::InsertText(request) => RequestResult::unimplemented(request),
         DesktopRequest::RunProcess(request) => RequestResult::unimplemented(request),

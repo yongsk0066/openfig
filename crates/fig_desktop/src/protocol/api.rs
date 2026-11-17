@@ -58,6 +58,11 @@ pub async fn handle(
     } else {
         None
     };
+    if request.body().len() > fig_proto::MAX_MESSAGE_SIZE {
+        return Ok(Response::builder()
+            .status(StatusCode::PAYLOAD_TOO_LARGE)
+            .body(Cow::Borrowed(b"API request exceeds 16 MiB".as_slice()))?);
+    }
     let client_message = ClientOriginatedMessage::decode(Bytes::from(request.into_body()))?;
     let operation = async {
         let _sequence = match client_message.submessage {
@@ -131,7 +136,18 @@ mod tests {
 
     fn api_state() -> Arc<ApplicationServices> {
         Arc::new(ApplicationServices {
+            settings_bus: Default::default(),
+            icon_cache: Default::default(),
             page_epoch: Default::default(),
+            io: fig_shell_ipc::process::Service::new(
+                std::env::current_exe()
+                    .unwrap()
+                    .ancestors()
+                    .find(|p| p.file_name().is_some_and(|n| n == "deps" || n == "build"))
+                    .and_then(|p| p.parent())
+                    .unwrap()
+                    .join("fig_io_worker"),
+            ),
             processes: Default::default(),
             native_icons: fig_desktop::native::Icons::new().ok(),
             shell_sessions: Arc::new(ShellSessions::default()),
@@ -154,6 +170,20 @@ mod tests {
         assert_eq!(
             handle(state, request, AUTOCOMPLETE_ID).await.unwrap().status(),
             StatusCode::CONFLICT
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_body_is_rejected_before_protobuf_decode() {
+        let request = Request::builder()
+            .method(Method::POST)
+            .header(CONTENT_TYPE, APPLICATION_FIG_API.clone())
+            .header("x-fig-view-epoch", "1")
+            .body(vec![255; fig_proto::MAX_MESSAGE_SIZE + 1])
+            .unwrap();
+        assert_eq!(
+            handle(api_state(), request, AUTOCOMPLETE_ID).await.unwrap().status(),
+            StatusCode::PAYLOAD_TOO_LARGE
         );
     }
 

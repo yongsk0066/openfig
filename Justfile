@@ -63,6 +63,7 @@ rust:
 bundle:
     rm -rf "{{app}}"
     mkdir -p "{{app}}/Contents/MacOS" "{{app}}/Contents/Resources"
+    cp "{{tdir}}/fig_io_worker" "{{app}}/Contents/MacOS/fig_io_worker"
     cp "{{tdir}}/fig_native_worker" "{{app}}/Contents/MacOS/fig_native_worker"
     cp "{{tdir}}/fig_desktop" "{{app}}/Contents/MacOS/$DESKTOP_BIN"
     cp "{{tdir}}/fig_cli"     "{{app}}/Contents/MacOS/$CLI_BIN"
@@ -93,6 +94,7 @@ sign:
     identity="${identity:--}"; \
     echo "codesign identity: $identity"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
+    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.ioworker" "{{app}}/Contents/MacOS/fig_io_worker"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.nativeworker" "{{app}}/Contents/MacOS/fig_native_worker"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
     codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
@@ -124,7 +126,7 @@ dev-web:
     pnpm -C packages/autocomplete-app dev & pnpm -C packages/dashboard-app dev; wait
 
 dev:
-    cargo build --locked -p fig_desktop --bin fig_native_worker
+    cargo build --locked -p fig_desktop --bin fig_native_worker --bin fig_io_worker
     -"/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" quit 2>/dev/null
     AUTOCOMPLETE_URL=http://localhost:3124 DASHBOARD_URL=http://localhost:3433 cargo run --locked -p fig_desktop
 

@@ -155,7 +155,8 @@ impl AssetCache {
         self.entries.insert(key, value);
     }
 }
-static ASSET_CACHE: LazyLock<Mutex<AssetCache>> = LazyLock::new(|| Mutex::new(AssetCache::default()));
+#[derive(Default)]
+pub struct Cache(Mutex<AssetCache>);
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 struct AssetCacheKey {
@@ -167,6 +168,7 @@ async fn cached_asset_response(
     asset: &AssetSpecifier<'_>,
     fallback: Option<&str>,
     native: Option<&Icons>,
+    cache: &Cache,
 ) -> Response<Cow<'static, [u8]>> {
     trace!(?asset, "building response for asset");
 
@@ -175,7 +177,7 @@ async fn cached_asset_response(
         fallback: fallback.map(ToOwned::to_owned),
     };
 
-    if let Some((data, kind)) = ASSET_CACHE.lock().await.entries.get(&key).cloned() {
+    if let Some((data, kind)) = cache.0.lock().await.entries.get(&key).cloned() {
         return build_asset_response((*data).clone(), kind);
     }
     let resolved = match ASSETS.get(asset) {
@@ -184,7 +186,7 @@ async fn cached_asset_response(
     };
     let resolved = match resolved {
         Some(value) => {
-            ASSET_CACHE.lock().await.insert(key, value.clone());
+            cache.0.lock().await.insert(key, value.clone());
             value
         },
         None => fallback_asset(fallback),
@@ -196,6 +198,7 @@ pub async fn handle(
     request: Request<Vec<u8>>,
     _: WindowId,
     native: Option<&Icons>,
+    cache: &Cache,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
     debug!(uri =% request.uri(), "fig:// protocol request");
     let url = Url::parse(&request.uri().to_string())?;
@@ -228,7 +231,9 @@ pub async fn handle(
             Some(build_asset_response(png_bytes.into_inner().into(), AssetKind::Png))
         },
         Some("icon" | "asset") => match pairs.get("asset").or_else(|| pairs.get("type")) {
-            Some(name) => Some(cached_asset_response(&AssetSpecifier::Named(Cow::Borrowed(name)), None, native).await),
+            Some(name) => {
+                Some(cached_asset_response(&AssetSpecifier::Named(Cow::Borrowed(name)), None, native, cache).await)
+            },
             None => None,
         },
         Some("path") => {
@@ -243,7 +248,7 @@ pub async fn handle(
             // resolves real file/folder/symlink icons; an unavailable helper uses a lexical hint.
             let fallback = Some(if path_str.ends_with('/') { "folder" } else { "file" });
 
-            Some(cached_asset_response(&AssetSpecifier::PathBased(Cow::Borrowed(path)), fallback, native).await)
+            Some(cached_asset_response(&AssetSpecifier::PathBased(Cow::Borrowed(path)), fallback, native, cache).await)
         },
         _ => None,
     };
@@ -261,25 +266,29 @@ mod tests {
     /// again — the `PathBased` path is a LaunchServices query plus three codec passes.
     #[tokio::test]
     async fn the_same_asset_is_only_resolved_once() {
+        let cache = Cache::default();
         let asset = AssetSpecifier::Named("git".into());
         let key = AssetCacheKey {
             asset: asset.to_owned_key(),
             fallback: None,
         };
 
-        let first = cached_asset_response(&asset, None, None).await;
+        let first = cached_asset_response(&asset, None, None, &cache).await;
         assert_eq!(first.status(), wry::http::StatusCode::OK);
         assert!(
-            ASSET_CACHE.lock().await.entries.contains_key(&key),
+            cache.0.lock().await.entries.contains_key(&key),
             "the first request must populate the cache"
         );
 
         // Overwrite the cached bytes: if the second request re-resolves, it will not see them.
         let marker: Arc<Cow<'static, [u8]>> = Arc::new(Cow::Owned(b"cached".to_vec()));
-        ASSET_CACHE.lock().await.insert(key.clone(), (marker, AssetKind::Png));
+        cache.0.lock().await.insert(key.clone(), (marker, AssetKind::Png));
 
-        let second = cached_asset_response(&asset, None, None).await;
+        let second = cached_asset_response(&asset, None, None, &cache).await;
         assert_eq!(second.body().as_ref(), b"cached");
+        let independent = Cache::default();
+        let fresh = cached_asset_response(&asset, None, None, &independent).await;
+        assert_eq!(fresh.body().as_ref(), first.body().as_ref());
     }
 
     /// Different fallbacks give different answers for the same name, so the key has to carry it.
@@ -317,13 +326,14 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_native_loop_returns_fallback_without_caching_failure() {
+        let cache = Cache::default();
         let asset = AssetSpecifier::Named("missing-native-test-type".into());
         let key = AssetCacheKey {
             asset: asset.to_owned_key(),
             fallback: None,
         };
-        let response = cached_asset_response(&asset, None, None).await;
+        let response = cached_asset_response(&asset, None, None, &cache).await;
         assert_eq!(response.body().as_ref(), TEMPLATE_BYTES);
-        assert!(!ASSET_CACHE.lock().await.entries.contains_key(&key));
+        assert!(!cache.0.lock().await.entries.contains_key(&key));
     }
 }

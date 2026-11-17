@@ -24,10 +24,14 @@ use tracing::{
 };
 
 use crate::EventLoopProxy;
-use crate::notification_bus::NOTIFICATION_BUS;
+use crate::notification_bus::NotificationBus;
 use crate::webview::notification::WebviewNotificationsState;
 
-pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>, proxy: EventLoopProxy) {
+pub async fn setup_listeners(
+    notifications_state: Arc<WebviewNotificationsState>,
+    proxy: EventLoopProxy,
+    bus: Arc<NotificationBus>,
+) {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
     let watcher = notify::recommended_watcher(move |res| match res {
@@ -69,6 +73,8 @@ pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>
         },
     };
 
+    let mut lifetime = bus.lifetime();
+    let bus = Arc::downgrade(&bus);
     tokio::spawn(async move {
         let _watcher = watcher;
 
@@ -80,7 +86,14 @@ pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>
             },
         };
 
-        while let Some(event) = rx.recv().await {
+        loop {
+            let event = tokio::select! {
+                _ = lifetime.changed() => break,
+                event = rx.recv() => match event { Some(event) => event, None => break },
+            };
+            let Some(bus) = bus.upgrade() else {
+                break;
+            };
             trace!(?event, "Settings event");
 
             if let Some(settings_path) = &settings_path
@@ -122,15 +135,15 @@ pub async fn setup_listeners(notifications_state: Arc<WebviewNotificationsState>
                             &settings,
                             |key, value| {
                                 debug!(%key, %value, "Setting added");
-                                NOTIFICATION_BUS.send_settings_new(key, value);
+                                bus.send_settings_new(key, value);
                             },
                             |key, old, new| {
                                 debug!(%key, %old, %new, "Setting change");
-                                NOTIFICATION_BUS.send_settings_changed(key, old, new);
+                                bus.send_settings_changed(key, old, new);
                             },
                             |key, value| {
                                 debug!(%key, %value, "Setting removed");
-                                NOTIFICATION_BUS.send_settings_remove(key, value);
+                                bus.send_settings_remove(key, value);
                             },
                         );
 

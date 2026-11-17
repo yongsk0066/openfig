@@ -27,12 +27,20 @@ pub async fn handle(
     proxy: &dyn crate::event::EventSender,
 ) -> RequestResult {
     match request {
+        DesktopRequest::Directory { path, classify } => {
+            let file_names = state.io.directory(path, classify).await?;
+            Ok(Box::new(
+                fig_proto::fig::server_originated_message::Submessage::ContentsOfDirectoryResponse(
+                    fig_proto::fig::ContentsOfDirectoryResponse { file_names },
+                ),
+            ))
+        },
         DesktopRequest::InsertText(request) => insert_text::insert_text(request, &state.shell_sessions, proxy).await,
         DesktopRequest::Notification(request) => {
             notifications::handle_request(request, window_id, message_id, &state.notifications_state).await
         },
         DesktopRequest::RunProcess(request) => {
-            process::run(request, window_id, &state.processes, &state.shell_sessions).await
+            process::run(request, window_id, &state.processes, &state.shell_sessions, &state.io).await
         },
         DesktopRequest::CancelProcess(request) => {
             state.processes.cancel(window_id, &request.cancellation_token)?;

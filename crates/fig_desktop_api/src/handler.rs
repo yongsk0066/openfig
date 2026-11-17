@@ -30,6 +30,7 @@ use crate::requests::{
 /// the event loop. [`api_request`] hands these to the caller.
 #[derive(Debug)]
 pub enum DesktopRequest {
+    Directory { path: std::path::PathBuf, classify: bool },
     InsertText(InsertTextRequest),
     Notification(NotificationRequest),
     RunProcess(RunProcessRequest),
@@ -126,7 +127,14 @@ async fn handle_request(
                 WriteFileRequest(request) => fs::write_file(request, env).await,
                 AppendToFileRequest(request) => fs::append_to_file(request, env).await,
                 DestinationOfSymbolicLinkRequest(request) => fs::destination_of_symbolic_link(request, env).await,
-                ContentsOfDirectoryRequest(request) => fs::contents_of_directory(request, env).await,
+                ContentsOfDirectoryRequest(request) => {
+                    let path = request.directory.as_ref().ok_or("No path provided")?;
+                    desktop(message_id, DesktopRequest::Directory {
+                        path: crate::util::resolve_filepath(path, env).as_std_path().to_owned(),
+                        classify: request.append_directory_separator(),
+                    })
+                    .await
+                },
                 CreateDirectoryRequest(request) => fs::create_directory_request(request, env).await,
                 // notifications
                 NotificationRequest(request) => desktop(message_id, DesktopRequest::Notification(request)).await,

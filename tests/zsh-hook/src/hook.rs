@@ -232,8 +232,9 @@ impl HookShell {
                 shell_sessions = Some(state.clone());
                 let path = socket.clone();
                 let recorder = recorder.clone();
+                let io = fig_shell_ipc::process::Service::new(cli.with_file_name("fig_io_worker"));
                 tasks.push(tokio::spawn(async move {
-                    fig_shell_ipc::hook::start_hook_ipc(path, state, recorder)
+                    fig_shell_ipc::hook::start_hook_ipc(path, state, recorder, io)
                         .await
                         .unwrap();
                 }));

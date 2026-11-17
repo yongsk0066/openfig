@@ -6,6 +6,7 @@ verify_app() {
   codesign --verify --deep --strict "$app"
   test -x "$app/Contents/MacOS/$desktop"
   test -x "$app/Contents/MacOS/fig_native_worker"
+  test -x "$app/Contents/MacOS/fig_io_worker"
   test -x "$app/Contents/MacOS/$cli"
   test -x "$app/Contents/Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method"
 }

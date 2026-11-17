@@ -241,12 +241,12 @@ impl WebviewManager {
             &self.shell_sessions,
         )?;
 
-        // Start the local ipc task, listens for requests to the desktop socket.
+        let mut tasks = tokio::task::JoinSet::new();
         {
             let shell_sessions = self.shell_sessions.clone();
             let notifications_state = self.notifications_state.clone();
             let event_loop = self.proxy.clone();
-            tokio::spawn(async move {
+            tasks.spawn(async move {
                 match local_ipc::start_local_ipc(shell_sessions, notifications_state, event_loop).await {
                     Ok(_) => (),
                     Err(err) => error!("Unable to start local ipc: {:?}", err),
@@ -263,7 +263,7 @@ impl WebviewManager {
         // zsh shells that report through `fig.zsh`; `doctor` asks it whether it answers.
         {
             let shell_sessions = self.shell_sessions.clone();
-            tokio::spawn(async move {
+            tasks.spawn(async move {
                 let result = match fig_util::directories::hook_socket_path() {
                     Ok(path) => fig_shell_ipc::hook::start_hook_ipc(path, shell_sessions, shell_hook, io).await,
                     Err(err) => Err(err.into()),
@@ -274,19 +274,15 @@ impl WebviewManager {
             });
         }
 
+        init_webview_notification_listeners(&mut tasks, self.proxy.clone(), &self.api_state.settings_bus);
         file_watcher::setup_listeners(
+            &mut tasks,
             self.notifications_state.clone(),
             self.proxy.clone(),
             self.api_state.settings_bus.clone(),
-        )
-        .await;
+        );
 
-        init_webview_notification_listeners(self.proxy.clone(), &self.api_state.settings_bus).await;
-
-        // The tray icon is created inside the loop, at `StartCause::Init`, not here: tray-icon
-        // (0.24) requires the macOS event loop to be running on the main thread when the status
-        // item is created. Built before `event_loop.run`, it silently never appeared in the
-        // menu bar (observed after the tao/wry/tray-icon bump, 2026-09-17).
+        // AppKit requires tray creation on the running main loop.
         let tray_visible = !fig_settings::settings::get_bool_or("app.hideMenubarIcon", false);
         let mut tray: Option<TrayIcon> = None;
 
@@ -298,9 +294,6 @@ impl WebviewManager {
             .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::InitializePostRun))
             .map_err(|_closed| anyhow::anyhow!("Event loop closed during initialization"))?;
 
-        // Push menu clicks instead of polling for them. `MenuEvent::receiver().try_recv()` ran
-        // on *every* iteration of the event loop — measured at 25,391 iterations over seven
-        // minutes — and made menu handling depend on some other event arriving to wake the loop.
         {
             let menu_proxy = self.proxy.clone();
             MenuEvent::set_event_handler(Some(move |menu_event: MenuEvent| {
@@ -316,6 +309,7 @@ impl WebviewManager {
             trace!(?event, "Main loop event");
 
             match event {
+                WryEvent::LoopDestroyed => tasks.abort_all(),
                 WryEvent::NewEvents(StartCause::Init) => {
                     info!("{PRODUCT_NAME} has started");
                     if self.show_dashboard_after_launch && !crate::login_item::launched_at_login() {
@@ -784,12 +778,16 @@ pub fn build_autocomplete(
     Ok((window, webview))
 }
 
-async fn init_webview_notification_listeners(proxy: EventLoopProxy, bus: &NotificationBus) {
+fn init_webview_notification_listeners(
+    tasks: &mut tokio::task::JoinSet<()>,
+    proxy: EventLoopProxy,
+    bus: &NotificationBus,
+) {
     macro_rules! watcher {
         ($type:ident, $name:expr, $on_update:expr) => {{
             let proxy = proxy.clone();
             let mut rx = bus.$type($name.into());
-            tokio::spawn(async move {
+            tasks.spawn(async move {
                 loop {
                     let res = rx.recv().await;
                     match res {

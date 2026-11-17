@@ -19,7 +19,6 @@ use serde_json::{
 use tracing::{
     debug,
     error,
-    trace,
     warn,
 };
 
@@ -27,19 +26,29 @@ use crate::EventLoopProxy;
 use crate::notification_bus::NotificationBus;
 use crate::webview::notification::WebviewNotificationsState;
 
-pub async fn setup_listeners(
+fn signal_settings_change(event: &notify::Event, path: &std::path::Path, dirty: &tokio::sync::Notify) {
+    if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) && event.paths.iter().any(|p| p == path)
+        || event.need_rescan()
+    {
+        dirty.notify_one();
+    }
+}
+
+pub fn setup_listeners(
+    tasks: &mut tokio::task::JoinSet<()>,
     notifications_state: Arc<WebviewNotificationsState>,
     proxy: EventLoopProxy,
     bus: Arc<NotificationBus>,
 ) {
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-
+    let Ok(path) = directories::settings_path() else {
+        error!("Settings path unavailable");
+        return;
+    };
+    let dirty = Arc::new(tokio::sync::Notify::new());
+    let callback_dirty = dirty.clone();
+    let watched_path = path.clone();
     let watcher = notify::recommended_watcher(move |res| match res {
-        Ok(event) => {
-            if let Err(err) = tx.send(event) {
-                error!(%err, "failed to send notify event");
-            }
-        },
+        Ok(event) => signal_settings_change(&event, &watched_path, &callback_dirty),
         Err(err) => error!(%err, "notify watcher"),
     });
     let mut watcher = match watcher {
@@ -50,113 +59,80 @@ pub async fn setup_listeners(
         },
     };
 
-    let settings_path = match directories::settings_path() {
-        Ok(settings_path) => match settings_path.parent() {
-            Some(settings_dir) => match watcher.watch(settings_dir, RecursiveMode::NonRecursive) {
-                Ok(()) => {
-                    trace!("watching settings file at {settings_dir:?}");
-                    Some(settings_path)
-                },
-                Err(err) => {
-                    error!(%err, "failed to watch settings dir");
-                    None
-                },
-            },
-            None => {
-                error!("failed to get settings file dir");
-                None
-            },
-        },
-        Err(err) => {
-            error!(%err, "failed to get settings file path");
-            None
-        },
-    };
-
-    let mut lifetime = bus.lifetime();
-    let bus = Arc::downgrade(&bus);
-    tokio::spawn(async move {
+    let Some(parent) = path.parent() else { return };
+    if let Err(err) = watcher.watch(parent, RecursiveMode::NonRecursive) {
+        error!(%err, "Failed to watch settings directory");
+        return;
+    }
+    tasks.spawn(async move {
         let _watcher = watcher;
 
-        let mut prev_settings = match fig_settings::OldSettings::load_from_file() {
-            Ok(map) => map,
+        let mut prev_settings = match fig_settings::OldSettings::load() {
+            Ok(settings) => settings.map().clone(),
             Err(err) => {
                 error!(?err, "failed to initialize settings");
                 Map::new()
             },
         };
 
+        // Reconcile the cached snapshot with writes concurrent with watcher registration.
+        dirty.notify_one();
         loop {
-            let event = tokio::select! {
-                _ = lifetime.changed() => break,
-                event = rx.recv() => match event { Some(event) => event, None => break },
-            };
-            let Some(bus) = bus.upgrade() else {
-                break;
-            };
-            trace!(?event, "Settings event");
-
-            if let Some(settings_path) = &settings_path
-                && event.paths.contains(settings_path)
-                && let EventKind::Create(_) | EventKind::Modify(_) = event.kind
+            dirty.notified().await;
+            // Refresh the shared backend before notifying observers so a later desktop
+            // write preserves settings added by the CLI.
+            match fig_settings::OldSettings::load_into_global()
+                .and_then(|()| fig_settings::OldSettings::load())
+                .map(|settings| settings.map().clone())
             {
-                // Refresh the process-wide `SETTINGS_DATA` rather than only reading a local
-                // copy: `settings::get_*`/`set_value` go through the global backend
-                // (fig_settings::JsonStore::load returns the cached map once it exists), so a
-                // watcher that only reads locally leaves the desktop blind to every CLI write —
-                // and the next desktop-side write then saves a stale map, dropping the keys the
-                // CLI had added.
-                match fig_settings::OldSettings::load_into_global()
-                    .and_then(|()| fig_settings::OldSettings::load())
-                    .map(|settings| settings.map().clone())
-                {
-                    Ok(settings) => {
-                        debug!("Settings file changed");
+                Ok(settings) => {
+                    if settings == prev_settings {
+                        continue;
+                    }
+                    debug!("Settings file changed");
 
-                        if let Err(err) = notifications_state
-                            .broadcast_notification_all(
-                                &NotificationType::NotifyOnSettingsChange,
-                                fig_proto::fig::Notification {
-                                    r#type: Some(NotificationEnum::SettingsChangedNotification(
-                                        SettingsChangedNotification {
-                                            json_blob: serde_json::to_string(&settings).ok(),
-                                        },
-                                    )),
-                                },
-                                &proxy,
-                            )
-                            .await
-                        {
-                            warn!(%err, "Failed to broadcast settings change notification");
-                        }
+                    if let Err(err) = notifications_state
+                        .broadcast_notification_all(
+                            &NotificationType::NotifyOnSettingsChange,
+                            fig_proto::fig::Notification {
+                                r#type: Some(NotificationEnum::SettingsChangedNotification(
+                                    SettingsChangedNotification {
+                                        json_blob: serde_json::to_string(&settings).ok(),
+                                    },
+                                )),
+                            },
+                            &proxy,
+                        )
+                        .await
+                    {
+                        warn!(%err, "Failed to broadcast settings change notification");
+                    }
 
-                        json_map_diff(
-                            &prev_settings,
-                            &settings,
-                            |key, value| {
-                                debug!(%key, %value, "Setting added");
-                                bus.send_settings_new(key, value);
-                            },
-                            |key, old, new| {
-                                debug!(%key, %old, %new, "Setting change");
-                                bus.send_settings_changed(key, old, new);
-                            },
-                            |key, value| {
-                                debug!(%key, %value, "Setting removed");
-                                bus.send_settings_remove(key, value);
-                            },
-                        );
+                    json_map_diff(
+                        &prev_settings,
+                        &settings,
+                        |key, value| {
+                            debug!(%key, %value, "Setting added");
+                            bus.send_settings_new(key, value);
+                        },
+                        |key, old, new| {
+                            debug!(%key, %old, %new, "Setting change");
+                            bus.send_settings_changed(key, old, new);
+                        },
+                        |key, value| {
+                            debug!(%key, %value, "Setting removed");
+                            bus.send_settings_remove(key, value);
+                        },
+                    );
 
-                        prev_settings = settings;
-                    },
-                    Err(err) => error!(%err, "Failed to get settings"),
-                }
+                    prev_settings = settings;
+                },
+                Err(err) => error!(%err, "Failed to get settings"),
             }
         }
     });
 }
 
-// Diffs the old and new settings and calls the appropriate callbacks
 fn json_map_diff(
     map_a: &Map<String, Value>,
     map_b: &Map<String, Value>,
@@ -178,5 +154,29 @@ fn json_map_diff(
         if !map_a.contains_key(key) {
             on_new(key, value);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn changes_coalesce_while_the_reader_is_busy() {
+        use std::path::Path;
+
+        use notify::event::ModifyKind;
+        let path = Path::new("/settings.json");
+        let dirty = tokio::sync::Notify::new();
+        let event = notify::Event::new(EventKind::Modify(ModifyKind::Any)).add_path(path.into());
+        let wait = || tokio::time::timeout(std::time::Duration::from_millis(1), dirty.notified());
+        signal_settings_change(&event, Path::new("/other"), &dirty);
+        assert!(wait().await.is_err());
+        for _ in 0..1000 {
+            signal_settings_change(&event, path, &dirty);
+        }
+        assert!(wait().await.is_ok());
+        assert!(wait().await.is_err());
+        signal_settings_change(&event, path, &dirty);
+        assert!(wait().await.is_ok());
     }
 }

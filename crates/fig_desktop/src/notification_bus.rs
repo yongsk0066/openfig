@@ -34,25 +34,12 @@ impl JsonNotification {
 }
 
 /// Fan-out for `settings.json` changes, from the file watcher to the webview watchers.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct NotificationBus {
-    lifetime: tokio::sync::watch::Sender<()>,
     settings_channels: DashMap<String, Sender<JsonNotification>, FnvBuildHasher>,
 }
 
-impl Default for NotificationBus {
-    fn default() -> Self {
-        Self {
-            settings_channels: Default::default(),
-            lifetime: tokio::sync::watch::channel(()).0,
-        }
-    }
-}
 impl NotificationBus {
-    pub fn lifetime(&self) -> tokio::sync::watch::Receiver<()> {
-        self.lifetime.subscribe()
-    }
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -105,12 +92,10 @@ mod tests {
         let second = NotificationBus::new();
         let mut a = first.subscribe_settings("key".into());
         let mut b = second.subscribe_settings("key".into());
-        let mut lifetime = first.lifetime();
         first.send_settings_new("key", &Value::Bool(true));
         assert_eq!(a.recv().await.unwrap().as_bool(), Some(true));
         assert!(b.try_recv().is_err());
         drop(first);
-        assert!(lifetime.changed().await.is_err());
         assert!(matches!(
             a.recv().await,
             Err(tokio::sync::broadcast::error::RecvError::Closed)

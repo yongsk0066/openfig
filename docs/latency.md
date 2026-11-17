@@ -45,11 +45,18 @@ stack sampling run if needed. Do not compare sampled and unsampled runs as a str
 Backend comparison (same 1,000-entry fixture, alternating old/new, release build):
 
 ```sh
-cargo nextest run --locked --cargo-profile release -p fig_desktop_api \
+cargo nextest run --locked --cargo-profile release -p fig_shell_ipc \
   --run-ignored only --no-capture -E 'test(directory_backend_benchmark)'
 ```
 
-This excludes transport/UI. Directory responses preserve each name as a separate
+This compares the enumeration implementation with the older `ls` fallback and excludes the current process boundary and UI. To compare the direct backend with disposable-process round trips (50 samples after 10 warmups, alternating order and equal outputs):
+
+```sh
+cargo run --locked --release --target aarch64-apple-darwin -p fig_desktop \
+  --example io_isolation_benchmark -- target/aarch64-apple-darwin/release/fig_io_worker
+```
+
+This includes helper startup, IPC and reaping on every isolated call, but excludes the WebView and terminal. It uses a 1,000-entry directory and `/bin/pwd`; local results do not predict remote-volume tails or physical key-to-display latency. Directory responses preserve each name as a separate
 string, append `/` to folders when requested, and follow directory symlinks. Legacy
 callers receive plain names by default. There is no persistent directory cache;
 existing generator triggers govern refresh, so a new read sees filesystem changes.

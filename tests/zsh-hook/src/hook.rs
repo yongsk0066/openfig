@@ -244,6 +244,8 @@ impl HookShell {
                 tasks.push(tokio::spawn(raw_stub(
                     listener,
                     daemon == Daemon::Refusing,
+                    Duration::ZERO,
+                    false,
                     recorder.clone(),
                     raw_writers.clone(),
                 )));
@@ -529,11 +531,26 @@ impl HookShell {
 
     /// Starts a [`Daemon::Raw`] stub on the socket after the shell is already up.
     pub fn start_raw_daemon(&mut self) -> Result<()> {
+        self.start_delayed_daemon(Duration::ZERO)
+    }
+
+    /// Fragment the greeting to exercise readiness and timeout without blocking ZLE.
+    pub fn start_delayed_daemon(&mut self, greeting_delay: Duration) -> Result<()> {
+        self.start_stub(greeting_delay, false)
+    }
+
+    pub fn start_v2_daemon(&mut self) -> Result<()> {
+        self.start_stub(Duration::ZERO, true)
+    }
+
+    fn start_stub(&mut self, greeting_delay: Duration, edits_v2: bool) -> Result<()> {
         std::fs::create_dir_all(self.socket.parent().context("socket has no parent")?)?;
         let listener = UnixListener::bind(&self.socket)?;
         self.daemon.push(tokio::spawn(raw_stub(
             listener,
             false,
+            greeting_delay,
+            edits_v2,
             self.recorder.clone(),
             self.raw_writers.clone(),
         )));
@@ -567,6 +584,8 @@ async fn wait_for_socket(socket: &Path) -> Result<()> {
 async fn raw_stub(
     listener: UnixListener,
     refuse: bool,
+    greeting_delay: Duration,
+    edits_v2: bool,
     recorder: Recorder,
     writers: Arc<tokio::sync::Mutex<Vec<tokio::net::unix::OwnedWriteHalf>>>,
 ) {
@@ -589,11 +608,20 @@ async fn raw_stub(
             let _ = writer.write_all(b"WELCOME 0 test\n").await;
             continue;
         }
-        let _ = writer
-            .write_all(format!("WELCOME 1 {}\n", fig_util::HOOK_PROTOCOL_VERSION).as_bytes())
-            .await;
-        writers.lock().await.push(writer);
+        let writers = writers.clone();
         connections.0.push(tokio::spawn(async move {
+            if let Ok(Some(line)) = lines.next_line().await {
+                recorder.record(HookEvent::Line(line));
+            }
+            let _ = writer.write_all(b"WELCOME ").await;
+            tokio::time::sleep(greeting_delay).await;
+            let welcome = if edits_v2 {
+                b"1 test edits-v2\n".as_slice()
+            } else {
+                b"1 test\n".as_slice()
+            };
+            let _ = writer.write_all(welcome).await;
+            writers.lock().await.push(writer);
             while let Ok(Some(line)) = lines.next_line().await {
                 recorder.record(HookEvent::Line(line));
             }

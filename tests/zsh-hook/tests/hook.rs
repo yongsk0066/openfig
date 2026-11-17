@@ -1075,3 +1075,151 @@ async fn hook_rejects_cancelled_and_expired_edits_before_dispatch() {
     shell.type_text("!").await.unwrap();
     expect_buffer(&mut shell, "echo before!").await;
 }
+
+/// Restart only the isolated socket peer, leaving the shell and the current prompt untouched.
+#[tokio::test]
+async fn hook_reconnects_idle_buffer_without_a_key_or_new_prompt() {
+    for zsh in ["/bin/zsh", "zsh"] {
+        let rc = format!("{PLAIN}export OPENFIG_RECONNECT_TEST=kept\nalias oftest='git status'\n");
+        let mut shell = HookShell::spawn_zsh(zsh, Rc::Text(&rc), Daemon::Raw).await.unwrap();
+        shell.type_text("git 한글").await.unwrap();
+        shell.press("\x1b[D").unwrap();
+        shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+        let before = shell
+            .events()
+            .into_iter()
+            .filter_map(|e| match e {
+                HookEvent::Line(line) if line.starts_with("E ") => Some(line),
+                _ => None,
+            })
+            .next_back()
+            .unwrap();
+        for _ in 0..3 {
+            shell.kill_daemon().await;
+            shell.events();
+            shell.start_raw_daemon().unwrap();
+            shell
+                .wait_for_event(
+                    std::time::Instant::now() + STEP_TIMEOUT,
+                    |e| matches!(e, HookEvent::Line(line) if line == &before),
+                )
+                .await
+                .unwrap();
+            let events = shell.events();
+            let lines: Vec<_> = events
+                .iter()
+                .filter_map(|e| match e {
+                    HookEvent::Line(line) => Some(line.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(lines.iter().filter(|l| l.starts_with("HELLO ")).count(), 1, "{lines:?}");
+            assert!(
+                lines
+                    .iter()
+                    .any(|l| l.starts_with("C ") && l.contains("OPENFIG_RECONNECT_TEST=kept") && l.contains("oftest=")),
+                "{lines:?}"
+            );
+            assert!(lines.iter().any(|l| l.starts_with("P ")), "{lines:?}");
+            assert!(!lines.iter().any(|l| l.starts_with("X ")), "{lines:?}");
+        }
+        assert_no_noise(&shell.output());
+    }
+}
+
+#[tokio::test]
+async fn hook_partial_greeting_does_not_block_typing_and_timeout_can_recover() {
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Absent).await.unwrap();
+    shell.start_delayed_daemon(Duration::from_secs(10)).unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line.starts_with("HELLO ")),
+        )
+        .await
+        .unwrap();
+    let started = std::time::Instant::now();
+    shell.press("pending").unwrap();
+    shell
+        .wait_for_output("pending", Duration::from_millis(500))
+        .await
+        .unwrap();
+    assert!(started.elapsed() < Duration::from_millis(500));
+    // Let the incomplete greeting expire, then recover the edited snapshot without another key.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    shell.kill_daemon().await;
+    shell.events();
+    shell.start_delayed_daemon(Duration::from_millis(100)).unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + Duration::from_secs(12),
+            |e| matches!(e, HookEvent::Line(line) if line == "E 7 7 pending"),
+        )
+        .await
+        .unwrap();
+    assert_no_noise(&shell.output());
+}
+
+#[tokio::test]
+async fn hook_reconnection_renegotiates_edits_and_rejects_old_revision() {
+    use fig_shell_ipc::hook::wire::ShellLine;
+    let mut shell = HookShell::spawn(Rc::Text(PLAIN), Daemon::Raw).await.unwrap();
+    shell.run("_fig_v2=1", "% ").await.unwrap();
+    shell.type_text("git ch").await.unwrap();
+    shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
+    let revision = |events: Vec<HookEvent>| {
+        events
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                HookEvent::Line(line) => match ShellLine::parse(&line) {
+                    Ok(ShellLine::EditBufferV2 { revision, text, .. }) if text == "git ch" => Some(revision),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap()
+    };
+    let old = revision(shell.events());
+    shell.kill_daemon().await;
+    shell.start_v2_daemon().unwrap();
+    shell
+        .wait_for_event(
+            std::time::Instant::now() + STEP_TIMEOUT,
+            |e| matches!(e, HookEvent::Line(line) if line.starts_with("E2 ")),
+        )
+        .await
+        .unwrap();
+    let current = revision(shell.events());
+    assert!(current > old);
+    let deadline = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        + 10_000;
+    for (id, revision, expected) in [("stale", old, 1), ("fresh", current, 0)] {
+        shell
+            .send_line(&format!(
+                "INSERT2 {id} {revision} 6 git\\sch 2 checkout\\s 0 0 {deadline}"
+            ))
+            .await
+            .unwrap();
+        shell
+            .wait_for_event(
+                std::time::Instant::now() + STEP_TIMEOUT,
+                |e| matches!(e, HookEvent::Line(line) if line == &format!("ACK {id} {expected}")),
+            )
+            .await
+            .unwrap();
+    }
+    shell.type_text("!").await.unwrap();
+    shell
+        .wait_for_event(std::time::Instant::now() + STEP_TIMEOUT, |e| match e {
+            HookEvent::Line(line) => {
+                matches!(ShellLine::parse(line), Ok(ShellLine::EditBufferV2 { text, .. }) if text == "git checkout !")
+            },
+            _ => false,
+        })
+        .await
+        .unwrap();
+}

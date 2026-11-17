@@ -1,12 +1,13 @@
 # {{PRODUCT_NAME}} zsh hook: zsh reports its own edit buffer over a
-# unix socket. No process is spawned, every hook returns 0, and a socket failure disarms the hook,
-# leaving a plain shell. Wire format and the reasons
-# behind it: crates/fig_shell_ipc/src/hook/wire.rs.
+# unix socket. No process is spawned; disconnected shells keep editing while scheduled retries
+# restore context and the current buffer. Wire format: crates/fig_shell_ipc/src/hook/wire.rs.
 if [[ -o interactive && -z ${_fig_sock-} ]] && autoload -Uz is-at-least add-zle-hook-widget add-zsh-hook \
-  && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system zsh/datetime 2>/dev/null; then
+  && is-at-least {{ZSH_HOOK_MIN_VERSION}} && zmodload zsh/zle zsh/zleparameter zsh/parameter zsh/net/socket zsh/system zsh/datetime zsh/sched 2>/dev/null; then
 
 typeset -g _fig_sock='{{HOOK_SOCKET}}' _fig_fd= _fig_off= _fig_armed= _fig_isearch= _fig_last= _fig_ctx=
-typeset -gi _fig_revision=0
+typeset -gi _fig_revision=0 _fig_retry=1 _fig_timer=0 _fig_status=0
+typeset -gF _fig_hello_deadline=0
+typeset -g _fig_connect_fd= _fig_hello= _fig_in_command=
 typeset -g _fig_v2= _fig_ack_id= _fig_ack_status=
 typeset -gA _fig_fwd _fig_orig _fig_names
 _fig_names=($'\t' tab $'\e[Z' shift+tab $'\e[A' up $'\eOA' up $'\e[B' down $'\eOB' down $'\r' enter $'\e' esc
@@ -30,23 +31,85 @@ _fig_send() {
   [[ -n $_fig_fd ]] && syswrite -o $_fig_fd "$1"$'\n' && return 0
   _fig_close; return 1
 }
+# Only our exact timer entry is removed; sched indices shift when other plugins add events.
+_fig_unschedule() {
+  emulate -L zsh; local i
+  for (( i=${#zsh_scheduled_events}; i>0; --i )); do
+    [[ ${zsh_scheduled_events[i]} == *:_fig_tick ]] && sched -$i
+  done
+  _fig_timer=0
+}
+_fig_schedule() {
+  [[ -z $_fig_off && -z $_fig_in_command && $_fig_timer == 0 ]] || return 0
+  _fig_timer=1; sched +${1:-$_fig_retry} _fig_tick
+}
 _fig_close() {
-  emulate -L zsh; [[ -n $_fig_fd ]] || return 0
-  zle -F $_fig_fd 2>/dev/null; exec {_fig_fd}>&- 2>/dev/null
-  _fig_fd= _fig_last= _fig_ctx= _fig_fwd=()
+  emulate -L zsh; local fd
+  for fd in $_fig_fd $_fig_connect_fd; do
+    zle -F $fd 2>/dev/null; exec {fd}>&- 2>/dev/null
+  done
+  _fig_fd= _fig_connect_fd= _fig_hello= _fig_last= _fig_ctx= _fig_v2= _fig_ack_id= _fig_ack_status= _fig_fwd=()
+  _fig_unschedule; _fig_schedule
 }
 
-# No socket: try again at the next prompt. Anything but WELCOME 1 within a second: never again.
+# WELCOME is read by ZLE readiness, never by a one-second blocking read. A silent or partial
+# greeting expires at the next scheduled tick; protocol refusal alone permanently disarms.
 _fig_connect() {
   emulate -L zsh
-  [[ -z $_fig_fd && -z $_fig_off && -S $_fig_sock ]] && zsocket $_fig_sock 2>/dev/null || return 1
-  local fd=$REPLY line tty; _fig_esc "$TTY"; tty=$REPLY; _fig_esc "$USER@$HOST"; setopt localtraps; trap '' PIPE
-  if syswrite -o $fd "HELLO {{HOOK_PROTOCOL_VERSION}} $$.$RANDOM zsh $$ $tty $REPLY"$'\n' \
-    && read -t 1 -r -u $fd line && [[ $line == 'WELCOME 1 '* ]]; then
-    _fig_v2=; [[ $line == *' edits-v2' ]] && _fig_v2=1
-    _fig_fd=$fd; zle -F -w $fd _fig_on_msg; return 0
+  [[ -z $_fig_fd && -z $_fig_connect_fd && -z $_fig_off ]] || return 0
+  if [[ ! -S $_fig_sock ]] || ! zsocket $_fig_sock 2>/dev/null; then
+    _fig_schedule; return 0
   fi
-  _fig_off=1; exec {fd}>&- 2>/dev/null; return 1
+  _fig_connect_fd=$REPLY
+  local tty; _fig_esc "$TTY"; tty=$REPLY; _fig_esc "$USER@$HOST"
+  setopt localtraps; trap '' PIPE
+  if syswrite -o $_fig_connect_fd "HELLO {{HOOK_PROTOCOL_VERSION}} $$.$RANDOM zsh $$ $tty $REPLY"$'\n'; then
+    _fig_hello_deadline=$(( EPOCHREALTIME + 1 ))
+    zle -F -w $_fig_connect_fd _fig_on_hello
+    _fig_unschedule; _fig_schedule 1
+  else
+    _fig_close
+  fi
+  return 0
+}
+_fig_tick() {
+  _fig_timer=0
+  # Scheduled callbacks have no editor parameters; enter a widget for the live snapshot.
+  if zle; then zle _fig_reconnect; fi
+  return 0
+}
+_fig_reconnect() {
+  emulate -L zsh
+  [[ -z $_fig_fd && -z $_fig_off ]] || return 0
+  if [[ -n $_fig_connect_fd ]]; then
+    if (( EPOCHREALTIME < _fig_hello_deadline )); then _fig_schedule 1; return 0; fi
+    _fig_close; _fig_unschedule
+  fi
+  (( _fig_retry = _fig_retry < 8 ? _fig_retry * 2 : 8 ))
+  _fig_connect
+  return 0
+}
+_fig_on_hello() {
+  emulate -L zsh; local chunk line result
+  [[ $1 == $_fig_connect_fd ]] || return 0
+  [[ -z ${2-} ]] || { _fig_close; return 0 }
+  # Stop at the newline so commands coalesced with WELCOME stay on the socket.
+  while [[ $_fig_hello != *$'\n' ]]; do
+    sysread -i $1 -s 1 -t 0 chunk; result=$?
+    (( result == 4 )) && return 0
+    (( result == 0 )) || { _fig_close; return 0 }
+    _fig_hello+=$chunk
+    (( ${#_fig_hello} <= 4096 )) || { _fig_off=1; _fig_close; return 0 }
+  done
+  line=${_fig_hello%%$'\n'*}
+  [[ $line == 'WELCOME 1 '* ]] || { _fig_off=1; _fig_close; return 0 }
+  _fig_fd=$_fig_connect_fd; _fig_connect_fd= _fig_hello= _fig_retry=1
+  _fig_v2=; [[ $line == *' edits-v2' ]] && _fig_v2=1
+  _fig_unschedule; zle -F -w $_fig_fd _fig_on_msg
+  _fig_arm; _fig_context
+  _fig_esc "$PWD"; _fig_send "P $_fig_status $REPLY"
+  _fig_report
+  return 0
 }
 
 _fig_report() {
@@ -140,7 +203,7 @@ _fig_arm() {
     if [[ $h == line-pre-redraw && -z $widgets[zle-$h] ]]; then zle -N zle-$h $fn; continue; fi
     add-zle-hook-widget -d $h $fn; add-zle-hook-widget $h $fn
   done
-  [[ -z $_fig_armed ]] && _fig_armed=1 || return 0
+  [[ -d $_fig_sock:h && -z $_fig_armed ]] && _fig_armed=1 || return 0
   { for km in emacs viins vicmd; do for seq in ${(k)_fig_names}; do bindkey -M $km $seq; done; done } >| $tmp 2>/dev/null
   for km in emacs viins vicmd; do for seq in ${(k)_fig_names}; do
     read -r line || break; line=${line##* }
@@ -150,23 +213,34 @@ _fig_arm() {
   zmodload -F zsh/files b:zf_rm 2>/dev/null && zf_rm -f $tmp
 }
 
-_fig_precmd() {
-  local st=$?; emulate -L zsh; local REPLY line k; local -a env al
-  _fig_isearch= _fig_last=
-  [[ -n $_fig_fd ]] || _fig_connect || return 0
-  _fig_arm
-  # Lines that came while a command ran: keep interception, drop insertions (no zle to apply them).
-  while [[ -n $_fig_fd ]] && read -t 0 -r -u $_fig_fd line; do [[ $line == INSERT* ]] || _fig_line "$line"; done
+_fig_context() {
+  emulate -L zsh; local REPLY line k; local -a env al
   for k in ${(k)parameters[(R)*export*]}; do env+=("$k=${(P)k}"); done
   for k in ${(k)aliases}; do al+=("$k=$aliases[$k]"); done
   line="${(pj:\0:)env}"$'\n'"${(pj:\n:)al}"
   if [[ -n $_fig_fd && $line != "$_fig_ctx" ]]; then
     _fig_ctx=$line; _fig_esc "${(pj:\0:)env}"; line=$REPLY; _fig_esc "${(pj:\n:)al}"; _fig_send "C $line $REPLY"
   fi
+}
+_fig_precmd() {
+  local st=$?; emulate -L zsh; local REPLY line
+  _fig_status=$st _fig_in_command= _fig_isearch= _fig_last=
+  _fig_arm
+  if [[ -z $_fig_fd ]]; then _fig_unschedule; _fig_connect; return 0; fi
+  # Commands arriving during execution cannot insert into a later prompt.
+  while [[ -n $_fig_fd ]] && read -t 0 -r -u $_fig_fd line; do [[ $line == INSERT* ]] || _fig_line "$line"; done
+  _fig_context
   _fig_esc "$PWD"; _fig_send "P $st $REPLY"; return 0
 }
-_fig_preexec() { emulate -L zsh; (( ++_fig_revision )); _fig_isearch= _fig_last=; local REPLY; _fig_esc "$1"; _fig_send "X $REPLY"; return 0 }
+_fig_preexec() {
+  emulate -L zsh; (( ++_fig_revision )); _fig_isearch= _fig_last= _fig_in_command=1
+  _fig_unschedule
+  [[ -z $_fig_connect_fd ]] || _fig_close
+  local REPLY; _fig_esc "$1"; _fig_send "X $REPLY"; return 0
+}
 
+zle -N _fig_on_hello
+zle -N _fig_reconnect
 zle -N _fig_on_msg
 add-zsh-hook precmd _fig_precmd
 add-zsh-hook preexec _fig_preexec

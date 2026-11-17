@@ -214,8 +214,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
     }
 
-    /// The success path, which used to be untestable: the handler read five process globals
-    /// that only `WebviewManager::new` ever set.
     #[tokio::test]
     async fn a_well_formed_request_is_answered() {
         let request = Request::builder()

@@ -13,7 +13,7 @@ build      := justfile_directory() / "build"
 app        := build / env("APP_NAME") + ".app"
 export BUNDLE_ID := if path_exists("bundle-id.local") == "true" { trim(read("bundle-id.local")) } else { env("BUNDLE_ID") }
 version    := `cargo metadata --format-version 1 --no-deps --offline | jq -r '.packages[] | select(.name=="fig_desktop") | .version'`
-min_macos  := `rustc --print deployment-target --target aarch64-apple-darwin | sed 's/^.*=//'`
+min_macos  := "13.0"
 
 default: all
 
@@ -48,6 +48,7 @@ specs:
 # Web: proto -> api-bindings -> autocomplete-app, dashboard-app
 web:
     pnpm install --frozen-lockfile --ignore-scripts
+    cargo fetch --locked --target {{target}}
     rm -rf packages/autocomplete-app/dist packages/dashboard-app/dist
     python3 scripts/license-notices.py --check
     pnpm exec turbo build --force --filter=./packages/autocomplete-app --filter=./packages/dashboard-app

@@ -2,7 +2,7 @@
 
 A personal macOS terminal-autocomplete fork of [Amazon Q Developer CLI Autocomplete](https://github.com/aws/amazon-q-developer-cli-autocomplete), originally built by Fig. It shows completion suggestions beside the terminal cursor and inserts the selected text into zsh.
 
-Targets Apple silicon and zsh. The installed app remains **Fig.app**, with CLI **q**, to preserve existing shell integration and macOS permissions; names are defined in `branding.env`.
+Targets macOS 13 or later, Apple silicon and zsh. The installed app remains **Fig.app**, with CLI **q**, to preserve existing shell integration and macOS permissions; names are defined in `branding.env`.
 
 AI/chat, account sign-in, product telemetry and automatic updates are removed. Completion specs are bundled locally. Specs and their generators execute commands with your user permissions; those commands may access the network. This is not a network sandbox. Developer mode can load specs from a local HTTP server.
 

@@ -135,6 +135,7 @@ pub type FigIdMap = HashMap<WindowId, Rc<WindowState>, FnvBuildHasher>;
 pub type WryIdMap = HashMap<WryWindowId, Rc<WindowState>, FnvBuildHasher>;
 
 pub struct WebviewManager {
+    show_dashboard_after_launch: bool,
     fig_id_map: FigIdMap,
     window_id_map: WryIdMap,
     event_loop: EventLoop,
@@ -146,32 +147,21 @@ pub struct WebviewManager {
 }
 
 impl WebviewManager {
-    pub fn new(visible: bool) -> anyhow::Result<Self> {
+    pub fn new(show_dashboard_after_launch: bool) -> anyhow::Result<Self> {
         let main_thread = objc2::MainThreadMarker::new()
             .ok_or_else(|| anyhow::anyhow!("WebviewManager must be created on the main thread"))?;
         let mut event_loop = EventLoopBuilder::with_user_event().build();
 
-        if !visible {
-            use tao::platform::macos::{
-                ActivationPolicy,
-                EventLoopExtMacOS,
-            };
-
-            event_loop.set_activation_policy(ActivationPolicy::Accessory);
-        }
+        use tao::platform::macos::{
+            ActivationPolicy,
+            EventLoopExtMacOS,
+        };
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
 
         let proxy = EventLoopProxy::new(event_loop.create_proxy());
 
         let shell_sessions = Arc::new(ShellSessions::default());
-        let platform_state = PlatformState::new(
-            main_thread,
-            if visible {
-                tao::platform::macos::ActivationPolicy::Regular
-            } else {
-                tao::platform::macos::ActivationPolicy::Accessory
-            },
-            proxy.clone(),
-        )?;
+        let platform_state = PlatformState::new(main_thread, ActivationPolicy::Accessory, proxy.clone())?;
         let notifications_state = Arc::new(WebviewNotificationsState::default());
 
         let api_state = Arc::new(ApplicationServices {
@@ -185,6 +175,7 @@ impl WebviewManager {
         });
 
         Ok(Self {
+            show_dashboard_after_launch,
             fig_id_map: Default::default(),
             window_id_map: Default::default(),
             event_loop,
@@ -318,6 +309,10 @@ impl WebviewManager {
             match event {
                 WryEvent::NewEvents(StartCause::Init) => {
                     info!("{PRODUCT_NAME} has started");
+                    if self.show_dashboard_after_launch && !crate::login_item::launched_at_login() {
+                        proxy.send_event_or_log(Event::WindowEvent { window_id: DASHBOARD_ID, window_event: WindowEvent::Show });
+                    }
+                    crate::login_item::apply();
                     match build_tray() {
                         Ok(icon) => {
                             if let Err(err) = icon.set_visible(tray_visible) {
@@ -505,6 +500,7 @@ impl WebviewManager {
                                 window_event: WindowEvent::SetEnabled(autocomplete_enabled),
                             });
                         },
+                        Event::ReconcileLoginItem => crate::login_item::apply(),
                         Event::SetTrayVisible(visible) => {
                             if let Some(tray) = tray.as_ref()
                                 && let Err(err) = tray.set_visible(visible)
@@ -801,6 +797,14 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             });
         };};
     }
+
+    watcher!(
+        subscribe_settings,
+        crate::login_item::SETTING,
+        |_notification: JsonNotification, proxy: &EventLoopProxy| {
+            proxy.send_event_or_log(Event::ReconcileLoginItem);
+        }
+    );
 
     watcher!(
         subscribe_settings,

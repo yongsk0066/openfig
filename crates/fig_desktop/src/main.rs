@@ -5,8 +5,8 @@ mod event_queue;
 mod file_watcher;
 mod install;
 mod latency;
-mod launchd_plist;
 mod local_ipc;
+mod login_item;
 pub mod notification_bus;
 mod panic_report;
 mod platform;
@@ -72,6 +72,15 @@ pub type EventLoopWindowTarget = WryEventLoopWindowTarget<Event>;
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
+    if cli.unregister_login_item {
+        return match login_item::unregister() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Unable to unregister login item: {error}");
+                ExitCode::FAILURE
+            },
+        };
+    }
 
     let log_file_path = directories::logs_dir().map(|path| path.join("fig_desktop.log"));
     if let Err(err) = &log_file_path {
@@ -138,12 +147,13 @@ async fn main() -> ExitCode {
     install::run_install().await;
 
     let accessibility_enabled = PlatformState::accessibility_is_enabled().unwrap_or(true);
-    let visible = !cli.no_dashboard;
+    // Defer presentation until the launch Apple Event distinguishes login from a normal open.
+    let visible = false;
 
     let autocomplete_enabled =
         !fig_settings::settings::get_bool_or("autocomplete.disable", false) && accessibility_enabled;
 
-    let mut webview_manager = match WebviewManager::new(visible) {
+    let mut webview_manager = match WebviewManager::new(!cli.no_dashboard) {
         Ok(manager) => manager,
         Err(err) => {
             error!(%err, "Unable to initialize the desktop");

@@ -31,6 +31,7 @@ pub enum Event {
     PlatformBoundEvent(PlatformBoundEvent),
     ControlFlow(ControlFlow),
     SetTrayVisible(bool),
+    ReconcileLoginItem,
 
     ReloadAccessibility,
 

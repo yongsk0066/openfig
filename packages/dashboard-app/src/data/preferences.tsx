@@ -6,8 +6,8 @@ const generalPreferences = [
     properties: [
       {
         id: "app.launchOnStartup",
-        title: "Launch on Start",
-        description: `Start ${PRODUCT_NAME} automatically whenever you restart your computer.`,
+        title: "Start with macOS",
+        description: `Start ${PRODUCT_NAME} automatically when you sign in to your Mac. macOS may require approval in System Settings → General → Login Items. If you disabled it there, enable it there again.`,
         type: "boolean",
         default: true,
         popular: false,

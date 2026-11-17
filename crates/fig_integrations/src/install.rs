@@ -139,6 +139,30 @@ async fn uninstall_desktop() -> Result<()> {
     use tokio::fs;
     use tracing::warn;
 
+    // Retire the modern login item before deleting its signed owner. The short-lived desktop
+    // command performs no ordinary app startup; timeout/error leaves the bundle available to retry.
+    let desktop = fig_util::app_bundle_path()
+        .join("Contents/MacOS")
+        .join(fig_util::consts::APP_PROCESS_NAME);
+    if desktop.is_file() {
+        let mut command = tokio::process::Command::new(desktop);
+        command.arg("--unregister-login-item").kill_on_drop(true);
+        let output = tokio::time::timeout(std::time::Duration::from_secs(5), command.output())
+            .await
+            .map_err(|error| {
+                crate::Error::Custom(format!("login item removal timed out; app preserved: {error}").into())
+            })??;
+        if !output.status.success() {
+            return Err(crate::Error::Custom(
+                format!(
+                    "login item removal failed; app preserved: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )
+                .into(),
+            ));
+        }
+    }
+
     // Remove launch agents
     if let Ok(home) = directories::home_dir() {
         let launch_agents = home.join("Library").join("LaunchAgents");

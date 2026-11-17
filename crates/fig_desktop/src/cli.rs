@@ -9,6 +9,9 @@ pub struct Cli {
     /// Checks the `app.launchOnStartup` setting before launching
     #[arg(long)]
     pub is_startup: bool,
+    /// Unregister the login item without launching the desktop
+    #[arg(long)]
+    pub unregister_login_item: bool,
     /// Kill old instances of `fig_desktop`
     #[arg(long)]
     pub kill_old: bool,

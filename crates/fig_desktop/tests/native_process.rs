@@ -45,25 +45,46 @@ async fn real_helper_renders_png_reuses_process_and_reaps_on_shutdown() {
 
 #[tokio::test]
 async fn helper_exits_if_its_parent_dies_while_its_main_thread_is_waiting() {
+    use std::process::Stdio;
+
     use tokio::io::{
         AsyncBufReadExt,
+        AsyncReadExt,
+        AsyncWriteExt,
         BufReader,
     };
-    let script = "import subprocess,sys,time\np=subprocess.Popen([sys.argv[1],'--stdio'],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\nprint(p.pid,flush=True)\ntime.sleep(30)";
-    let mut parent = tokio::process::Command::new("/usr/bin/python3")
-        .args(["-c", script, env!("CARGO_BIN_EXE_fig_native_worker")])
-        .stdout(std::process::Stdio::piped())
+
+    // The test owns the input pipe's write end across parent death. A successful exit must
+    // therefore come from the parent watcher, even while the worker is blocked in read_exact.
+    let mut parent = tokio::process::Command::new("/bin/sh")
+        .args([
+            "-c",
+            r#"exec 3<&0; "$1" --stdio <&3 & echo $!; wait"#,
+            "fixture",
+            env!("CARGO_BIN_EXE_fig_native_worker"),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .unwrap();
-    let mut lines = BufReader::new(parent.stdout.take().unwrap()).lines();
-    let pid: i32 = tokio::time::timeout(Duration::from_secs(5), lines.next_line())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap()
-        .parse()
-        .unwrap();
+    let mut input = parent.stdin.take().unwrap();
+    let mut output = BufReader::new(parent.stdout.take().unwrap());
+    let pid: i32 = tokio::time::timeout(Duration::from_secs(10), async {
+        let mut line = String::new();
+        output.read_line(&mut line).await.unwrap();
+        let request = br#"{"id":1,"value":{"Activation":0}}"#;
+        input.write_u32(request.len() as u32).await.unwrap();
+        input.write_all(request).await.unwrap();
+        let size = output.read_u32().await.unwrap();
+        assert!(size < 4096);
+        let mut reply = vec![0; size as usize];
+        output.read_exact(&mut reply).await.unwrap();
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&reply).unwrap()["id"], 1);
+        line.trim().parse().unwrap()
+    })
+    .await
+    .expect("worker must process a frame before its parent is killed");
     parent.kill().await.unwrap();
     tokio::time::timeout(Duration::from_secs(3), async {
         // SAFETY: signal zero checks existence of the helper owned by this fixture.

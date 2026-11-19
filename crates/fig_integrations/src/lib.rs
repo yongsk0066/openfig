@@ -1,5 +1,6 @@
 pub(crate) mod atomic;
 pub(crate) mod backup;
+pub mod cli_link;
 pub mod error;
 pub mod file;
 pub mod install;

@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
-use fig_integrations::shell::ShellExt;
+use fig_integrations::install::{
+    InstallComponents,
+    install,
+};
 use fig_proto::fig::{
     OnboardingAction,
     OnboardingRequest,
 };
-use fig_util::Shell;
 use tao::event_loop::ControlFlow;
 use tokio::process::Command;
 use tracing::error;
@@ -19,10 +21,6 @@ use crate::event::{
     EventSender,
 };
 
-async fn finish_onboarding() {
-    fig_settings::state::set_value("desktop.completedOnboarding", true).ok();
-}
-
 pub async fn onboarding(
     request: OnboardingRequest,
     proxy: &dyn EventSender,
@@ -30,32 +28,13 @@ pub async fn onboarding(
 ) -> RequestResult {
     match request.action() {
         OnboardingAction::InstallationScript => {
-            let mut errs: Vec<String> = vec![];
-            for shell in Shell::all() {
-                match shell.get_shell_integrations(ctx.env()) {
-                    Ok(integrations) => {
-                        for integration in integrations {
-                            if let Err(err) = integration.install().await {
-                                errs.push(format!("{integration}: {err}"));
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        errs.push(format!("{shell}: {err}"));
-                    },
-                }
-            }
-
-            match &errs[..] {
-                [] => RequestResult::success(),
-                errs => RequestResult::error(errs.join("\n")),
-            }
+            install(InstallComponents::SHELL_INTEGRATIONS, ctx.env())
+                .await
+                .map_err(|e| e.to_string())?;
+            RequestResult::success()
         },
         OnboardingAction::Uninstall => {
-            use fig_integrations::install::{
-                InstallComponents,
-                uninstall,
-            };
+            use fig_integrations::install::uninstall;
 
             let result = match uninstall(InstallComponents::all(), Arc::clone(ctx)).await {
                 Ok(_) => RequestResult::success(),
@@ -66,7 +45,7 @@ pub async fn onboarding(
             result
         },
         OnboardingAction::FinishOnboarding => {
-            finish_onboarding().await;
+            fig_settings::state::set_value("desktop.completedOnboarding", true).map_err(|e| e.to_string())?;
             RequestResult::success()
         },
         OnboardingAction::LaunchShellOnboarding => {

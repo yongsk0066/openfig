@@ -4,6 +4,7 @@ set -euo pipefail
 verify_app() {
   local app="$1" cli="$2" desktop="$3"
   codesign --verify --deep --strict "$app"
+  test -f "$app/Contents/Resources/install-input-method.sh"
   test -x "$app/Contents/MacOS/$desktop"
   test -x "$app/Contents/MacOS/fig_native_worker"
   test -x "$app/Contents/MacOS/fig_io_worker"

@@ -51,6 +51,16 @@ pub async fn handle(
             window::position_window(request, window_id, &state.shell_sessions, proxy).await
         },
         DesktopRequest::DragWindow(request) => window::drag(request, window_id, proxy).await,
+        DesktopRequest::LoginItem(request) => {
+            let action = fig_proto::fig::InstallAction::try_from(request.action)
+                .map_err(|err| format!("Unknown login item action: {err}"))?;
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            proxy.send_event_or_err(crate::event::Event::InspectLoginItem(action, tx))?;
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+                .await
+                .map_err(|err| format!("Login item request timed out: {err}"))?
+                .map_err(|err| format!("Login item request canceled: {err}"))?
+        },
         DesktopRequest::Onboarding(request) => onboarding::onboarding(request, proxy, ctx).await,
     }
 }

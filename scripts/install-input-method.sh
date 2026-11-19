@@ -19,7 +19,7 @@ await_registered_input_method() {
 }
 
 activate_input_method() {
-  local helper="$1" target="$2" timeout="$3" requester="${4:-}" deadline
+  local helper="$1" target="$2" timeout="$3" requester="${4:-}" mode="${5:---activate}" deadline
   # IMK must be running before a terminal initializes its input context.
   open -g "$target" || return
   if "$helper" --check-active >/dev/null; then return 0; fi
@@ -31,6 +31,7 @@ activate_input_method() {
     # TIS requests originate in the GUI desktop main loop. A headless helper
     # request is not equivalent to the GUI enrollment path verified on macOS.
     "$requester" debug enable-input-method || return
+    if [[ "$mode" == --request ]] && ! "$helper" --check-enabled >/dev/null; then return 0; fi
     deadline=$((SECONDS + timeout))
     # Activation can open an asynchronous approval UI. Inspect from a new
     # process each time: the requesting process can retain stale TIS state.
@@ -62,8 +63,8 @@ install_input_method() {
   mode="${2:---activate}"
   timeout="${3:-120}"
   case "$mode" in
-    --activate|--register-only) ;;
-    *) echo "Expected --activate or --register-only" >&2; return 2 ;;
+    --activate|--register-only|--request) ;;
+    *) echo "Expected --activate, --register-only or --request" >&2; return 2 ;;
   esac
   if [[ ! "$timeout" =~ ^[0-9]{1,3}$ ]] || (( 10#$timeout > 120 )); then
     echo "Activation timeout must be an integer from 0 to 120 seconds" >&2
@@ -74,13 +75,17 @@ install_input_method() {
   [[ -x "$helper" ]] || { echo "Missing input method executable: $helper" >&2; return 1; }
   target="$HOME/Library/Input Methods/FigInputMethod.app"
   mkdir -p "$(dirname "$target")"
+  if [[ -L "$target" && "$(readlink "$target")" != "$source_bundle" ]]; then
+    echo "An input method from another location already owns $target. Inspect that link before retrying." >&2
+    return 1
+  fi
   if [[ -e "$target" && ! -L "$target" ]]; then
     echo "Refusing to replace a non-symlink input method: $target" >&2
     return 1
   fi
   # Preserve a correct registration path across repeated installs.
-  if [[ ! -L "$target" ]] || [[ "$(readlink "$target")" != "$source_bundle" ]]; then
-    ln -sfn "$source_bundle" "$target"
+  if [[ ! -L "$target" ]]; then
+    ln -s "$source_bundle" "$target" || return
   fi
   "$helper" --register "$target" || return
   await_registered_input_method "$helper" || return
@@ -89,7 +94,7 @@ install_input_method() {
     return
   fi
   requester="$(dirname "$(dirname "$source_bundle")")/MacOS/${CLI_BIN:-q}"
-  activate_input_method "$helper" "$target" "$timeout" "$requester"
+  activate_input_method "$helper" "$target" "$timeout" "$requester" "$mode"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

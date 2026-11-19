@@ -16,7 +16,7 @@ just all       # build and sign build/Fig.app
 just install   # install app, CLI link and zsh hooks
 ```
 
-Grant Fig Accessibility access in System Settings → Privacy & Security → Accessibility. Open a new terminal tab and type `git `. Use `q doctor --all` to diagnose setup problems. Installation updates your shell startup files and registers the app's login launcher. See [development](docs/development.md) for signing, tests and installation details.
+Open Fig → Integrations to check the zsh hooks, grant Accessibility access, and set up the optional Ghostty input method. Preferences shows macOS login-item approval. Open a new terminal tab and type `git `. Use `q doctor --all` to diagnose setup problems. Installation updates your shell startup files and registers the app's login launcher. See [development](docs/development.md) for signing, tests and installation details.
 
 ## Code map
 

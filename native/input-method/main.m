@@ -336,7 +336,7 @@ int main(int argc, const char *argv[]) {
         }
         if (argc == 2) {
             TISInputSourceRef source = InputSource();
-            if (!source) { fprintf(stderr, "Input method is not registered\n"); return 1; }
+            if (!source) { fprintf(stderr, "Input method is not registered\n"); return 4; }
             OSStatus status = noErr;
             if (strcmp(argv[1], "--select") == 0) {
                 if (!Property(source, kTISPropertyInputSourceIsEnabled)) {

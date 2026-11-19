@@ -1,3 +1,4 @@
+import { SetupRow } from "@/components/installs/statusCheck";
 import { UserPrefView } from "@/components/preference/list";
 import { Link } from "@/components/ui/link";
 import settings from "@/data/preferences";
@@ -6,6 +7,7 @@ export default function Page() {
   return (
     <>
       <UserPrefView array={settings} />
+      <SetupRow id="loginItem" />
       <section className={`py-4 gap-4`}>
         <h2
           id={`subhead-licenses`}

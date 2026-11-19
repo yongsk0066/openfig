@@ -1,27 +1,14 @@
-import StatusCheck from "@/components/installs/statusCheck";
 import { Code } from "@/components/text/code";
 import { Link } from "@/components/ui/link";
 import support from "@/data/help";
-import installChecks from "@/data/install";
-import { usePlatformInfo } from "@/hooks/store/usePlatformInfo";
-import { matchesPlatformRestrictions } from "@/lib/platform";
 
 export default function Page() {
-  const platformInfo = usePlatformInfo();
   return (
     <div className="flex flex-col items-start gap-8 pb-4">
       <div className="flex flex-col justify-between gap-2 self-stretch">
-        <h1 className="text-xl font-bold select-none">Automated checks</h1>
-        <div className="flex flex-col">
-          {platformInfo &&
-            installChecks
-              .filter((check) =>
-                matchesPlatformRestrictions(platformInfo, check.platformRestrictions),
-              )
-              .map((check) => {
-                return <StatusCheck check={check} key={check.id} />;
-              })}
-        </div>
+        <Link to="/integrations" variant="blue">
+          Check permissions and terminal setup →
+        </Link>
       </div>
       <div className="flex flex-col justify-between gap-4 self-stretch">
         <h1 className="text-xl font-bold select-none mb-2">Still having issues?</h1>

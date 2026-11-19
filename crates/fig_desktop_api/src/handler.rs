@@ -39,6 +39,7 @@ pub enum DesktopRequest {
     PositionWindow(PositionWindowRequest),
     DragWindow(DragWindowRequest),
     Onboarding(OnboardingRequest),
+    LoginItem(fig_proto::fig::InstallRequest),
 }
 
 pub fn request_from_b64(request_b64: &str) -> Result<ClientOriginatedMessage> {
@@ -161,6 +162,9 @@ async fn handle_request(
                 // onboarding
                 OnboardingRequest(request) => desktop(message_id, DesktopRequest::Onboarding(request)).await,
                 // install
+                InstallRequest(request) if request.component == fig_proto::fig::InstallComponent::LoginItem as i32 => {
+                    desktop(message_id, DesktopRequest::LoginItem(request)).await
+                },
                 InstallRequest(request) => install::install(request, env).await,
                 // history
                 HistoryQueryRequest(request) => history::query(request).await,

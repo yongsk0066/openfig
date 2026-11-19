@@ -10,6 +10,23 @@ static ACCESSIBILITY_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 
 pub fn open_accessibility() -> bool {
+    use accessibility_sys::{
+        AXIsProcessTrustedWithOptions,
+        kAXTrustedCheckOptionPrompt,
+    };
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+
+    // SAFETY: the framework owns this immutable key. The dictionary retains the
+    // key and value and lives through the call, which only requests user consent.
+    let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+    let options = CFDictionary::from_CFType_pairs(&[(key, CFBoolean::true_value())]);
+    if unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) } {
+        return true;
+    }
+
     let string = ns_string!(ACCESSIBILITY_SETTINGS_URL);
     let url = NSURL::initWithString(NSURL::alloc(), string);
     if let Some(url) = url {

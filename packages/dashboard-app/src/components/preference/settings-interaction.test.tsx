@@ -20,7 +20,11 @@ beforeEach(() => {
   store = createStore({
     settings: { current: async () => ({}), set: save, didChange: { subscribe } },
     state: { current: async () => ({}), set: async () => {}, didChange: { subscribe } },
-    install: { isInstalled: async () => true, installStatus: { subscribe } },
+    install: {
+      install: async () => {},
+      getStatus: async () => "ready",
+      installStatus: { subscribe, onLoginItemChange: subscribe },
+    },
     platform: {
       getPlatformInfo: async () => ({
         $typeName: "fig.GetPlatformInfoResponse",

@@ -32,6 +32,10 @@ pub enum Event {
     ControlFlow(ControlFlow),
     SetTrayVisible(bool),
     ReconcileLoginItem,
+    InspectLoginItem(
+        fig_proto::fig::InstallAction,
+        tokio::sync::oneshot::Sender<fig_desktop_api::requests::RequestResult>,
+    ),
 
     ReloadAccessibility,
 

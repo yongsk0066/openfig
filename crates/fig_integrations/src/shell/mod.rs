@@ -337,9 +337,9 @@ impl ShellScriptShellIntegration {
             None => "".into(),
         };
         match self.shell {
-            // Check if ~/.local/bin/{CLI_BINARY_NAME} is executable before eval
             Shell::Zsh => format!(
-                "[ -x ~/.local/bin/{CLI_BINARY_NAME} ] && eval \"$(~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile})\""
+                r#"[ -x ~/.local/bin/{CLI_BINARY_NAME} ] && [[ ~/.local/bin/{CLI_BINARY_NAME} -ef "{bundle}/Contents/MacOS/{CLI_BINARY_NAME}" ]] && eval "$(~/.local/bin/{CLI_BINARY_NAME} init {shell} {when}{rcfile})""#,
+                bundle = crate::cli_link::installed_bundle().display()
             ),
         }
     }

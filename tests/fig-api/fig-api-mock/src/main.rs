@@ -36,6 +36,7 @@ async fn desktop(_message_id: i64, request: DesktopRequest) -> RequestResult {
         DesktopRequest::UpdateApplicationProperties(request) => RequestResult::unimplemented(request),
         DesktopRequest::PositionWindow(request) => RequestResult::unimplemented(request),
         DesktopRequest::DragWindow(request) => RequestResult::unimplemented(request),
+        DesktopRequest::LoginItem(request) => RequestResult::unimplemented(request),
         DesktopRequest::Onboarding(request) => RequestResult::unimplemented(request),
     }
 }

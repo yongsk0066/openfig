@@ -11,7 +11,7 @@ The installer performs these distinct steps:
 1. Register the source once, then check discovery from a fresh process up to 20 times, sleeping 250ms between failed checks (about five seconds plus query/startup time).
 2. Launch the helper before the terminal initializes its input context.
 3. Request activation through `q debug enable-input-method`; IPC dispatches the public `TISEnableInputSource` call to the desktop GUI main loop, replacing the temporary probe/headless activation path.
-4. Wait for system approval when required, checking `enabled` from fresh processes against a 120-second polling deadline.
+4. In Settings → Integrations, **Set up input method** requests activation and returns while consent is pending. After approving in macOS, return to Fig and choose **Finish activation** if the source still needs selection. **Check again** reads the registered source without changing permissions. In the command-line installer, wait for system approval when required, checking `enabled` from fresh processes against a 120-second polling deadline.
 5. Select the enabled palette, then confirm both `enabled` and `selected` from another fresh process. An already-active source skips the activation request.
 
 A successful activation request is not proof of approval. A timeout reports unconfirmed activation and leaves the installed desktop running. The installer compares signed code-directory hashes, preserves the helper across signature-only updates and negotiates its shutdown when sealed code changes. Already-approved terminal clients reconnect automatically after helper replacement or death; user terminals are never terminated. Initial discovery/approval remains a separate installation step. Keep your usual keyboard layout selected.

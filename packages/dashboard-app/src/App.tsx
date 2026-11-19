@@ -15,7 +15,7 @@ import { getIconFromName } from "./lib/icons";
 import { StoreContext } from "./context/zustand";
 import { createStore, type Store } from "./lib/store";
 import ListenerContext from "./context/input";
-import { useAccessibilityCheck, useDotfilesCheck } from "./hooks/store";
+import { useSetup } from "./hooks/store/useStatusCheck";
 import { useLocalStateZodDefault } from "./hooks/store/useState";
 import { z } from "zod";
 import { useState } from "react";
@@ -195,10 +195,14 @@ function Layout() {
     z.boolean(),
     false,
   );
-  const [accessibilityCheck] = useAccessibilityCheck();
-  const [dotfilesCheck] = useDotfilesCheck();
+  const accessibility = useSetup("accessibility");
+  const shell = useSetup("dotfiles");
   const navData = useNavData();
-  const error = onboardingComplete && (accessibilityCheck === false || dotfilesCheck === false);
+  const error =
+    onboardingComplete &&
+    [accessibility, shell].some(
+      (check) => check && (check.error || (check.status && check.status !== "ready")),
+    );
 
   return (
     <div className="flex flex-row h-screen w-full overflow-hidden bg-white dark:bg-zinc-800 text-black dark:text-zinc-200">

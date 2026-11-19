@@ -1,66 +1,78 @@
-import type { InstallCheckWithInstallKey } from "@/types/preferences";
-import { Install } from "@fig/api-bindings";
-import { useEffect, useState } from "react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { Check, ChevronDown, X } from "lucide-react";
+import { useEffect } from "react";
+import { checks } from "@/data/install";
+import { useSetup } from "@/hooks/store/useStatusCheck";
+import { useStoreContext } from "@/hooks/store/useStoreContext";
+import type { SetupKey } from "@/lib/store";
 import { Button } from "../ui/button";
-import { useStatusCheck } from "@/hooks/store";
 
-export default function StatusCheck({ check }: { check: InstallCheckWithInstallKey }) {
-  const [expanded, setExpanded] = useState(false);
-  const [status, refreshStatus] = useStatusCheck(check.installKey);
-  const [err, setErr] = useState("");
-
-  function fixInstall() {
-    Install.install(check.installKey)
-      .then(() => {
-        void refreshStatus();
-      })
-      .catch((e) => {
-        console.error(e);
-        setErr(e.toString());
-      });
-  }
-
+export function SetupRow({ id }: { id: SetupKey }) {
+  const checkSetup = useStoreContext((s) => s.checkSetup);
+  const configure = useStoreContext((s) => s.configure);
+  const current = useSetup(id);
+  const check = checks[id];
   useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus]);
-
+    const refresh = () => {
+      void checkSetup(id);
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [id, checkSetup]);
+  const status = current?.status;
+  const action =
+    id === "ghosttyInputMethod" && status === "ready"
+      ? "Reopen input method"
+      : id === "ghosttyInputMethod" && status === "selection"
+        ? "Finish activation"
+        : check.action;
   return (
-    <Collapsible className="flex gap-4 self-stretch" open={expanded} onOpenChange={setExpanded}>
-      <CollapsibleTrigger asChild className="mt-5 flex-none">
-        <ChevronDown
-          className={`h-5 w-5 ${expanded ? "rotate-0" : "-rotate-90"} cursor-pointer text-zinc-400`}
-        />
-      </CollapsibleTrigger>
-      <div className="flex flex-col border-b-[1px] border-zinc-200 dark:border-zinc-600 py-4 flex-auto gap-1">
-        <div className="flex gap-2 items-center">
-          <h2 className="font-medium text-lg select-none">{check.title}</h2>
-          {status !== undefined &&
-            (status ? (
-              <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-            ) : (
-              <X className="h-5 w-5 text-red-600 dark:text-red-400" />
-            ))}
-        </div>
-        <CollapsibleContent className="flex flex-col gap-2 text-base font-light text-zinc-500 dark:text-zinc-400 items-start leading-tight">
-          {check.description.map((d, i) => (
-            <p key={i}>{d}</p>
-          ))}
+    <section className="border-b border-zinc-200 dark:border-zinc-600 py-3 space-y-2">
+      <h3 className="font-medium">{check.title}</h3>
+      <p className="text-sm text-zinc-600 dark:text-zinc-300">{check.detail}</p>
+      <output className="block text-sm font-medium">
+        {current?.busy
+          ? "Applying…"
+          : status
+            ? (check.status[status] ?? "Unavailable")
+            : current?.error
+              ? "Check failed"
+              : "Checking…"}
+      </output>
+      {current?.error && (
+        <p role="alert" className="text-sm break-words text-red-700 dark:text-red-300">
+          {current.error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {(status !== "ready" || check.alwaysAction) && (
           <Button
-            onClick={fixInstall}
-            disabled={status}
-            className="disabled:bg-zinc-400 dark:disabled:bg-zinc-600 dark:disabled:border-zinc-400 dark:bg-dusk-600 dark:border dark:border-dusk-400 dark:hover:border-dusk-700 dark:hover:bg-dusk-800 select-none h-auto py-2 px-6 mt-1"
+            size="sm"
+            disabled={current?.busy || status === "unsupported"}
+            onClick={() => void configure(id)}
           >
-            {status ? "Enabled" : check.action}
+            {action}
           </Button>
-          {status !== undefined && status == false && err !== "" && (
-            <pre className="text-sm text-zinc-900 dark:text-zinc-200 bg-red-100 dark:bg-red-950 border-red-400 border flex items-center justify-center leading-none p-2 px-2 rounded overflow-x-auto max-w-full whitespace-pre-wrap">
-              {err}
-            </pre>
-          )}
-        </CollapsibleContent>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={current?.busy}
+          onClick={() => void checkSetup(id)}
+        >
+          Check again
+        </Button>
       </div>
-    </Collapsible>
+    </section>
+  );
+}
+
+export function TerminalSetup() {
+  return (
+    <section aria-label="Terminal setup" className="mb-4">
+      <h2 className="font-bold text-lg">Terminal setup</h2>
+      <SetupRow id="dotfiles" />
+      <SetupRow id="accessibility" />
+      <SetupRow id="ghosttyInputMethod" />
+    </section>
   );
 }

@@ -153,10 +153,36 @@ pub fn apply() {
 
 fn require_installed_bundle() -> Result<()> {
     let bundle = macos_utils::bundle::get_bundle_path().context("login items require an app bundle")?;
-    if bundle != fig_util::app_bundle_path() {
+    if bundle != fig_integrations::cli_link::installed_bundle() {
         bail!("only the installed application may manage login items");
     }
     Ok(())
+}
+
+pub fn inspect(action: fig_proto::fig::InstallAction) -> fig_desktop_api::requests::RequestResult {
+    use fig_desktop_api::requests::install::{
+        installation_status,
+        integration_result,
+    };
+    use fig_proto::fig::InstallAction;
+    use fig_proto::fig::install_response::InstallationStatus;
+    require_installed_bundle().map_err(|e| e.to_string())?;
+    let marker = MainThreadMarker::new().ok_or("Login item request requires the main thread")?;
+    let service = Native::new(marker).map_err(|e| e.to_string())?;
+    Ok(Box::new(match action {
+        InstallAction::Status => installation_status(match service.status().map_err(|e| e.to_string())? {
+            Status::Enabled => InstallationStatus::Installed,
+            Status::RequiresApproval => InstallationStatus::RequiresApproval,
+            Status::NotRegistered | Status::NotFound => InstallationStatus::NotInstalled,
+        }),
+        InstallAction::Install => {
+            let class = AnyClass::get(c"SMAppService").ok_or("Login Items unavailable")?;
+            // SAFETY: SMAppService exposes this void class method on macOS 13 and later.
+            let _: () = unsafe { msg_send![class, openSystemSettingsLoginItems] };
+            integration_result(Ok::<(), &str>(()))
+        },
+        InstallAction::Uninstall => integration_result(Err("Turn off Start with macOS in Preferences.")),
+    }))
 }
 
 pub fn unregister() -> Result<()> {

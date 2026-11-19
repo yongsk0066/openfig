@@ -55,7 +55,7 @@ class EnrollmentTests(unittest.TestCase):
                      'test', str(INSTALLER), path], capture_output=True, text=True)
                 self.assertEqual(result.returncode, expected, result.stderr)
 
-    def run_case(self, scenario, enabled=False, selected=False, timeout=0):
+    def run_case(self, scenario, enabled=False, selected=False, timeout=0, mode="--activate"):
         with tempfile.TemporaryDirectory(prefix='fig enrollment ') as directory:
             root = Path(directory)
             state = dict(scenario=scenario, enabled=enabled, selected=selected, checks=0)
@@ -69,12 +69,12 @@ open() {
   printf 'open %s %s\\n' "$1" "$2" >> "$FIG_ENROLLMENT_TEST/events"
   [[ "$FIG_ENROLLMENT_CASE" != 'launch-failed' ]]
 }
-activate_input_method "$2" "$3" "$4" "$2"
+activate_input_method "$2" "$3" "$4" "$2" "$5"
 '''
             environment['FIG_ENROLLMENT_CASE'] = scenario
             result = subprocess.run(
                 ['bash', '-c', script, 'test', str(INSTALLER), str(helper),
-                 str(root / 'Test Input.app'), str(timeout)],
+                 str(root / 'Test Input.app'), str(timeout), mode],
                 env=environment, text=True, capture_output=True, timeout=10)
             events = (root / 'events').read_text().splitlines()
             return result, events
@@ -94,6 +94,16 @@ activate_input_method "$2" "$3" "$4" "$2"
         self.assertEqual(result.returncode, 3)
         self.assertFalse(any(e.startswith('--select ') for e in events))
         self.assertIn('not confirmed', result.stderr)
+
+    def test_settings_returns_with_approval_pending_then_selects_on_retry(self):
+        result, events = self.run_case('pending', mode='--request')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sum(e.startswith('--enable ') for e in events), 1)
+        self.assertFalse(any(e.startswith('--select ') for e in events))
+        result, events = self.run_case('approved', enabled=True, mode='--request')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(events[-1].startswith('--check-active '))
+        self.assertFalse(any(e.startswith('--enable ') for e in events))
 
     def test_already_active_does_not_request_or_reselect(self):
         result, events = self.run_case('active', enabled=True, selected=True)

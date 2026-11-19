@@ -4,7 +4,6 @@
 //! Moved here from the former installer crate (which also owned the self-update
 //! pipeline) so that the update machinery could be deleted.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use fig_os_shim::{
@@ -47,7 +46,7 @@ const LEGACY_PTY_BINARIES: [&str; 3] = ["figterm", "zsh (figterm)", "bash (figte
 /// Removes the integration blocks from the user's rc files, and the ones bash support left behind.
 ///
 /// Each rc file is copied into the timestamped backup directory first.
-async fn uninstall_shell_integrations(env: &Env) -> Result<()> {
+pub async fn uninstall_shell_integrations(env: &Env) -> Result<()> {
     let backup_dir = directories::utc_backup_dir()?;
     for shell in Shell::all() {
         for integration in shell.get_shell_integrations(env)? {
@@ -69,20 +68,14 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
     }
 
     if components.contains(InstallComponents::BINARY) {
-        let remove_binary = |path: PathBuf| async move {
-            match tokio::fs::remove_file(&path).await {
-                Ok(_) => tracing::info!("Removed binary: {path:?}"),
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {},
-                Err(err) => tracing::warn!(%err, "Failed to remove binary: {path:?}"),
-            }
-        };
-
-        let folders = [directories::home_local_bin()?];
-
-        for folder in folders {
-            remove_binary(folder.join(CLI_BINARY_NAME)).await;
-            for name in LEGACY_PTY_BINARIES {
-                remove_binary(folder.join(name)).await;
+        let folder = directories::home_local_bin()?;
+        let bin = crate::cli_link::installed_bundle().join("Contents/MacOS");
+        for name in std::iter::once(CLI_BINARY_NAME).chain(LEGACY_PTY_BINARIES) {
+            let link = folder.join(name);
+            if let Ok(target) = tokio::fs::read_link(&link).await
+                && (target == bin.join(name) || (name != CLI_BINARY_NAME && target == bin.join("figterm")))
+            {
+                tokio::fs::remove_file(link).await?;
             }
         }
     }
@@ -103,8 +96,27 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
     Ok(())
 }
 
+pub async fn shell_is_installed(env: &Env) -> Result<bool> {
+    if !crate::cli_link::is_installed().await? {
+        return Ok(false);
+    }
+    for shell in Shell::all() {
+        for integration in shell.get_shell_integrations(env)? {
+            match integration.is_installed().await {
+                Ok(()) => {},
+                Err(Error::NotInstalled(_) | Error::FileDoesNotExist(_) | Error::ImproperInstallation(_)) => {
+                    return Ok(false);
+                },
+                Err(err) => return Err(err),
+            }
+        }
+    }
+    Ok(true)
+}
+
 pub async fn install(components: InstallComponents, env: &Env) -> Result<()> {
     if components.contains(InstallComponents::SHELL_INTEGRATIONS) {
+        crate::cli_link::install().await?;
         let mut errs: Vec<Error> = vec![];
         for shell in Shell::all() {
             match shell.get_shell_integrations(env) {

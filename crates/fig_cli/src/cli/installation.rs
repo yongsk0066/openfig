@@ -63,6 +63,9 @@ pub async fn install_cli(
             }
         };
         if !manual_install && let Err(err) = install(InstallComponents::SHELL_INTEGRATIONS, &env).await {
+            if no_confirm {
+                return Err(err.into());
+            }
             println!("{}", "Could not automatically install:".bold());
             println!("{err}");
             manual_install = true;
@@ -83,28 +86,15 @@ pub async fn install_cli(
             println!("At the bottom of your .zshrc file:");
             println!(". \"$HOME/{shell_dir}/zshrc.post.zsh\"");
             println!();
-
-            if let Err(err) = install(InstallComponents::SHELL_INTEGRATIONS, &env).await {
-                println!("Could not install required files:");
-                println!("{err}");
-            }
         }
     }
 
     if install_components.contains(InstallComponents::SHELL_INTEGRATIONS) && global {
-        // TODO: fix this, we do not error out at the moment as the fix is in `install.sh` which
-        // works for the CloudShell team
         warn!("Global install is not supported for shell integrations");
     }
 
     if !global {
-        // The dashboard's onboarding modal reappears on every launch until
-        // `desktop.completedOnboarding` is set, and only the modal's last step used to set it
-        // (`fig_desktop/src/request/onboarding.rs`). Someone who set the shell integrations up
-        // from the CLI instead got the "Welcome!" modal in front of the dashboard forever.
-        //
-        // `state` is the local sqlite db, not an IPC call, so this works with the desktop app
-        // stopped — which is the whole point of setting it here.
+        // CLI setup also works while the desktop is stopped.
         if let Err(err) = fig_settings::state::set_value("desktop.completedOnboarding", true) {
             warn!(%err, "Failed to record that onboarding is complete");
         }

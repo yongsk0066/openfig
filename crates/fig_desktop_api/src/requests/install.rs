@@ -1,7 +1,6 @@
+mod ghostty;
 use std::fmt::Display;
 
-use anstream::adapter::strip_str;
-use fig_integrations::shell::ShellExt;
 use fig_os_shim::Env;
 use fig_proto::fig::install_response::{
     InstallationStatus,
@@ -16,11 +15,10 @@ use fig_proto::fig::{
     InstallResponse,
     Result as ProtoResult,
 };
-use fig_util::Shell;
 
 use super::RequestResult;
 
-fn integration_result(result: Result<(), impl Display>) -> ServerOriginatedSubMessage {
+pub fn integration_result(result: Result<(), impl Display>) -> ServerOriginatedSubMessage {
     ServerOriginatedSubMessage::InstallResponse(InstallResponse {
         response: Some(Response::Result(match result {
             Ok(()) => ProtoResult {
@@ -35,49 +33,40 @@ fn integration_result(result: Result<(), impl Display>) -> ServerOriginatedSubMe
     })
 }
 
+pub fn installation_status(status: InstallationStatus) -> ServerOriginatedSubMessage {
+    ServerOriginatedSubMessage::InstallResponse(InstallResponse {
+        response: Some(Response::InstallationStatus(status.into())),
+    })
+}
+
 pub async fn install(request: InstallRequest, env: &Env) -> RequestResult {
-    let response = match (request.component(), request.action()) {
-        (InstallComponent::Dotfiles, action) => {
-            let mut errs: Vec<String> = vec![];
-            for shell in Shell::all() {
-                match shell.get_shell_integrations(env) {
-                    Ok(integrations) => {
-                        for integration in integrations {
-                            let res = match action {
-                                InstallAction::Install => integration.install().await,
-                                InstallAction::Uninstall => integration.uninstall().await,
-                                InstallAction::Status => integration.is_installed().await,
-                            };
-
-                            if let Err(err) = res {
-                                errs.push(format!(
-                                    "{integration}: {}",
-                                    strip_str(&err.verbose_message().to_string())
-                                ));
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        errs.push(format!("{shell}: {}", strip_str(&err.verbose_message().to_string())));
-                    },
-                }
-            }
-
-            match action {
-                InstallAction::Install | InstallAction::Uninstall => integration_result(match &errs[..] {
-                    [] => Ok(()),
-                    errs => Err(errs.join("\n\n")),
-                }),
-                InstallAction::Status => ServerOriginatedSubMessage::InstallResponse(InstallResponse {
-                    response: Some(Response::InstallationStatus(
-                        if errs.is_empty() {
-                            InstallationStatus::Installed
-                        } else {
-                            InstallationStatus::NotInstalled
-                        }
-                        .into(),
-                    )),
-                }),
+    let (Ok(component), Ok(action)) = (
+        InstallComponent::try_from(request.component),
+        InstallAction::try_from(request.action),
+    ) else {
+        return Ok(Box::new(integration_result(Err("Unknown installation request"))));
+    };
+    let response = match (component, action) {
+        (InstallComponent::GhosttyInputMethod, InstallAction::Status) => match ghostty::status().await {
+            Ok(status) => installation_status(status),
+            Err(err) => integration_result(Err(err)),
+        },
+        (InstallComponent::GhosttyInputMethod, InstallAction::Install) => integration_result(ghostty::enroll().await),
+        (InstallComponent::GhosttyInputMethod, InstallAction::Uninstall) => {
+            integration_result(Err("Disable Ghostty completions in Integrations."))
+        },
+        (InstallComponent::Dotfiles, InstallAction::Install) => integration_result(
+            fig_integrations::install::install(fig_integrations::install::InstallComponents::SHELL_INTEGRATIONS, env)
+                .await,
+        ),
+        (InstallComponent::Dotfiles, InstallAction::Uninstall) => {
+            integration_result(fig_integrations::install::uninstall_shell_integrations(env).await)
+        },
+        (InstallComponent::Dotfiles, InstallAction::Status) => {
+            match fig_integrations::install::shell_is_installed(env).await {
+                Ok(true) => installation_status(InstallationStatus::Installed),
+                Ok(false) => installation_status(InstallationStatus::NotInstalled),
+                Err(err) => integration_result(Err(err)),
             }
         },
         (InstallComponent::Accessibility, InstallAction::Install) => {
@@ -86,8 +75,10 @@ pub async fn install(request: InstallRequest, env: &Env) -> RequestResult {
                 open_accessibility,
             };
 
-            if !accessibility_is_enabled() {
-                open_accessibility();
+            if !accessibility_is_enabled() && !open_accessibility() {
+                return Ok(Box::new(integration_result(Err(
+                    "Unable to open Accessibility settings",
+                ))));
             }
 
             integration_result(Ok::<(), &str>(()))
@@ -105,7 +96,8 @@ pub async fn install(request: InstallRequest, env: &Env) -> RequestResult {
         },
         (InstallComponent::Accessibility, InstallAction::Uninstall) => integration_result(Ok::<(), &str>(())),
         (
-            InstallComponent::Ibus
+            InstallComponent::LoginItem
+            | InstallComponent::Ibus
             | InstallComponent::DesktopEntry
             | InstallComponent::AutostartEntry
             | InstallComponent::GnomeExtension,

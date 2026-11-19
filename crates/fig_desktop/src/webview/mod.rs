@@ -505,7 +505,13 @@ impl WebviewManager {
                                 window_event: WindowEvent::SetEnabled(autocomplete_enabled),
                             });
                         },
-                        Event::ReconcileLoginItem => crate::login_item::apply(),
+                        Event::InspectLoginItem(action,reply) => { let _ = reply.send(crate::login_item::inspect(action)); },
+                        Event::ReconcileLoginItem => {
+                            crate::login_item::apply();
+                            proxy.send_event_or_log(Event::WindowEvent {window_id:DASHBOARD_ID,window_event:WindowEvent::Event {
+                                event_name:"dashboard.loginItemChanged".into(),payload:None
+                            }});
+                        },
                         Event::SetTrayVisible(visible) => {
                             if let Some(tray) = tray.as_ref()
                                 && let Err(err) = tray.set_visible(visible)

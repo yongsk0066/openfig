@@ -22,8 +22,12 @@ function fixture() {
       didChange: { subscribe: vi.fn(async () => ({ unsubscribe })) },
     },
     install: {
-      isInstalled: vi.fn(async () => true),
-      installStatus: { subscribe: vi.fn(async () => ({ unsubscribe })) },
+      getStatus: vi.fn(async () => "ready" as const),
+      install: vi.fn(async () => {}),
+      installStatus: {
+        onLoginItemChange: vi.fn(async () => ({ unsubscribe })),
+        subscribe: vi.fn(async () => ({ unsubscribe })),
+      },
     },
     platform: { getPlatformInfo: vi.fn(async () => ({}) as never) },
   };
@@ -38,7 +42,7 @@ describe("dashboard store ownership", () => {
     const stop = store.start();
     stop();
     pending.resolve({ unsubscribe });
-    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(4));
     expect(store.getState().settings).toBeUndefined();
   });
   it("keeps notifications newer than the startup snapshot", async () => {
@@ -92,13 +96,13 @@ describe("dashboard store ownership", () => {
 });
 it("does not undo a newer accessibility notification with an old probe", async () => {
   const { ports, store } = fixture();
-  const pending = deferred<boolean>();
-  vi.mocked(ports.install.isInstalled).mockReturnValueOnce(pending.promise);
+  const pending = deferred<"missing">();
+  vi.mocked(ports.install.getStatus).mockReturnValueOnce(pending.promise);
   store.start();
   vi.mocked(ports.install.installStatus.subscribe).mock.calls[0][1](true);
-  pending.resolve(false);
+  pending.resolve("missing");
   await Promise.resolve();
-  expect(store.getState().accessibilityIsInstalled).toBe(true);
+  expect(store.getState().setup.accessibility?.status).toBe("ready");
   store.dispose();
 });
 it("dispose closes the current subscriptions after an explicit retry", async () => {
@@ -108,5 +112,45 @@ it("dispose closes the current subscriptions after an explicit retry", async () 
   store.start();
   await Promise.resolve();
   store.dispose();
-  expect(unsubscribe).toHaveBeenCalledTimes(6);
+  expect(unsubscribe).toHaveBeenCalledTimes(8);
+});
+
+it("keeps consent pending after a successful request and coalesces repeat clicks", async () => {
+  const { ports, store } = fixture();
+  const request = deferred<void>();
+  vi.mocked(ports.install.install).mockReturnValueOnce(request.promise);
+  vi.mocked(ports.install.getStatus)
+    .mockResolvedValueOnce("approval")
+    .mockResolvedValueOnce("selection")
+    .mockResolvedValueOnce("ready");
+  const first = store.getState().configure("ghosttyInputMethod");
+  await store.getState().configure("ghosttyInputMethod");
+  expect(ports.install.install).toHaveBeenCalledTimes(1);
+  request.resolve();
+  await first;
+  expect(store.getState().setup.ghosttyInputMethod).toMatchObject({
+    busy: false,
+    status: "approval",
+  });
+  await store.getState().checkSetup("ghosttyInputMethod");
+  expect(store.getState().setup.ghosttyInputMethod?.status).toBe("selection");
+  await store.getState().configure("ghosttyInputMethod");
+  expect(store.getState().setup.ghosttyInputMethod?.status).toBe("ready");
+});
+
+it("keeps setup failures on the affected component and allows a retry", async () => {
+  const { ports, store } = fixture();
+  vi.mocked(ports.install.install).mockRejectedValueOnce(
+    new Error("CLI path belongs to another installation"),
+  );
+  vi.mocked(ports.install.getStatus).mockResolvedValueOnce("missing");
+  await store.getState().configure("dotfiles");
+  expect(store.getState().setup.dotfiles?.error).toContain("CLI path");
+  expect(store.getState().error).toBeUndefined();
+  await store.getState().configure("dotfiles");
+  expect(store.getState().setup.dotfiles).toMatchObject({
+    busy: false,
+    status: "ready",
+    error: undefined,
+  });
 });

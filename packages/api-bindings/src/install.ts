@@ -7,10 +7,13 @@ import {
   Result_Result,
 } from "@fig/proto/fig";
 
+import { subscribe as subscribeEvent } from "./event.js";
 import { sendInstallRequest } from "./requests.js";
 import { type NotificationResponse, subscribeNotification } from "./notifications.js";
 
 export type Component =
+  | "ghosttyInputMethod"
+  | "loginItem"
   | "dotfiles"
   | "ibus"
   | "accessibility"
@@ -20,6 +23,10 @@ export type Component =
 
 function componentToProto(component: Component) {
   switch (component) {
+    case "ghosttyInputMethod":
+      return InstallComponent.GHOSTTY_INPUT_METHOD;
+    case "loginItem":
+      return InstallComponent.LOGIN_ITEM;
     case "dotfiles":
       return InstallComponent.DOTFILES;
     case "ibus":
@@ -69,27 +76,47 @@ export async function uninstall(component: Component) {
   handleBasicResponse(response);
 }
 
-export async function isInstalled(component: Component) {
+export type SetupStatus = "ready" | "missing" | "approval" | "selection" | "unsupported";
+
+export async function getStatus(component: Component): Promise<SetupStatus> {
   const response = await sendInstallRequest({
     action: InstallAction.STATUS,
     component: componentToProto(component),
   });
   switch (response.response?.case) {
     case "installationStatus":
-      if (response.response.value === InstallResponse_InstallationStatus.INSTALLED) {
-        return true;
+      switch (response.response.value) {
+        case InstallResponse_InstallationStatus.INSTALLED:
+          return "ready";
+        case InstallResponse_InstallationStatus.NOT_INSTALLED:
+          return "missing";
+        case InstallResponse_InstallationStatus.REQUIRES_APPROVAL:
+          return "approval";
+        case InstallResponse_InstallationStatus.REQUIRES_SELECTION:
+          return "selection";
+        case InstallResponse_InstallationStatus.NOT_SUPPORTED:
+          return "unsupported";
+        default:
+          throw Error("Unrecognized installation status");
       }
-      if (response.response.value === InstallResponse_InstallationStatus.NOT_INSTALLED) {
-        return false;
-      }
-      throw Error(`Unexpected result: ${response.response.value}`);
-
+    case "result":
+      throw Error(response.response.value.error ?? "Installation status unavailable");
     default:
       throw Error(`Unexpected result: ${response.response?.case}`);
   }
 }
 
+export async function isInstalled(component: Component) {
+  return (await getStatus(component)) === "ready";
+}
+
 export const installStatus = {
+  onLoginItemChange: (handler: () => void) =>
+    subscribeEvent("dashboard.loginItemChanged", () => {
+      handler();
+      return { unsubscribe: false };
+    }),
+
   subscribe: (
     component: "accessibility",
     handler: (isInstalled: boolean) => NotificationResponse | undefined,

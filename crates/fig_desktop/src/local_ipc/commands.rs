@@ -156,7 +156,7 @@ pub async fn prompt_for_accessibility_permission(env: &Env) -> LocalResult {
         InstallRequest,
     };
 
-    install(
+    let response = install(
         InstallRequest {
             component: InstallComponent::Accessibility.into(),
             action: InstallAction::Install.into(),
@@ -164,8 +164,26 @@ pub async fn prompt_for_accessibility_permission(env: &Env) -> LocalResult {
         env,
     )
     .await
-    .ok();
-    Ok(LocalResponse::Success(None))
+    .map_err(|err| LocalResponse::Error {
+        code: None,
+        message: Some(err.to_string()),
+    })?;
+    if let fig_proto::fig::server_originated_message::Submessage::InstallResponse(result) = *response
+        && let Some(fig_proto::fig::install_response::Response::Result(result)) = result.response
+    {
+        return if result.result == fig_proto::fig::result::Result::Ok as i32 {
+            Ok(LocalResponse::Success(None))
+        } else {
+            Err(LocalResponse::Error {
+                code: None,
+                message: result.error,
+            })
+        };
+    }
+    Err(LocalResponse::Error {
+        code: None,
+        message: Some("Unexpected Accessibility response".into()),
+    })
 }
 
 pub fn log_level(LogLevelCommand { level }: LogLevelCommand) -> LocalResult {

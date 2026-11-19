@@ -1,78 +1,48 @@
-import type { InstallCheckWithInstallKey } from "@/types/preferences";
-import accessibility_fig from "@assets/images/accessibility_fig.png?url";
-import { PRODUCT_NAME } from "@/lib/constants";
-import { Platform } from "@fig/api-bindings";
+import type { SetupKey } from "@/lib/store";
+import type { Install } from "@fig/api-bindings";
 
-const getBackupsDir = (): string => {
-  const backupsDir = window?.fig?.constants?.backupsDir;
-  const home = window?.fig?.constants?.home;
-  if (backupsDir && home) {
-    return backupsDir.replace(home, "~") + "/";
-  } else {
-    return "~/.fig.dotfiles.bak/";
-  }
+type Check = {
+  title: string;
+  detail: string;
+  action: string;
+  status: Partial<Record<Install.SetupStatus, string>>;
+  alwaysAction?: boolean;
 };
-
-const installChecks: InstallCheckWithInstallKey[] = [
-  {
-    id: "dotfiles",
-    installKey: "dotfiles",
-    title: "Shell integrations",
-    description: [
-      `Integrate ${PRODUCT_NAME} with your local shell so we can run the necessary hooks.`,
-    ],
-    action: "Install",
-    explainer: {
-      title: "What's happening under the hood?",
-      steps: [
-        [
-          {
-            content: `${PRODUCT_NAME} will add one line to the top and bottom of the following files (if they exist):`,
-            tag: "span",
-          },
-          {
-            content: ".zshrc",
-            tag: "code",
-          },
-          {
-            content: ".zprofile",
-            tag: "code",
-          },
-        ],
-        [
-          {
-            content: "Your dotfiles will be backed up to",
-            tag: "span",
-          },
-          {
-            content: getBackupsDir(),
-            tag: "code",
-          },
-        ],
-        [
-          {
-            content: `Uninstalling ${PRODUCT_NAME} will remove these lines.`,
-            tag: "span",
-          },
-        ],
-      ],
-    },
+export const checks: Record<SetupKey, Check> = {
+  dotfiles: {
+    title: "zsh integration",
+    detail: "Links the CLI and adds hooks to .zshrc and .zprofile. Open a new zsh tab after setup.",
+    action: "Set up zsh",
+    status: { ready: "CLI and shell hooks installed", missing: "Setup needed" },
   },
-  {
-    id: "accessibility",
-    installKey: "accessibility",
-    platformRestrictions: {
-      os: Platform.Os.MACOS,
-    },
-    title: "Enable accessibility",
-    description: [
-      `Grant accessibility permissions so ${PRODUCT_NAME} can position the completion window and insert text on your behalf.`,
-      `If enabling it isn't working, try toggling it off and on again or restarting ${PRODUCT_NAME}.`,
-    ],
-    image: accessibility_fig,
-    action: "Enable",
-    actionWaitingText: "Waiting for permission...",
+  accessibility: {
+    title: "Accessibility",
+    detail: "Allow Fig in System Settings so it can follow the active terminal window.",
+    action: "Open Accessibility settings",
+    status: { ready: "Allowed by macOS", missing: "Permission needed" },
   },
-];
-
-export default installChecks;
+  ghosttyInputMethod: {
+    title: "Ghostty cursor positioning",
+    detail:
+      "Optional for Ghostty. Allow Fig Input Method when macOS asks. Keep your usual keyboard layout. To verify placement, type git followed by a space in a Ghostty zsh tab.",
+    action: "Set up input method",
+    status: {
+      ready: "Input method enabled and selected",
+      missing: "Input method setup needed",
+      approval: "Approval needed in macOS",
+      selection: "Approved · finish activation",
+    },
+    alwaysAction: true,
+  },
+  loginItem: {
+    title: "Login item status",
+    detail: "macOS manages approval separately from the Start with macOS preference.",
+    action: "Open Login Items",
+    status: {
+      ready: "Enabled in macOS",
+      missing: "Off in macOS",
+      approval: "Approval needed in Login Items",
+    },
+    alwaysAction: true,
+  },
+};

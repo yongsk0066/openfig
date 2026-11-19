@@ -72,6 +72,7 @@ bundle:
         bundle/macos/Info.plist.in > "{{app}}/Contents/Info.plist"
     plutil -lint "{{app}}/Contents/Info.plist"
     printf 'APPL????' > "{{app}}/Contents/PkgInfo"
+    cp scripts/install-input-method.sh "{{app}}/Contents/Resources/"
     cp bundle/macos/AppIcon.icns "{{app}}/Contents/Resources/AppIcon.icns"
     cp -R packages/autocomplete-app/dist/ "{{app}}/Contents/Resources/autocomplete/"
     cp -R packages/dashboard-app/dist/    "{{app}}/Contents/Resources/dashboard/"
@@ -108,18 +109,8 @@ stage:
 # Preserve regular files at the CLI link target. See docs/development.md for signing/rollback.
 install:
     bash scripts/install-app.sh "{{app}}" "/Applications/$APP_NAME.app" "$CLI_BIN" "$DESKTOP_BIN"
-    mkdir -p "$HOME/.local/bin"
-    link="$HOME/.local/bin/$CLI_BIN"; \
-    if [ -f "$link" ] && [ ! -L "$link" ]; then \
-        backup="$link.bak-$(date +%Y%m%d%H%M%S)"; \
-        echo "moving existing $link aside to $backup"; \
-        mv -n "$link" "$backup"; \
-    fi; \
-    ln -sf "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" "$link"
-    # Remove obsolete CLI links left by the old PTY integration.
-    rm -f "$HOME/.local/bin/figterm" "$HOME/.local/bin/zsh (figterm)" "$HOME/.local/bin/bash (figterm)"
     "/Applications/$APP_NAME.app/Contents/MacOS/$CLI_BIN" setup --dotfiles --no-confirm
-    bash scripts/install-input-method.sh "/Applications/$APP_NAME.app/Contents/Helpers/FigInputMethod.app"
+    bash "/Applications/$APP_NAME.app/Contents/Resources/install-input-method.sh" "/Applications/$APP_NAME.app/Contents/Helpers/FigInputMethod.app"
 
 # Two vite servers for the debug binary to point at.
 dev-web:

@@ -16,7 +16,7 @@ class AppInstallTests(BashTests):
             root = Path(directory)
             source, destination = root/'new.app', root/'Fig.app'
             for app, marker in [(source, 'new'), (destination, 'old')]:
-                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
+                for relative in ['Resources/install-input-method.sh', 'MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
                     binary = app/'Contents'/relative
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_text('#!/bin/sh\nexit 0\n'); binary.chmod(0o700)
@@ -93,7 +93,7 @@ class AppStageTests(BashTests):
                 root = Path(directory)
                 source, destination, live = root/'new.app', root/'updates/pending.app', root/'Fig.app'
                 live.mkdir(); (live/'marker').write_text('running-old')
-                for relative in ['MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
+                for relative in ['Resources/install-input-method.sh', 'MacOS/q', 'MacOS/fig_desktop', 'MacOS/fig_native_worker', 'MacOS/fig_io_worker', 'Helpers/FigInputMethod.app/Contents/MacOS/fig_input_method']:
                     binary = source/'Contents'/relative
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_text('#!/bin/sh\nexit 99\n'); binary.chmod(0o700)

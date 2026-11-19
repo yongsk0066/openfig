@@ -1055,6 +1055,16 @@ export enum InstallResponse_InstallationStatus {
    * @generated from enum value: INSTALLATION_STATUS_NOT_SUPPORTED = 2;
    */
   NOT_SUPPORTED = 2,
+
+  /**
+   * @generated from enum value: INSTALLATION_STATUS_REQUIRES_APPROVAL = 3;
+   */
+  REQUIRES_APPROVAL = 3,
+
+  /**
+   * @generated from enum value: INSTALLATION_STATUS_REQUIRES_SELECTION = 4;
+   */
+  REQUIRES_SELECTION = 4,
 }
 
 /**
@@ -1968,6 +1978,16 @@ export enum InstallComponent {
    * @generated from enum value: INSTALL_COMPONENT_GNOME_EXTENSION = 7;
    */
   GNOME_EXTENSION = 7,
+
+  /**
+   * @generated from enum value: INSTALL_COMPONENT_GHOSTTY_INPUT_METHOD = 8;
+   */
+  GHOSTTY_INPUT_METHOD = 8,
+
+  /**
+   * @generated from enum value: INSTALL_COMPONENT_LOGIN_ITEM = 9;
+   */
+  LOGIN_ITEM = 9,
 }
 
 /**

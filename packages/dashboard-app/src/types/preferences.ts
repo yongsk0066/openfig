@@ -33,30 +33,3 @@ export type Action = {
   default: string[];
   popular?: boolean;
 };
-
-export type RichText = {
-  content: string;
-  tag: string;
-};
-
-export type InstallKey = "dotfiles" | "accessibility";
-
-export type InstallCheck = {
-  id: string;
-  installKey?: InstallKey;
-  platformRestrictions?: PlatformRestrictions;
-  title: string;
-  description: string[];
-  image?: string;
-  action: string;
-  actionWaitingText?: string;
-  skippable?: boolean;
-  explainer?: {
-    title: string;
-    steps: RichText[][];
-  };
-};
-
-export type InstallCheckWithInstallKey = InstallCheck & {
-  installKey: InstallKey;
-};

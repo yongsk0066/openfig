@@ -101,6 +101,7 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
     let result = match integration {
         Integration::All => Ok(()),
         Integration::Dotfiles { shell } => {
+            fig_integrations::cli_link::install().await?;
             let shells = match shell {
                 Some(shell) => vec![shell],
                 None => Shell::all().to_vec(),

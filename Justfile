@@ -93,13 +93,19 @@ sign:
     identity="${FIG_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
         | awk -F'"' '/Developer ID Application|Apple Development|Mac Developer/ {print $2; exit}')}"; \
     identity="${identity:--}"; \
+    flags=(--force --sign "$identity"); \
+    if [ "${FIG_DISTRIBUTION_SIGNING:-0}" = 1 ]; then flags+=(--options runtime --timestamp); fi; \
     echo "codesign identity: $identity"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.ioworker" "{{app}}/Contents/MacOS/fig_io_worker"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.nativeworker" "{{app}}/Contents/MacOS/fig_native_worker"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
-    codesign --force --sign "$identity" --identifier "$BUNDLE_ID"     "{{app}}"
+    codesign "${flags[@]}" --identifier "$BUNDLE_ID.inputmethod" "{{app}}/Contents/Helpers/FigInputMethod.app"; \
+    codesign "${flags[@]}" --identifier "$BUNDLE_ID.ioworker" "{{app}}/Contents/MacOS/fig_io_worker"; \
+    codesign "${flags[@]}" --identifier "$BUNDLE_ID.nativeworker" "{{app}}/Contents/MacOS/fig_native_worker"; \
+    codesign "${flags[@]}" --identifier "$BUNDLE_ID.cli" "{{app}}/Contents/MacOS/$CLI_BIN"; \
+    codesign "${flags[@]}" --identifier "$BUNDLE_ID"     "{{app}}"
     codesign --verify --deep --strict --verbose=2 "{{app}}"
+
+# Build, notarize and verify a public ZIP from HEAD.
+release:
+    /bin/bash scripts/release-macos.sh
 
 # Prepare a signed update without stopping the running app or changing enrollment.
 stage:

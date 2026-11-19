@@ -93,6 +93,7 @@ step "turbo typecheck" pnpm exec turbo typecheck
 step "vitest run" pnpm exec vitest run
 step "nextest run --workspace" cargo nextest run --locked --workspace
 step "FFI safety doctests" cargo test --locked -p macos-utils --doc
+step "public release packaging" python3 scripts/test-release-macos.py
 step "app installation rollback" python3 scripts/test-app-install.py
 step "input method compile and geometry" bash scripts/check-input-method.sh
 if [ "$native_ui" -eq 1 ]; then

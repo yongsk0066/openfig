@@ -29,24 +29,30 @@ async fn golden_variant(name: &str) {
     let mut shell = HookShell::spawn(Rc::Golden(case), Daemon::Real).await.unwrap();
 
     let mut current = shell.edit_buffers().pop();
-    let mut got = vec![current.clone()];
-    for input in case.inputs() {
-        match &input {
+    let inputs = case.inputs();
+    assert_eq!(expected.len(), inputs.len() + 1, "{name}: step count");
+    assert_eq!(current, expected[0], "{name}: initial buffer");
+    for (index, input) in inputs.iter().enumerate() {
+        match input {
             golden::Input::Bytes(bytes) => shell.press(bytes).unwrap(),
             golden::Input::Resize { columns, screen_lines } => shell.resize(*columns, *screen_lines).unwrap(),
+        }
+        let step = index + 1;
+        let wanted = &expected[step];
+        // PTY output and hook IPC have independent readers. Silence on the PTY can precede
+        // delivery of an edit; steps that leave the buffer unchanged need not send an event.
+        if wanted != &current
+            && let Some(buffer) = wanted
+        {
+            shell.wait_for_event(std::time::Instant::now() + STEP_TIMEOUT, |event| {
+                matches!(event, HookEvent::EditBuffer { text,cursor } if text == &buffer.text && *cursor == buffer.cursor)
+            }).await.unwrap_or_else(|err| panic!("{name}: step {step}, after {input:?}, expected {buffer:?}: {err}"));
         }
         shell.settle(QUIET, STEP_TIMEOUT).await.unwrap();
         if let Some(last) = shell.edit_buffers().pop() {
             current = Some(last);
         }
-        got.push(current.clone());
-    }
-
-    assert_eq!(got.len(), expected.len(), "{name}: step count");
-    let inputs = case.inputs();
-    for (step, (got, expected)) in got.iter().zip(&expected).enumerate() {
-        let after = step.checked_sub(1).map(|i| &inputs[i]);
-        assert_eq!(got, expected, "{name}: step {step}, after {after:?}");
+        assert_eq!(&current, wanted, "{name}: step {step}, after {input:?}");
     }
 }
 
